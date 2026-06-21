@@ -1,5 +1,5 @@
 import XCTest
-@testable import HouseholdBudget
+@testable import PocketWise
 
 final class BudgetIncomeWiringTests: XCTestCase {
 
@@ -259,7 +259,7 @@ final class BudgetIncomeWiringTests: XCTestCase {
         let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
         store.accounts = [Account(name: accountName, balance: startingCash, type: .cash)]
         store.categories = [
-            HouseholdBudget.Category(name: "Rent", subcategories: ["Rent"])
+            PocketWise.Category(name: "Rent", subcategories: ["Rent"])
         ]
         store.financialEvents = []
         store.creditCards = []

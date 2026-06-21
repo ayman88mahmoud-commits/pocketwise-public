@@ -1,5 +1,5 @@
 import XCTest
-@testable import HouseholdBudget
+@testable import PocketWise
 
 final class WalletStoreFinancialInvariantTests: XCTestCase {
 
@@ -760,8 +760,8 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         let store = WalletStore(userDefaults: defaults)
         store.accounts = accounts
         store.categories = [
-            HouseholdBudget.Category(name: "Groceries", subcategories: ["Groceries"]),
-            HouseholdBudget.Category(name: "Rent", subcategories: ["Rent"])
+            PocketWise.Category(name: "Groceries", subcategories: ["Groceries"]),
+            PocketWise.Category(name: "Rent", subcategories: ["Rent"])
         ]
         store.financialEvents = []
         store.creditCards = []
@@ -906,7 +906,7 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
 
     private func makeSnapshot(
         accounts: [Account],
-        categories: [HouseholdBudget.Category],
+        categories: [PocketWise.Category],
         installmentPlans: [InstallmentPlan],
         financialEvents: [FinancialEvent],
         creditCards: [CreditCard]

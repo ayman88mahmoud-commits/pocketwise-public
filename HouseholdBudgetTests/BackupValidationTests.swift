@@ -1,5 +1,5 @@
 import XCTest
-@testable import HouseholdBudget
+@testable import PocketWise
 
 final class BackupValidationTests: XCTestCase {
 
@@ -166,7 +166,7 @@ final class BackupValidationTests: XCTestCase {
             Account(name: accountName, balance: 10_000, type: .cash)
         ]
         store.categories = [
-            HouseholdBudget.Category(name: "Groceries", subcategories: ["Groceries"])
+            PocketWise.Category(name: "Groceries", subcategories: ["Groceries"])
         ]
         store.walletEvents = []
         store.installmentPlans = []
@@ -211,7 +211,7 @@ final class BackupValidationTests: XCTestCase {
 
     private func makeSnapshot(
         accounts: [Account],
-        categories: [HouseholdBudget.Category],
+        categories: [PocketWise.Category],
         installmentPlans: [InstallmentPlan] = [],
         financialEvents: [FinancialEvent] = [],
         creditCardPurchases: [CreditCardPurchase] = [],

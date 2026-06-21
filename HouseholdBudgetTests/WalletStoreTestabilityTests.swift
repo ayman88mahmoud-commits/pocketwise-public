@@ -1,5 +1,5 @@
 import XCTest
-@testable import HouseholdBudget
+@testable import PocketWise
 
 final class WalletStoreTestabilityTests: XCTestCase {
 
@@ -389,10 +389,10 @@ final class WalletStoreTestabilityTests: XCTestCase {
     private func makeSuggestionStore() -> WalletStore {
         let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
         store.categories = [
-            HouseholdBudget.Category(name: "Dining & Delivery", subcategories: ["Restaurants"]),
-            HouseholdBudget.Category(name: "Digital & Subscriptions", subcategories: ["Apps & Subscriptions"]),
-            HouseholdBudget.Category(name: "Electronics", subcategories: ["Devices"]),
-            HouseholdBudget.Category(name: "Banking & Fees", subcategories: ["InstaPay Fee"])
+            PocketWise.Category(name: "Dining & Delivery", subcategories: ["Restaurants"]),
+            PocketWise.Category(name: "Digital & Subscriptions", subcategories: ["Apps & Subscriptions"]),
+            PocketWise.Category(name: "Electronics", subcategories: ["Devices"]),
+            PocketWise.Category(name: "Banking & Fees", subcategories: ["InstaPay Fee"])
         ]
         store.financialEvents = []
         store.creditCardPurchases = []
