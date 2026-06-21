@@ -1,0 +1,39 @@
+# Xcode build artefacts
+DerivedData/
+*.xcbuilddata
+*.xcactivitylog
+*.pcm
+
+# Xcode user-specific (per-developer, not shared)
+*.xcuserstate
+HouseholdBudget.xcodeproj/xcuserdata/
+HouseholdBudget.xcodeproj/project.xcworkspace/xcuserdata/
+
+# SwiftPM resolution cache (reproducible on demand)
+HouseholdBudget.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# Generated / AI-session audit and report docs at repo root
+# README.md and CLAUDE.md are intentional and are NOT ignored
+*_AUDIT.md
+*_PLAN.md
+*_CHECKPOINT.md
+*_LOG.md
+*_REPORT.md
+*_CHECKLIST.md
+*_NOTES.md
+*_BACKLOG.md
+*_HISTORY*.md
+*_STATE.md
+*_PROGRESS.md
+*_PROPOSAL.md
+*_DECISIONS*.md
+*_PACKAGE.md
+*_TOUR.md
+*_GUIDE.md
+CODX_*.md
+BUG_*.md
+P0_*.md
+P1_*.md
+P2_*.md
+MANUAL_TEST*.md
+ios_household*.md
