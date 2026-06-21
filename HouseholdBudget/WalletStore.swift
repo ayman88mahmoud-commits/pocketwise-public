@@ -2662,7 +2662,7 @@ final class WalletStore: ObservableObject {
         ).max()
         let backupMetadata = WalletBackupMetadata(
             backupCreatedAt: exportedAt,
-            appName: "Household Budget",
+            appName: "PocketWise",
             appVersion: appVersion,
             backupSchemaVersion: WalletDataSnapshot.currentSchemaVersion,
             deviceName: nil,
