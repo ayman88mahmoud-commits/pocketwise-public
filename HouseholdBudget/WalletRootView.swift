@@ -747,17 +747,17 @@ struct SettingsView: View {
             }
             #if DEBUG
             .confirmationDialog(
-                "Reset wallet to sample data?",
+                store.appLanguage == .arabicEgyptian ? "ترجع المحفظة لبيانات تجريبية؟" : "Reset wallet to sample data?",
                 isPresented: $isConfirmingReset,
                 titleVisibility: .visible
             ) {
-                Button("Reset Wallet", role: .destructive) {
+                Button(store.appLanguage == .arabicEgyptian ? "إعادة ضبط المحفظة" : "Reset Wallet", role: .destructive) {
                     store.resetToSampleData()
                 }
 
-                Button("Cancel", role: .cancel) { }
+                Button(store.appLanguage == .arabicEgyptian ? "إلغاء" : "Cancel", role: .cancel) { }
             } message: {
-                Text("This replaces your current wallet data with sample data. Export a backup first if you need to keep your current data.")
+                Text(store.appLanguage == .arabicEgyptian ? "ده هيستبدل بيانات المحفظة الحالية ببيانات تجريبية. صدّر نسخة احتياطية الأول لو محتاج تحتفظ ببياناتك الحالية." : "This replaces your current wallet data with sample data. Export a backup first if you need to keep your current data.")
             }
             #endif
         }

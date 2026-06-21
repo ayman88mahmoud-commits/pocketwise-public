@@ -1791,7 +1791,7 @@ private struct CreditCardPaymentDetailView: View {
                 }
             }
 
-            Button("Cancel", role: .cancel) { }
+            Button(store.appLanguage == .arabicEgyptian ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
             Text(store.appLanguage == .arabicEgyptian ? "الحذف يرجع المبلغ للحساب ويزود المستحق على الكارت مرة أخرى. لا يغير المصروفات." : "Deleting restores the source account and increases card outstanding again. It does not change spending.")
         }
