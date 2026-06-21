@@ -1,0 +1,31 @@
+{
+  "configurations" : [
+    {
+      "id" : "FC3ED7A6-CDFE-444D-9F37-CF6C895DF072",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:HouseholdBudget.xcodeproj",
+        "identifier" : "DF61CC2F2FDDD655003699A6",
+        "name" : "HouseholdBudgetTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:HouseholdBudget.xcodeproj",
+        "identifier" : "DF61CC1F2FDDD4AC003699A6",
+        "name" : "HouseholdBudgetUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
