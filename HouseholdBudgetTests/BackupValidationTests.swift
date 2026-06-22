@@ -159,6 +159,25 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertEqual(store.accounts.first?.balance, originalAccountBalance)
     }
 
+    func testDemoFixtureDecodesAndPassesValidation() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/PocketWise-Demo-Household-TestData.json")
+
+        let data = try Data(contentsOf: fixtureURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(WalletDataSnapshot.self, from: data)
+
+        let store = makeStore()
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.hasIssues, "Demo fixture produced validation issues: \(report.issues.map { $0.title })")
+        XCTAssertEqual(snapshot.accounts.count, 5)
+        XCTAssertEqual(snapshot.financialEvents.count, 21)
+        XCTAssertEqual(snapshot.schemaVersion, WalletDataSnapshot.currentSchemaVersion)
+    }
+
     private func makeStore() -> WalletStore {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)
