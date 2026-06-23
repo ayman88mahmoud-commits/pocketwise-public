@@ -83,6 +83,7 @@ struct CreditCardsView: View {
                 cardSection(title: store.appLanguage == .arabicEgyptian ? "غير نشطة" : "Inactive Cards", cards: inactiveCards)
             }
         }
+        .accessibilityIdentifier("screen.creditCards")
         .onAppear {
             guard !swipeHintHasRun, !activeCards.isEmpty else { return }
             swipeHintHasRun = true

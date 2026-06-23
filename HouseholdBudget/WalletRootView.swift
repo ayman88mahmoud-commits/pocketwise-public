@@ -17,26 +17,31 @@ struct WalletRootView: View {
             if store.appLanguage == .arabicEgyptian {
                 SettingsView()
                     .environment(\.layoutDirection, layoutDirection)
+                    .accessibilityIdentifier("screen.settings")
                     .tabItem {
                         Label(AppText.tabSettings(store.appLanguage), systemImage: "gearshape.fill")
+                            .accessibilityIdentifier("tab.settings")
                     }
 
                 AnalysisView()
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabAnalysis(store.appLanguage), systemImage: "chart.pie.fill")
+                            .accessibilityIdentifier("tab.analysis")
                     }
 
                 BudgetRootView()
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabPlan(store.appLanguage), systemImage: "tablecells")
+                            .accessibilityIdentifier("tab.budget")
                     }
 
                 TransactionsView()
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabTransactions(store.appLanguage), systemImage: "list.bullet.rectangle")
+                            .accessibilityIdentifier("tab.transactions")
                     }
 
                 todayTab
@@ -47,24 +52,29 @@ struct WalletRootView: View {
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabTransactions(store.appLanguage), systemImage: "list.bullet.rectangle")
+                            .accessibilityIdentifier("tab.transactions")
                     }
 
                 BudgetRootView()
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabPlan(store.appLanguage), systemImage: "tablecells")
+                            .accessibilityIdentifier("tab.budget")
                     }
 
                 AnalysisView()
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabAnalysis(store.appLanguage), systemImage: "chart.pie.fill")
+                            .accessibilityIdentifier("tab.analysis")
                     }
 
                 SettingsView()
                     .environment(\.layoutDirection, layoutDirection)
+                    .accessibilityIdentifier("screen.settings")
                     .tabItem {
                         Label(AppText.tabSettings(store.appLanguage), systemImage: "gearshape.fill")
+                            .accessibilityIdentifier("tab.settings")
                     }
             }
         }
@@ -118,8 +128,10 @@ struct WalletRootView: View {
             }
         )
         .environment(\.layoutDirection, layoutDirection)
+        .accessibilityIdentifier("screen.today")
         .tabItem {
             Label(AppText.tabToday(store.appLanguage), systemImage: "house.fill")
+                .accessibilityIdentifier("tab.today")
         }
     }
 
@@ -637,6 +649,7 @@ struct SettingsView: View {
                             semanticColor: .creditCards
                         )
                     }
+                    .accessibilityIdentifier("button.settingsCreditCards")
 
                     NavigationLink {
                         CategoryManagementView()
@@ -720,6 +733,7 @@ struct SettingsView: View {
                             semanticColor: .backupPrivacy
                         )
                     }
+                    .accessibilityIdentifier("button.settingsDataBackup")
 
                     settingsRow(
                         title: store.appLanguage == .arabicEgyptian ? "مزامنة iCloud غير متاحة" : "iCloud Sync unavailable",
@@ -740,6 +754,7 @@ struct SettingsView: View {
                 }
                 #endif
             }
+            .accessibilityIdentifier("screen.settings")
             .navigationTitle(AppText.tabSettings(store.appLanguage))
             .sheet(isPresented: $isEditingInstaPayFees) {
                 InstaPayFeeSettingsView()

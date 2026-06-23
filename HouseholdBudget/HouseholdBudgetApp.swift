@@ -1,3 +1,4 @@
+import Foundation
 import Security
 import SwiftUI
 
@@ -67,15 +68,39 @@ struct HouseholdBudgetApp: App {
 
         hasStartedStartup = true
 
-        async let minimumLoadingScreen: Void = sleepIgnoringCancellation(nanoseconds: 3_000_000_000)
-        let loadedStore = await WalletStore.loadForStartup()
+        let shouldSkipLoadingDelay = shouldSkipLoadingDelayForCurrentLaunch()
+        let minimumLoadingScreen = Task {
+            if !shouldSkipLoadingDelay {
+                await sleepIgnoringCancellation(nanoseconds: 3_000_000_000)
+            }
+        }
+        let loadedStore = await loadStoreForCurrentLaunch()
 
         store = loadedStore
         startupState = .warmingUp
         warmUpCriticalDisplayData(using: loadedStore)
 
-        await minimumLoadingScreen
+        await minimumLoadingScreen.value
         startupState = .ready
+    }
+
+    @MainActor
+    private func loadStoreForCurrentLaunch() async -> WalletStore {
+        #if DEBUG
+        if let store = UITestDemoLaunch.loadStoreIfRequested() {
+            return store
+        }
+        #endif
+
+        return await WalletStore.loadForStartup()
+    }
+
+    private func shouldSkipLoadingDelayForCurrentLaunch() -> Bool {
+        #if DEBUG
+        UITestDemoLaunch.shouldSkipLoadingDelay
+        #else
+        false
+        #endif
     }
 
     private func warmUpCriticalDisplayData(using store: WalletStore) {
@@ -97,6 +122,50 @@ private enum StartupState {
     case warmingUp
     case ready
 }
+
+#if DEBUG
+private enum UITestDemoLaunch {
+    private static let demoDataArgument = "--uitest-demo-data"
+    private static let skipLoadingDelayArgument = "--uitest-skip-loading-delay"
+    private static let suiteEnvironmentKey = "POCKETWISE_UITEST_SUITE"
+    private static let demoJSONEnvironmentKey = "POCKETWISE_UITEST_DEMO_JSON"
+
+    static var shouldSkipLoadingDelay: Bool {
+        ProcessInfo.processInfo.arguments.contains(skipLoadingDelayArgument)
+    }
+
+    @MainActor
+    static func loadStoreIfRequested() -> WalletStore? {
+        let processInfo = ProcessInfo.processInfo
+        guard processInfo.arguments.contains(demoDataArgument) else {
+            return nil
+        }
+
+        let suiteName = processInfo.environment[suiteEnvironmentKey] ?? "PocketWiseUITest-\(UUID().uuidString)"
+        guard let userDefaults = UserDefaults(suiteName: suiteName) else {
+            assertionFailure("Could not create UI test UserDefaults suite.")
+            return WalletStore()
+        }
+
+        userDefaults.removePersistentDomain(forName: suiteName)
+
+        let store = WalletStore(userDefaults: userDefaults)
+        guard let json = processInfo.environment[demoJSONEnvironmentKey],
+              let data = json.data(using: .utf8) else {
+            assertionFailure("UI test demo data launch requested without fixture JSON.")
+            return store
+        }
+
+        do {
+            try store.importBackupSnapshotFromJSON(data)
+        } catch {
+            assertionFailure("Failed to import UI test demo data: \(error.localizedDescription)")
+        }
+
+        return store
+    }
+}
+#endif
 
 private enum LegacyCredentialCleanup {
 

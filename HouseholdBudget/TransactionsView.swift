@@ -307,6 +307,7 @@ struct TransactionsView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .accessibilityIdentifier("screen.transactions")
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $isShowingMoreFilters) {

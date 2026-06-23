@@ -56,6 +56,7 @@ struct BudgetRootView: View {
                 }
                 .environmentObject(store)
             }
+            .accessibilityIdentifier("screen.budget")
             .navigationTitle(AppText.tabPlan(store.appLanguage))
             .navigationBarTitleDisplayMode(.inline)
         }

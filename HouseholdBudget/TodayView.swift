@@ -133,6 +133,7 @@ struct TodayView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 24)
             }
+            .accessibilityIdentifier("screen.today")
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -560,6 +561,10 @@ private struct ManageIncomeView: View {
                 }
 
                 Section {
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .accessibilityIdentifier("section.expectedIncome")
+
                     Text(isArabic
                          ? "اضغط ··· لتسجيل الشهر كمستلم عند وصول الفلوس."
                          : "Tap ··· to mark a month as received when the money arrives.")
@@ -590,9 +595,14 @@ private struct ManageIncomeView: View {
                     }
                 } header: {
                     Text(isArabic ? "شهور الدخل المتوقعة" : "Expected income months")
+                        .accessibilityIdentifier("section.expectedIncome")
                 }
 
                 Section {
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .accessibilityIdentifier("section.recurringIncome")
+
                     Text(isArabic
                          ? "كل قاعدة تنشئ شهور الدخل المتوقعة المعروضة بالأعلى."
                          : "Each rule generates the expected income months listed above.")
@@ -619,9 +629,14 @@ private struct ManageIncomeView: View {
                     }
                 } header: {
                     Text(isArabic ? "قواعد الدخل المتكرر" : "Recurring income rules")
+                        .accessibilityIdentifier("section.recurringIncome")
                 }
 
-                Section(isArabic ? "دخل تم استلامه" : "Received income") {
+                Section {
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .accessibilityIdentifier("section.receivedIncome")
+
                     if receivedIncome.isEmpty {
                         emptyIncomeRow(
                             icon: "checkmark.circle.fill",
@@ -637,8 +652,12 @@ private struct ManageIncomeView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                } header: {
+                    Text(isArabic ? "دخل تم استلامه" : "Received income")
+                        .accessibilityIdentifier("section.receivedIncome")
                 }
             }
+            .accessibilityIdentifier("sheet.manageIncome")
             .navigationTitle(isArabic ? "إدارة الدخل" : "Manage Income")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1506,6 +1525,7 @@ private extension TodayView {
                     } label: {
                         Label(store.appLanguage == .arabicEgyptian ? "إدارة الدخل" : "Manage income", systemImage: "tray.full.fill")
                     }
+                    .accessibilityIdentifier("button.manageIncome")
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle.fill")
