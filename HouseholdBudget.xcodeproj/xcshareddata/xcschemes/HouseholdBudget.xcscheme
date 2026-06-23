@@ -32,10 +32,6 @@
          <TestPlanReference
             reference = "container:HouseholdBudget.xctestplan">
          </TestPlanReference>
-         <TestPlanReference
-            reference = "container:HouseholdBudgetTests"
-            default = "YES">
-         </TestPlanReference>
       </TestPlans>
       <Testables>
          <TestableReference
