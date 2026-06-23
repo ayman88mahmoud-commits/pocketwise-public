@@ -174,7 +174,7 @@ final class BackupValidationTests: XCTestCase {
 
         XCTAssertFalse(report.hasIssues, "Demo fixture produced validation issues: \(report.issues.map { $0.title })")
         XCTAssertEqual(snapshot.accounts.count, 5)
-        XCTAssertEqual(snapshot.financialEvents.count, 21)
+        XCTAssertEqual(snapshot.financialEvents.count, 27)
         XCTAssertEqual(snapshot.schemaVersion, WalletDataSnapshot.currentSchemaVersion)
     }
 
