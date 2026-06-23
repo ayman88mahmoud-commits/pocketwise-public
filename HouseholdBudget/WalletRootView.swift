@@ -735,13 +735,17 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("button.settingsDataBackup")
 
-                    settingsRow(
-                        title: store.appLanguage == .arabicEgyptian ? "مزامنة iCloud غير متاحة" : "iCloud Sync unavailable",
-                        subtitle: store.appLanguage == .arabicEgyptian ? "استخدم النسخ الاحتياطي اليدوي في هذا الإصدار" : "Use manual backup export/import in this build",
-                        icon: "icloud.slash",
-                        semanticColor: .backupPrivacy
-                    )
-                    .foregroundStyle(.secondary)
+                    NavigationLink {
+                        ICloudSnapshotSyncView()
+                            .environmentObject(store)
+                    } label: {
+                        settingsRow(
+                            title: store.appLanguage == .arabicEgyptian ? "مزامنة iCloud" : "iCloud Sync",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "رفع وتنزيل نسخة احتياطية" : "Upload and download backup",
+                            icon: "icloud",
+                            semanticColor: .backupPrivacy
+                        )
+                    }
                 }
 
                 #if DEBUG
