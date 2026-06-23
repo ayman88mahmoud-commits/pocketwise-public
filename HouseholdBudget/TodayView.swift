@@ -561,8 +561,8 @@ private struct ManageIncomeView: View {
 
                 Section {
                     Text(isArabic
-                         ? "هذه شهور دخل متوقعة يمكنك تسجيلها كمستلمة."
-                         : "These are expected income months you can mark as received.")
+                         ? "اضغط ··· لتسجيل الشهر كمستلم عند وصول الفلوس."
+                         : "Tap ··· to mark a month as received when the money arrives.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
@@ -589,45 +589,39 @@ private struct ManageIncomeView: View {
                         }
                     }
                 } header: {
-                    Text(isArabic ? "الدخل القادم" : "Upcoming income")
+                    Text(isArabic ? "شهور الدخل المتوقعة" : "Expected income months")
                 }
 
                 Section {
                     Text(isArabic
-                         ? "هذه هي الخطط التي تنشئ دخلًا متوقعًا في الشهور القادمة."
-                         : "These are the rules that create future expected income.")
+                         ? "كل قاعدة تنشئ شهور الدخل المتوقعة المعروضة بالأعلى."
+                         : "Each rule generates the expected income months listed above.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
                     if recurringIncome.isEmpty {
                         emptyIncomeRow(
                             icon: "repeat.circle.fill",
-                            message: isArabic ? "لا توجد خطط دخل حاليًا." : "No income plans yet."
+                            message: isArabic ? "لا توجد قواعد دخل متكرر حاليًا." : "No recurring income rules yet."
                         )
                     } else {
                         ForEach(recurringIncome) { event in
                             incomeRow(event, icon: "repeat.circle.fill", semanticColor: .income) {
-                                Button(isArabic ? "تعديل الخطة" : "Edit plan") {
+                                Button(isArabic ? "تعديل القاعدة" : "Edit rule") {
                                     recurringIncomeToEdit = event
                                 }
 
-                                if event.effectiveRecurringAmountMode == .variableEachMonth {
-                                    Button(isArabic ? "إدارة مبالغ الشهور" : "Manage monthly amounts") {
-                                        recurringIncomeToEdit = event
-                                    }
-                                }
-
-                                Button(isArabic ? "حذف الخطة" : "Delete plan", role: .destructive) {
+                                Button(isArabic ? "حذف القاعدة" : "Delete rule", role: .destructive) {
                                     eventPendingDelete = event
                                 }
                             }
                         }
                     }
                 } header: {
-                    Text(isArabic ? "خطط الدخل" : "Income plans")
+                    Text(isArabic ? "قواعد الدخل المتكرر" : "Recurring income rules")
                 }
 
-                Section(isArabic ? "دخل تم استلامه" : "Received income history") {
+                Section(isArabic ? "دخل تم استلامه" : "Received income") {
                     if receivedIncome.isEmpty {
                         emptyIncomeRow(
                             icon: "checkmark.circle.fill",
@@ -799,10 +793,6 @@ private struct ManageIncomeView: View {
     }
 
     private func incomeTitle(for event: FinancialEvent) -> String {
-        if event.repeatRule != .none && event.sourceRecurringEventID == nil {
-            return isArabic ? "\(event.title) خطة" : "\(event.title) plan"
-        }
-
         if event.sourceRecurringEventID != nil {
             return "\(event.title) — \(formatMonth(event.date))"
         }
