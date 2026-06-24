@@ -740,8 +740,8 @@ struct SettingsView: View {
                             .environmentObject(store)
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "مزامنة iCloud" : "iCloud Sync",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "رفع وتنزيل نسخة احتياطية" : "Upload and download backup",
+                            title: store.appLanguage == .arabicEgyptian ? "نسخة iCloud الاحتياطية" : "iCloud Backup",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "نسخة احتياطية خاصة على iCloud" : "Private iCloud backup",
                             icon: "icloud",
                             semanticColor: .backupPrivacy
                         )
@@ -828,210 +828,223 @@ struct ICloudSnapshotSyncView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var isWorking = false
-    @State private var isConfirmingUpload = false
-    @State private var isConfirmingReplace = false
+    @State private var isConfirmingBackup = false
+    @State private var isConfirmingRestore = false
+    @State private var showAdvanced = false
 
-    private var localSnapshot: WalletDataSnapshot {
-        store.makeBackupSnapshot()
-    }
-
-    private var language: AppLanguage {
-        store.appLanguage
-    }
-
-    private var isArabic: Bool {
-        language == .arabicEgyptian
-    }
+    private var isAr: Bool { store.appLanguage == .arabicEgyptian }
 
     var body: some View {
         List {
-            Section(isArabic ? "الحالة" : "Status") {
+            Section(isAr ? "الحالة" : "Status") {
                 statusRow(
-                    title: isArabic ? "توفر iCloud" : "iCloud availability",
-                    value: availabilityText(store.iCloudAvailability)
+                    title: "iCloud",
+                    value: availabilityText(store.iCloudAvailability),
+                    isError: isUnavailable(store.iCloudAvailability)
                 )
 
                 statusRow(
-                    title: isArabic ? "آخر حفظ محلي" : "Last local save",
-                    value: formattedOptionalDate(store.localDataUpdatedAt)
+                    title: isAr ? "آخر نسخة على iCloud" : "Last iCloud Backup",
+                    value: formattedOptionalDate(
+                        store.iCloudRemoteMetadata?.remoteUpdatedAt ?? store.lastKnownRemoteUpdateAt,
+                        fallback: isAr ? "لا توجد نسخة بعد" : "No backup yet"
+                    )
                 )
 
                 statusRow(
-                    title: isArabic ? "آخر نسخة على iCloud" : "Last iCloud backup",
-                    value: formattedOptionalDate(store.iCloudRemoteMetadata?.remoteUpdatedAt ?? store.lastKnownRemoteUpdateAt)
+                    title: isAr ? "هذا الجهاز" : "This Device",
+                    value: formattedOptionalDate(store.localDataUpdatedAt, fallback: isAr ? "غير محدد" : "Unknown")
                 )
 
-                if let metadata = store.iCloudRemoteMetadata {
-                    if let deviceName = metadata.deviceName, !deviceName.isEmpty {
-                        statusRow(title: isArabic ? "الجهاز" : "Device", value: deviceName)
-                    }
-
-                    if let schemaVersion = metadata.schemaVersion {
-                        statusRow(title: isArabic ? "نسخة المخطط" : "Schema", value: "\(schemaVersion)")
-                    }
+                if let deviceName = store.iCloudRemoteMetadata?.deviceName, !deviceName.isEmpty {
+                    statusRow(title: isAr ? "نُسخ من جهاز" : "Backed Up From", value: deviceName)
                 }
 
-                if let lastICloudSyncError = store.lastICloudSyncError,
-                   !lastICloudSyncError.isEmpty {
-                    Text(localizedICloudError(lastICloudSyncError))
+                if let lastError = store.lastICloudSyncError, !lastError.isEmpty {
+                    Text(localizedICloudError(lastError))
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
             }
 
-            snapshotSection(
-                title: isArabic ? "النسخة المحلية" : "Local Snapshot",
-                snapshot: localSnapshot
-            )
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(isAr
+                        ? "يمكن لـ PocketWise حفظ نسخة احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
+                        : "PocketWise can save a private backup to your iCloud. Restoring from iCloud always requires confirmation.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                    Text(isAr
+                        ? "المزامنة التلقائية بين iPhone وiPad مخطط لها، لكنها غير مفعّلة في هذا الإصدار."
+                        : "Automatic iPhone/iPad sync is planned, but not enabled in this version.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(isAr ? "الإجراءات" : "Actions") {
+                Button {
+                    Task { await checkStatus() }
+                } label: {
+                    Label(
+                        isWorking ? (isAr ? "جاري الفحص..." : "Checking...") : (isAr ? "فحص الحالة" : "Check Status"),
+                        systemImage: "arrow.clockwise"
+                    )
+                }
+                .disabled(isWorking)
+
+                Button {
+                    isConfirmingBackup = true
+                } label: {
+                    Label(isAr ? "نسخ احتياطي الآن" : "Back Up Now", systemImage: "icloud.and.arrow.up")
+                }
+                .disabled(isWorking)
+
+                Button {
+                    Task { await viewICloudBackup() }
+                } label: {
+                    Label(
+                        isWorking ? (isAr ? "جاري التحميل..." : "Loading...") : (isAr ? "عرض نسخة iCloud" : "View iCloud Backup"),
+                        systemImage: "eye"
+                    )
+                }
+                .disabled(isWorking)
+            }
 
             if let cloudSnapshot {
-                snapshotSection(
-                    title: isArabic ? "نسخة iCloud" : "iCloud Snapshot",
-                    snapshot: cloudSnapshot
-                )
-            } else {
-                Section(isArabic ? "نسخة iCloud" : "iCloud Snapshot") {
-                    Text(isArabic ? "استخدم المقارنة لتحميل ملخص نسخة iCloud بدون تغيير بياناتك." : "Use Compare to load the iCloud snapshot summary without changing your data.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                Section(isAr ? "نسخة iCloud الاحتياطية" : "iCloud Backup") {
+                    statusRow(title: isAr ? "تاريخ النسخة" : "Backup Date", value: formattedOptionalDate(cloudSnapshot.exportedAt, fallback: "-"))
+                    statusRow(title: isAr ? "الحسابات" : "Accounts", value: "\(cloudSnapshot.accounts.count)")
+                    statusRow(title: isAr ? "المعاملات / البنود" : "Transactions / Items", value: "\(cloudSnapshot.financialEvents.count)")
+                    statusRow(title: isAr ? "الميزانيات" : "Budgets", value: "\(cloudSnapshot.monthlyBudgets.count)")
+                    statusRow(title: isAr ? "الأشخاص / الديون" : "People / Debts", value: "\(cloudSnapshot.personDebts.count)")
+                }
+
+                Section {
+                    DisclosureGroup(
+                        isExpanded: $showAdvanced,
+                        content: {
+                            Button(isAr ? "الاحتفاظ ببيانات هذا الجهاز" : "Keep This Device's Data") {
+                                self.cloudSnapshot = nil
+                                statusMessage = isAr ? "تم الاحتفاظ ببيانات الجهاز. لم يتم تغيير أي شيء." : "Kept local data. Nothing was changed."
+                                errorMessage = nil
+                            }
+
+                            Button(isAr ? "رفع هذا الجهاز إلى iCloud" : "Upload This Device to iCloud") {
+                                isConfirmingBackup = true
+                            }
+
+                            Button(isAr ? "استبدال ببيانات iCloud" : "Replace with iCloud Backup", role: .destructive) {
+                                isConfirmingRestore = true
+                            }
+                        },
+                        label: {
+                            Label(isAr ? "خيارات الاسترداد المتقدمة" : "Advanced Recovery", systemImage: "wrench.and.screwdriver")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
                 }
             }
 
-            Section(isArabic ? "الإجراءات" : "Actions") {
-                Button {
-                    Task { await refreshStatus() }
-                } label: {
-                    Label(isWorking ? (isArabic ? "جاري الفحص..." : "Checking...") : (isArabic ? "فحص حالة iCloud" : "Check iCloud Status"), systemImage: "icloud")
-                }
-                .disabled(isWorking)
-
-                Button {
-                    isConfirmingUpload = true
-                } label: {
-                    Label(isArabic ? "رفع نسخة إلى iCloud" : "Upload Backup to iCloud", systemImage: "icloud.and.arrow.up")
-                }
-                .disabled(isWorking)
-
-                Button {
-                    Task { await compareWithICloud() }
-                } label: {
-                    Label(isWorking ? (isArabic ? "جاري المقارنة..." : "Comparing...") : (isArabic ? "مقارنة المحلي مع iCloud" : "Compare Local vs iCloud"), systemImage: "arrow.left.arrow.right")
-                }
-                .disabled(isWorking)
-
+            Section {
                 Button(role: .destructive) {
-                    Task { await prepareReplaceWithICloud() }
+                    isConfirmingRestore = true
                 } label: {
-                    Label(isArabic ? "تنزيل من iCloud" : "Download from iCloud", systemImage: "icloud.and.arrow.down")
+                    Label(isAr ? "استعادة من iCloud" : "Restore from iCloud", systemImage: "icloud.and.arrow.down")
                 }
                 .disabled(isWorking)
 
-                Text(isArabic ? "لا يوجد دمج تلقائي أو استبدال صامت. التطبيق يفضل العمل المحلي، وكل استبدال يحتاج تأكيد." : "No automatic merge or silent overwrite. The app remains offline-first, and every replace requires confirmation.")
+                Text(isAr
+                    ? "الاستعادة تستبدل بيانات هذا الجهاز بنسخة iCloud الاحتياطية. PocketWise لا يستبدل بياناتك بدون تأكيدك."
+                    : "Restore replaces the data on this device with the iCloud backup. PocketWise never replaces your device data without confirmation.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text(isAr ? "الاستعادة" : "Restore")
             }
 
-            if cloudSnapshot != nil {
-                Section(isArabic ? "بعد المقارنة" : "After Compare") {
-                    Button(isArabic ? "الاحتفاظ بالمحلي" : "Keep Local") {
-                        statusMessage = isArabic ? "تم الاحتفاظ بالبيانات المحلية. لم يتم تغيير أي شيء." : "Kept local data. Nothing was changed."
-                        errorMessage = nil
+            if statusMessage != nil || errorMessage != nil {
+                Section(isAr ? "آخر نتيجة" : "Last Result") {
+                    if let msg = statusMessage {
+                        Text(msg)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
 
-                    Button(isArabic ? "رفع المحلي إلى iCloud" : "Upload Local to iCloud") {
-                        isConfirmingUpload = true
+                    if let err = errorMessage {
+                        Text(err)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
                     }
-
-                    Button(isArabic ? "استبدال المحلي بنسخة iCloud" : "Replace Local with iCloud", role: .destructive) {
-                        isConfirmingReplace = true
-                    }
-                }
-            }
-
-            Section(isArabic ? "النتيجة" : "Result") {
-                if let statusMessage {
-                    Text(statusMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(isArabic ? "لم يتم تنفيذ أي عملية iCloud في هذه الجلسة." : "No iCloud action has run in this session.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
                 }
             }
         }
-        .navigationTitle(isArabic ? "مزامنة iCloud" : "iCloud Sync")
+        .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud Backup")
         .confirmationDialog(
-            isArabic ? "رفع النسخة المحلية إلى iCloud؟" : "Upload local backup to iCloud?",
-            isPresented: $isConfirmingUpload,
+            isAr ? "نسخ احتياطي إلى iCloud؟" : "Back up to iCloud?",
+            isPresented: $isConfirmingBackup,
             titleVisibility: .visible
         ) {
-            Button(isArabic ? "رفع المحلي إلى iCloud" : "Upload Local to iCloud") {
-                Task { await uploadToICloud() }
+            Button(isAr ? "نسخ احتياطي الآن" : "Back Up Now") {
+                Task { await performBackup() }
             }
 
-            Button(isArabic ? "إلغاء" : "Cancel", role: .cancel) { }
+            Button(isAr ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
-            Text(isArabic ? "سيتم استبدال النسخة الموجودة في iCloud بنسخة من بياناتك المحلية الحالية." : "This overwrites the current snapshot stored in your private iCloud database with your current local data.")
+            Text(isAr
+                ? "سيتم رفع بيانات هذا الجهاز إلى iCloud. النسخة الموجودة في iCloud ستُستبدل ببياناتك الحالية."
+                : "Your current data will be uploaded to iCloud. This overwrites the existing iCloud backup.")
         }
         .confirmationDialog(
-            isArabic ? "استبدال المحلي بنسخة iCloud؟" : "Replace local data with iCloud backup?",
-            isPresented: $isConfirmingReplace,
+            isAr ? "استعادة البيانات من iCloud؟" : "Restore from iCloud?",
+            isPresented: $isConfirmingRestore,
             titleVisibility: .visible
         ) {
-            Button(isArabic ? "استبدال المحلي بنسخة iCloud" : "Replace Local with iCloud", role: .destructive) {
-                Task { await replaceLocalWithICloud() }
+            Button(isAr ? "استعادة من iCloud" : "Restore from iCloud", role: .destructive) {
+                Task { await performRestore() }
             }
 
-            Button(isArabic ? "إلغاء" : "Cancel", role: .cancel) { }
+            Button(isAr ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
-            Text(isArabic ? "سيتم استبدال بيانات التطبيق المحلية بنسخة iCloud. سيتم إنشاء نسخة أمان محلية أولًا إن أمكن." : "This will replace your local wallet data with the iCloud backup. A local safety backup will be created first where possible.")
+            Text(isAr
+                ? "سيتم استبدال بيانات هذا الجهاز بنسخة iCloud الاحتياطية. سيتم إنشاء نسخة أمان محلية أولًا إن أمكن."
+                : "This will replace your device data with the iCloud backup. A local safety backup will be created first where possible.")
         }
         .task {
-            await refreshStatus()
+            await checkStatus()
         }
     }
 
-    private func snapshotSection(title: String, snapshot: WalletDataSnapshot) -> some View {
-        Section(title) {
-            statusRow(title: isArabic ? "تاريخ النسخة" : "Created", value: formattedOptionalDate(snapshot.exportedAt))
-            statusRow(title: isArabic ? "الحسابات" : "Accounts", value: "\(snapshot.accounts.count)")
-            statusRow(title: isArabic ? "المعاملات / البنود" : "Transactions / Items", value: "\(snapshot.financialEvents.count)")
-            statusRow(title: isArabic ? "الميزانيات" : "Budgets", value: "\(snapshot.monthlyBudgets.count)")
-            statusRow(title: isArabic ? "البنود المستقبلية" : "Future items", value: "\(futureItemCount(in: snapshot))")
-            statusRow(title: isArabic ? "المتكرر" : "Recurring", value: "\(recurringCount(in: snapshot))")
-            statusRow(title: isArabic ? "الأشخاص / الديون" : "People / Debts", value: "\(snapshot.personDebts.count)")
-        }
-    }
-
-    private func statusRow(title: String, value: String) -> some View {
+    private func statusRow(title: String, value: String, isError: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
             Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
+            Group {
+                if isError {
+                    Text(value).foregroundStyle(.red)
+                } else {
+                    Text(value).foregroundStyle(.secondary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
         }
     }
 
-    private func refreshStatus() async {
+    private func checkStatus() async {
         await runICloudAction {
             await store.fetchICloudStatus()
-            statusMessage = isArabic ? "تم تحديث حالة iCloud." : "iCloud status refreshed."
+            statusMessage = isAr ? "تم تحديث حالة iCloud." : "iCloud status refreshed."
         }
     }
 
-    private func uploadToICloud() async {
+    private func performBackup() async {
         await runICloudAction {
             if await store.uploadBackupToICloud(force: true) {
                 cloudSnapshot = nil
-                statusMessage = isArabic ? "تم رفع النسخة المحلية إلى iCloud." : "Uploaded local backup to iCloud."
+                statusMessage = isAr ? "تم رفع النسخة الاحتياطية إلى iCloud." : "Backed up to iCloud successfully."
                 errorMessage = nil
             } else {
                 errorMessage = localizedICloudError(store.lastICloudSyncError ?? "")
@@ -1040,29 +1053,20 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
-    private func compareWithICloud() async {
+    private func viewICloudBackup() async {
         await runICloudAction {
             let snapshot = try await store.downloadICloudSnapshotForReview()
             cloudSnapshot = snapshot
-            statusMessage = comparisonMessage(for: snapshot)
+            statusMessage = backupComparisonMessage(for: snapshot)
             errorMessage = nil
         }
     }
 
-    private func prepareReplaceWithICloud() async {
-        await runICloudAction {
-            cloudSnapshot = try await store.downloadICloudSnapshotForReview()
-            statusMessage = isArabic ? "تم تحميل ملخص نسخة iCloud. أكد الاستبدال لو عايز تكمل." : "Loaded iCloud snapshot summary. Confirm replace if you want to continue."
-            errorMessage = nil
-            isConfirmingReplace = true
-        }
-    }
-
-    private func replaceLocalWithICloud() async {
+    private func performRestore() async {
         await runICloudAction {
             let snapshot: WalletDataSnapshot
-            if let cloudSnapshot {
-                snapshot = cloudSnapshot
+            if let existing = cloudSnapshot {
+                snapshot = existing
             } else {
                 snapshot = try await store.downloadICloudSnapshotForReview()
             }
@@ -1072,7 +1076,10 @@ struct ICloudSnapshotSyncView: View {
             store.lastKnownRemoteUpdateAt = snapshot.exportedAt
             store.iCloudConflictState = .none
             store.lastICloudSyncError = nil
-            statusMessage = isArabic ? "تم استبدال البيانات المحلية بنسخة iCloud. نسخة الأمان: \(safetyBackupURL.lastPathComponent)" : "Replaced local data with iCloud backup. Safety backup: \(safetyBackupURL.lastPathComponent)"
+            cloudSnapshot = nil
+            statusMessage = isAr
+                ? "تمت الاستعادة من iCloud. نسخة الأمان: \(safetyBackupURL.lastPathComponent)"
+                : "Restored from iCloud. Safety backup: \(safetyBackupURL.lastPathComponent)"
             errorMessage = nil
         }
     }
@@ -1089,40 +1096,43 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
-    private func comparisonMessage(for snapshot: WalletDataSnapshot) -> String {
+    private func backupComparisonMessage(for snapshot: WalletDataSnapshot) -> String {
         let localDate = store.localDataUpdatedAt
         let cloudDate = snapshot.exportedAt
 
         if cloudDate > localDate.addingTimeInterval(1) {
-            return isArabic ? "نسخة iCloud أحدث من المحلي. لا يوجد تغيير بدون اختيارك." : "iCloud appears newer than local. Nothing changes unless you choose."
+            return isAr
+                ? "نسخة iCloud أحدث من هذا الجهاز. لا شيء يتغير بدون اختيارك."
+                : "iCloud backup is newer than this device. Nothing changes unless you choose."
         }
 
         if localDate > cloudDate.addingTimeInterval(1) {
-            return isArabic ? "النسخة المحلية أحدث من iCloud. لا يوجد تغيير بدون اختيارك." : "Local appears newer than iCloud. Nothing changes unless you choose."
+            return isAr
+                ? "هذا الجهاز أحدث من نسخة iCloud. لا شيء يتغير بدون اختيارك."
+                : "This device is newer than the iCloud backup. Nothing changes unless you choose."
         }
 
-        return isArabic ? "المحلي و iCloud قريبين في التاريخ. لا يوجد تغيير بدون اختيارك." : "Local and iCloud are close in date. Nothing changes unless you choose."
+        return isAr
+            ? "نسخة iCloud وهذا الجهاز متقاربان في التاريخ. لا شيء يتغير بدون اختيارك."
+            : "This device and iCloud backup are close in date. Nothing changes unless you choose."
     }
 
-    private func futureItemCount(in snapshot: WalletDataSnapshot) -> Int {
-        snapshot.financialEvents.filter { event in
-            event.status == .expected ||
-            event.status == .planned ||
-            event.status == .unpaid
-        }.count
+    private func isUnavailable(_ availability: WalletICloudAvailability) -> Bool {
+        switch availability {
+        case .available, .unknown:
+            return false
+        default:
+            return true
+        }
     }
 
-    private func recurringCount(in snapshot: WalletDataSnapshot) -> Int {
-        snapshot.financialEvents.filter { $0.repeatRule != .none }.count
-    }
-
-    private func formattedOptionalDate(_ date: Date?) -> String {
+    private func formattedOptionalDate(_ date: Date?, fallback: String = "") -> String {
         guard let date else {
-            return isArabic ? "غير موجود" : "None"
+            return fallback.isEmpty ? (isAr ? "غير موجود" : "None") : fallback
         }
 
         let formatter = DateFormatter()
-        formatter.locale = isArabic ? Locale(identifier: "ar_EG") : Locale(identifier: "en_US")
+        formatter.locale = isAr ? Locale(identifier: "ar_EG") : Locale(identifier: "en_US")
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
@@ -1131,25 +1141,25 @@ struct ICloudSnapshotSyncView: View {
     private func availabilityText(_ availability: WalletICloudAvailability) -> String {
         switch availability {
         case .unknown:
-            return isArabic ? "غير معروف" : "Unknown"
+            return isAr ? "جاري الفحص..." : "Checking..."
         case .available:
-            return isArabic ? "متاح" : "Available"
+            return isAr ? "متاح" : "Available"
         case .noAccount:
-            return isArabic ? "لا يوجد حساب iCloud" : "No iCloud account"
+            return isAr ? "تسجيل الدخول مطلوب" : "Sign In Required"
         case .restricted:
-            return isArabic ? "مقيد" : "Restricted"
+            return isAr ? "مقيد" : "Restricted"
         case .couldNotDetermine:
-            return isArabic ? "تعذر التحديد" : "Could not determine"
+            return isAr ? "تعذر التحديد" : "Could Not Determine"
         case .capabilityNotEnabled:
-            return isArabic ? "CloudKit غير مفعّل" : "CloudKit not enabled"
+            return isAr ? "غير مفعّل" : "Not Enabled"
         case .error:
-            return isArabic ? "خطأ" : "Error"
+            return isAr ? "خطأ" : "Error"
         }
     }
 
     private func localizedICloudError(_ message: String) -> String {
-        guard isArabic else {
-            return message.isEmpty ? "iCloud is not available. Check iCloud account and network." : message
+        guard isAr else {
+            return message.isEmpty ? "iCloud is not available. Check your iCloud account and network connection." : message
         }
 
         return "iCloud غير متاح. راجع حساب iCloud والإنترنت."
