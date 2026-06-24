@@ -534,7 +534,7 @@ final class WalletStore: ObservableObject {
     }
 
     var availableCash: Double {
-        ForecastEngine.calculateAvailableCash(accounts: accounts)
+        ForecastEngine.calculateAvailableCash(accounts: activeAccounts)
     }
 
     var dailyLivingBurn: Double {
@@ -606,8 +606,8 @@ final class WalletStore: ObservableObject {
 
     func runway(from date: Date = Date()) -> FinancialRunwayResult {
         ForecastEngine.calculateRunway(
-            accounts: accounts,
-            financialEvents: financialEvents,
+            accounts: activeAccounts,
+            financialEvents: activeFinancialEvents,
             monthlyLivingBurn: monthlyLivingBurn,
             from: date
         )
@@ -624,10 +624,10 @@ final class WalletStore: ObservableObject {
 
     func runwayCheck(targetDate: Date, from date: Date = Date()) -> RunwayCheckResult {
         ForecastEngine.calculateRunwayCheck(
-            accounts: accounts,
-            financialEvents: financialEvents + expectedRepaymentEvents(),
-            monthlyBudgets: monthlyBudgets,
-            creditCardPurchases: creditCardPurchases,
+            accounts: activeAccounts,
+            financialEvents: activeFinancialEvents + expectedRepaymentEvents(),
+            monthlyBudgets: activeMonthlyBudgets,
+            creditCardPurchases: activeCreditCardPurchases,
             creditCardDueItems: creditCardDueItems(
                 referenceDate: date,
                 horizonMonths: runwayHorizonMonths(from: date, to: targetDate)
@@ -643,8 +643,8 @@ final class WalletStore: ObservableObject {
         from date: Date = Date()
     ) -> [MonthlyForecast] {
         ForecastEngine.buildMonthlyForecast(
-            accounts: accounts,
-            financialEvents: financialEvents,
+            accounts: activeAccounts,
+            financialEvents: activeFinancialEvents,
             monthlyLivingBurn: monthlyLivingBurn,
             numberOfMonths: numberOfMonths,
             from: date
