@@ -15,7 +15,7 @@ struct AddTransferView: View {
     @State private var atmFeeTitle = "ATM Withdrawal Fee"
 
     private var activeAccounts: [Account] {
-        store.accounts
+        store.activeAccounts
             .filter { $0.isActive }
             .sorted { $0.name < $1.name }
     }

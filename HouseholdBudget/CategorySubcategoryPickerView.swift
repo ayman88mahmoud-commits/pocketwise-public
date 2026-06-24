@@ -165,12 +165,15 @@ struct CategorySubcategoryPickerView: View {
     }
 
     private var categoriesForSelection: [Category] {
-        store.categories
-            .filter { category in
-                category.isActive ||
-                (includesInactiveSelection && category.name == categoryName)
-            }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        var categories = store.activeCategories.filter { $0.isActive }
+
+        if includesInactiveSelection,
+           let selectedCategory = store.categories.first(where: { $0.name == categoryName }),
+           !categories.contains(where: { $0.id == selectedCategory.id }) {
+            categories.append(selectedCategory)
+        }
+
+        return categories.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private var availableSubcategories: [String] {
@@ -649,12 +652,15 @@ private struct CategorySubcategorySearchSheet: View {
     }
 
     private var categoriesForSelection: [Category] {
-        store.categories
-            .filter { category in
-                category.isActive ||
-                (includesInactiveSelection && category.name == categoryName)
-            }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        var categories = store.activeCategories.filter { $0.isActive }
+
+        if includesInactiveSelection,
+           let selectedCategory = store.categories.first(where: { $0.name == categoryName }),
+           !categories.contains(where: { $0.id == selectedCategory.id }) {
+            categories.append(selectedCategory)
+        }
+
+        return categories.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     var body: some View {

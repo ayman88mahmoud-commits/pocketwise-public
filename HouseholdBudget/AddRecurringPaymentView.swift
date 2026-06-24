@@ -172,8 +172,8 @@ struct AddRecurringPaymentView: View {
             .sheet(item: $selectionRoute) { route in
                 AddRecurringCategorySelectionSheet(
                     route: route,
-                    accounts: store.accounts.filter { $0.isActive },
-                    categories: store.categories.filter { $0.isActive }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
+                    accounts: store.activeAccounts.filter { $0.isActive },
+                    categories: store.activeCategories.filter { $0.isActive }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
                     subcategories: availableSubcategories,
                     selectedAccountName: selectedAccountName,
                     selectedCategoryName: selectedCategoryName,
@@ -267,13 +267,13 @@ struct AddRecurringPaymentView: View {
 
     private func setupInitialValues() {
         if selectedAccountName.isEmpty {
-            selectedAccountName = store.accounts.first { $0.isActive }?.name ?? ""
+            selectedAccountName = store.activeAccounts.first { $0.isActive }?.name ?? ""
         }
 
         if selectedCategoryName.isEmpty {
             selectedCategoryName =
-            store.categories.first { $0.name == "Fixed Obligations" && $0.isActive }?.name ??
-            store.categories.first { $0.isActive }?.name ??
+            store.activeCategories.first { $0.name == "Fixed Obligations" && $0.isActive }?.name ??
+            store.activeCategories.first { $0.isActive }?.name ??
             ""
         }
 

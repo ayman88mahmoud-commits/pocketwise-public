@@ -243,7 +243,7 @@ struct EditFinancialEventView: View {
     }
 
     private var isSelectedAccountBank: Bool {
-        store.accounts.first { $0.name == selectedAccountName }?.type == .bank
+        store.activeAccounts.first { $0.name == selectedAccountName }?.type == .bank
     }
 
     private var availableSubcategories: [String] {
@@ -254,7 +254,7 @@ struct EditFinancialEventView: View {
     }
 
     private var accountsForEditing: [Account] {
-        var accounts = store.accounts.filter { $0.isActive }
+        var accounts = store.activeAccounts.filter { $0.isActive }
 
         if let inactiveAccount = store.accounts.first(where: { $0.name == selectedAccountName && !$0.isActive }),
            !accounts.contains(where: { $0.id == inactiveAccount.id }) {
@@ -265,7 +265,7 @@ struct EditFinancialEventView: View {
     }
 
     private var destinationAccountsForEditing: [Account] {
-        var accounts = store.accounts.filter { $0.isActive }
+        var accounts = store.activeAccounts.filter { $0.isActive }
 
         if let inactiveAccount = store.accounts.first(where: { $0.name == selectedDestinationAccountName && !$0.isActive }),
            !accounts.contains(where: { $0.id == inactiveAccount.id }) {
@@ -276,7 +276,7 @@ struct EditFinancialEventView: View {
     }
 
     private var categoriesForEditing: [Category] {
-        var categories = store.categories.filter { $0.isActive }
+        var categories = store.activeCategories.filter { $0.isActive }
 
         if let inactiveCategory = store.categories.first(where: { $0.name == selectedCategoryName && !$0.isActive }),
            !categories.contains(where: { $0.id == inactiveCategory.id }) {
@@ -287,7 +287,7 @@ struct EditFinancialEventView: View {
     }
 
     private var reimbursementCategoriesForEditing: [Category] {
-        var categories = store.categories.filter { $0.isActive }
+        var categories = store.activeCategories.filter { $0.isActive }
 
         if let inactiveCategory = store.categories.first(where: { $0.name == reimbursementCategoryName && !$0.isActive }),
            !categories.contains(where: { $0.id == inactiveCategory.id }) {
@@ -374,10 +374,10 @@ struct EditFinancialEventView: View {
         selectedAccountName = event.accountName ?? ""
         selectedDestinationAccountName = event.destinationAccountName ?? ""
         paymentMethodName = event.paymentMethodName ?? ""
-        selectedCategoryName = event.categoryName ?? store.categories.first { $0.isActive }?.name ?? ""
+        selectedCategoryName = event.categoryName ?? store.activeCategories.first { $0.isActive }?.name ?? ""
         selectedSubCategoryName = event.subCategoryName ?? ""
         incomeType = event.incomeType ?? .unknown
-        reimbursementCategoryName = event.reimbursementCategoryName ?? store.categories.first { $0.isActive }?.name ?? ""
+        reimbursementCategoryName = event.reimbursementCategoryName ?? store.activeCategories.first { $0.isActive }?.name ?? ""
         repeatRule = event.repeatRule
         confidence = event.confidence ?? .medium
         note = event.note ?? ""
@@ -404,8 +404,8 @@ struct EditFinancialEventView: View {
         }
 
         if reimbursementCategoryName.isEmpty ||
-            !store.categories.contains(where: { $0.name == reimbursementCategoryName }) {
-            reimbursementCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+            !store.activeCategories.contains(where: { $0.name == reimbursementCategoryName }) {
+            reimbursementCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
         }
     }
 

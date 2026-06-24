@@ -165,7 +165,7 @@ struct AddFutureItemView: View {
                     AccountMenuPickerField(
                         title: isAr ? "الحساب" : "Account",
                         selection: $selectedAccountName,
-                        accounts: store.accounts.filter { $0.isActive },
+                        accounts: store.activeAccounts.filter { $0.isActive },
                         placeholder: isAr ? "لا يوجد حساب بعد" : "No account yet",
                         emptyTitle: isAr ? "لا يوجد حساب بعد" : "No account yet"
                     )
@@ -221,7 +221,7 @@ struct AddFutureItemView: View {
                                 Text(store.appLanguage == .arabicEgyptian ? "اختر تصنيف" : "Select category")
                                     .tag("")
 
-                                ForEach(store.categories.filter { $0.isActive }) { category in
+                                ForEach(store.activeCategories.filter { $0.isActive }) { category in
                                     Text(category.name)
                                         .tag(category.name)
                                 }
@@ -680,10 +680,10 @@ struct AddFutureItemView: View {
         }
 
         didSetupInitialValues = true
-        selectedAccountName = store.accounts.first { $0.isActive }?.name ?? ""
-        selectedCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+        selectedAccountName = store.activeAccounts.first { $0.isActive }?.name ?? ""
+        selectedCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
         selectedSubCategoryName = availableSubcategories.first ?? ""
-        reimbursementCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+        reimbursementCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
         confidence = selectedItemType.defaultConfidence
         recurringEndDate = date
 
@@ -726,12 +726,12 @@ struct AddFutureItemView: View {
 
         if itemType == .expectedIncome,
            selectedAccountName.isEmpty {
-            selectedAccountName = store.accounts.first { $0.isActive }?.name ?? ""
+            selectedAccountName = store.activeAccounts.first { $0.isActive }?.name ?? ""
         }
 
         if itemType.needsCategory {
             if selectedCategoryName.isEmpty {
-                selectedCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+                selectedCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
             }
 
             if selectedSubCategoryName.isEmpty {
@@ -758,8 +758,8 @@ struct AddFutureItemView: View {
         }
 
         if reimbursementCategoryName.isEmpty ||
-            !store.categories.contains(where: { $0.name == reimbursementCategoryName }) {
-            reimbursementCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+            !store.activeCategories.contains(where: { $0.name == reimbursementCategoryName }) {
+            reimbursementCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
         }
     }
 
@@ -781,7 +781,7 @@ struct AddFutureItemView: View {
     }
 
     private func matchingAccounts(for sourceEnding: String) -> [Account] {
-        store.accounts.filter { account in
+        store.activeAccounts.filter { account in
             account.isActive && account.recognitionCardEndings.contains(sourceEnding)
         }
     }

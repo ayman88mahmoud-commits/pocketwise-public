@@ -89,7 +89,7 @@ struct InstallmentPlanEditorView: View {
                     AccountMenuPickerField(
                         title: isArabic ? "الحساب" : "Account",
                         selection: $selectedAccountName,
-                        accounts: store.accounts.filter { $0.isActive }
+                        accounts: store.activeAccounts.filter { $0.isActive }
                     )
                 }
 
@@ -205,7 +205,7 @@ struct InstallmentPlanEditorView: View {
     }
 
     private var categoriesForEditing: [Category] {
-        var categories = store.categories.filter { $0.isActive }
+        var categories = store.activeCategories.filter { $0.isActive }
 
         if let inactiveCategory = store.categories.first(where: { $0.name == selectedCategoryName && !$0.isActive }),
            !categories.contains(where: { $0.id == inactiveCategory.id }) {
@@ -250,7 +250,7 @@ struct InstallmentPlanEditorView: View {
         totalAmountText = cleanNumberText(plan.totalAmount)
         installmentCount = max(plan.installmentCount, 1)
         firstDueDate = plan.firstDueDate
-        selectedAccountName = plan.accountName ?? store.accounts.first { $0.isActive }?.name ?? ""
+        selectedAccountName = plan.accountName ?? store.activeAccounts.first { $0.isActive }?.name ?? ""
         selectedCategoryName = plan.categoryName
         selectedSubCategoryName = plan.subCategoryName
         selectedProviderOption = InstallmentProviderOption.option(matching: plan.paymentMethodName)
@@ -259,7 +259,7 @@ struct InstallmentPlanEditorView: View {
         note = plan.note ?? ""
 
         if selectedCategoryName.isEmpty {
-            selectedCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+            selectedCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
         }
 
         if selectedSubCategoryName.isEmpty {

@@ -55,7 +55,7 @@ struct CreditCardEditorView: View {
     }
 
     private var accountsForPayment: [Account] {
-        var accounts = store.accounts.filter { $0.isActive }
+        var accounts = store.activeAccounts.filter { $0.isActive }
 
         if let inactiveAccount = store.accounts.first(where: { $0.name == defaultPaymentAccountName && !$0.isActive }),
            !accounts.contains(where: { $0.id == inactiveAccount.id }) {

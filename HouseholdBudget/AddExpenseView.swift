@@ -254,7 +254,7 @@ struct AddExpenseView: View {
                                 Text(isAr ? "إدخال يدوي" : "Manual Entry")
                                     .tag(nil as WalletEvent?)
 
-                                ForEach(store.walletEvents.filter { $0.isActive }) { event in
+                                ForEach(store.activeWalletEvents.filter { $0.isActive }) { event in
                                     Text(event.name)
                                         .tag(event as WalletEvent?)
                                 }
@@ -386,7 +386,7 @@ struct AddExpenseView: View {
     }
 
     private var availableAccounts: [Account] {
-        let activeAccounts = store.accounts.filter { $0.isActive }
+        let activeAccounts = store.activeAccounts.filter { $0.isActive }
 
         if selectedPaymentMethod == .instaPay {
             return activeAccounts.filter { $0.type == .bank }
@@ -411,7 +411,7 @@ struct AddExpenseView: View {
     }
 
     private var isSelectedAccountBank: Bool {
-        store.accounts.first { $0.name == selectedAccountName }?.type == .bank
+        store.activeAccounts.first { $0.name == selectedAccountName }?.type == .bank
     }
 
     private var shouldShowValidationMessages: Bool {
@@ -577,7 +577,7 @@ struct AddExpenseView: View {
         } else if let prefilledEvent {
             applyQuickEvent(prefilledEvent)
         } else {
-            selectedCategoryName = store.categories.first { $0.isActive }?.name ?? ""
+            selectedCategoryName = store.activeCategories.first { $0.isActive }?.name ?? ""
             selectedSubCategoryName = availableSubcategories.first ?? ""
             selectedAccountName = availableAccounts.first?.name ?? ""
             selectedCreditCardID = activeCreditCards.first?.id
@@ -739,7 +739,7 @@ struct AddExpenseView: View {
     }
 
     private func matchingAccounts(for sourceEnding: String) -> [Account] {
-        store.accounts.filter { account in
+        store.activeAccounts.filter { account in
             account.isActive && account.recognitionCardEndings.contains(sourceEnding)
         }
     }
