@@ -825,12 +825,12 @@ struct ICloudSnapshotSyncView: View {
     @EnvironmentObject private var store: WalletStore
 
     @State private var cloudSnapshot: WalletDataSnapshot?
-    @State private var statusMessage: String?
+    @State private var noBackupFound = false
+    @State private var actionMessage: String?
     @State private var errorMessage: String?
     @State private var isWorking = false
     @State private var isConfirmingBackup = false
     @State private var isConfirmingRestore = false
-    @State private var showAdvanced = false
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
 
@@ -886,16 +886,6 @@ struct ICloudSnapshotSyncView: View {
 
             Section(isAr ? "الإجراءات" : "Actions") {
                 Button {
-                    Task { await checkStatus() }
-                } label: {
-                    Label(
-                        isWorking ? (isAr ? "جاري الفحص..." : "Checking...") : (isAr ? "فحص الحالة" : "Check Status"),
-                        systemImage: "arrow.clockwise"
-                    )
-                }
-                .disabled(isWorking)
-
-                Button {
                     isConfirmingBackup = true
                 } label: {
                     Label(isAr ? "نسخ احتياطي الآن" : "Back Up Now", systemImage: "icloud.and.arrow.up")
@@ -913,72 +903,114 @@ struct ICloudSnapshotSyncView: View {
                 .disabled(isWorking)
             }
 
+            if noBackupFound {
+                Section {
+                    Label(
+                        isAr ? "لا توجد نسخة احتياطية على iCloud" : "No iCloud backup found",
+                        systemImage: "icloud.slash"
+                    )
+                    .foregroundStyle(.secondary)
+
+                    Text(isAr
+                        ? "اضغط «نسخ احتياطي الآن» لإنشاء أول نسخة احتياطية."
+                        : "Tap \"Back Up Now\" to create your first iCloud backup.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
             if let cloudSnapshot {
+                let backupDevice = store.iCloudRemoteMetadata?.deviceName
+                    ?? cloudSnapshot.backupMetadata?.deviceName
+                    ?? ""
+
                 Section(isAr ? "نسخة iCloud الاحتياطية" : "iCloud Backup") {
-                    statusRow(title: isAr ? "تاريخ النسخة" : "Backup Date", value: formattedOptionalDate(cloudSnapshot.exportedAt, fallback: "-"))
-                    statusRow(title: isAr ? "الحسابات" : "Accounts", value: "\(cloudSnapshot.accounts.count)")
-                    statusRow(title: isAr ? "المعاملات / البنود" : "Transactions / Items", value: "\(cloudSnapshot.financialEvents.count)")
-                    statusRow(title: isAr ? "الميزانيات" : "Budgets", value: "\(cloudSnapshot.monthlyBudgets.count)")
-                    statusRow(title: isAr ? "الأشخاص / الديون" : "People / Debts", value: "\(cloudSnapshot.personDebts.count)")
+                    statusRow(
+                        title: isAr ? "تاريخ النسخة" : "Backup Date",
+                        value: formattedOptionalDate(cloudSnapshot.exportedAt, fallback: "-")
+                    )
+
+                    if !backupDevice.isEmpty {
+                        statusRow(title: isAr ? "نُسخ من جهاز" : "Backed Up From", value: backupDevice)
+                    }
+
+                    if let appVersion = cloudSnapshot.backupMetadata?.appVersion, !appVersion.isEmpty {
+                        statusRow(title: isAr ? "إصدار التطبيق" : "App Version", value: appVersion)
+                    }
+
+                    statusRow(
+                        title: isAr ? "المعاملات / البنود" : "Transactions / Items",
+                        value: "\(cloudSnapshot.financialEvents.count)"
+                    )
+                    statusRow(
+                        title: isAr ? "متكررة" : "Recurring",
+                        value: "\(recurringCount(in: cloudSnapshot))"
+                    )
+                    statusRow(
+                        title: isAr ? "الحسابات" : "Accounts",
+                        value: "\(cloudSnapshot.accounts.count)"
+                    )
+                    statusRow(
+                        title: isAr ? "الميزانيات" : "Budgets",
+                        value: "\(cloudSnapshot.monthlyBudgets.count)"
+                    )
+                    statusRow(
+                        title: isAr ? "الأشخاص / الديون" : "People / Debts",
+                        value: "\(cloudSnapshot.personDebts.count)"
+                    )
+
+                    if cloudSnapshot.creditCards.count > 0 {
+                        statusRow(
+                            title: isAr ? "كروت الائتمان" : "Credit Cards",
+                            value: "\(cloudSnapshot.creditCards.count)"
+                        )
+                    }
+
+                    Text(backupComparisonNote(for: cloudSnapshot))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
 
                 Section {
-                    DisclosureGroup(
-                        isExpanded: $showAdvanced,
-                        content: {
-                            Button(isAr ? "الاحتفاظ ببيانات هذا الجهاز" : "Keep This Device's Data") {
-                                self.cloudSnapshot = nil
-                                statusMessage = isAr ? "تم الاحتفاظ ببيانات الجهاز. لم يتم تغيير أي شيء." : "Kept local data. Nothing was changed."
-                                errorMessage = nil
-                            }
+                    Button(role: .destructive) {
+                        isConfirmingRestore = true
+                    } label: {
+                        Label(isAr ? "استعادة من iCloud" : "Restore from iCloud", systemImage: "icloud.and.arrow.down")
+                    }
+                    .disabled(isWorking)
 
-                            Button(isAr ? "رفع هذا الجهاز إلى iCloud" : "Upload This Device to iCloud") {
-                                isConfirmingBackup = true
-                            }
+                    Button {
+                        self.cloudSnapshot = nil
+                        noBackupFound = false
+                    } label: {
+                        Label(isAr ? "إلغاء العرض" : "Dismiss", systemImage: "xmark.circle")
+                    }
+                    .foregroundStyle(.secondary)
 
-                            Button(isAr ? "استبدال ببيانات iCloud" : "Replace with iCloud Backup", role: .destructive) {
-                                isConfirmingRestore = true
-                            }
-                        },
-                        label: {
-                            Label(isAr ? "خيارات الاسترداد المتقدمة" : "Advanced Recovery", systemImage: "wrench.and.screwdriver")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    )
-                }
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    isConfirmingRestore = true
-                } label: {
-                    Label(isAr ? "استعادة من iCloud" : "Restore from iCloud", systemImage: "icloud.and.arrow.down")
-                }
-                .disabled(isWorking)
-
-                Text(isAr
-                    ? "الاستعادة تستبدل بيانات هذا الجهاز بنسخة iCloud الاحتياطية. PocketWise لا يستبدل بياناتك بدون تأكيدك."
-                    : "Restore replaces the data on this device with the iCloud backup. PocketWise never replaces your device data without confirmation.")
+                    Text(isAr
+                        ? "الاستعادة تستبدل بيانات هذا الجهاز. لن يتغير شيء بدون تأكيدك."
+                        : "Restore replaces the data on this device. Nothing changes without your confirmation.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } header: {
-                Text(isAr ? "الاستعادة" : "Restore")
+                } header: {
+                    Text(isAr ? "الاستعادة" : "Restore")
+                }
             }
 
-            if statusMessage != nil || errorMessage != nil {
-                Section(isAr ? "آخر نتيجة" : "Last Result") {
-                    if let msg = statusMessage {
-                        Text(msg)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+            if let msg = actionMessage {
+                Section {
+                    Text(msg)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
-                    if let err = errorMessage {
-                        Text(err)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
+            if let err = errorMessage {
+                Section {
+                    Text(err)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
                 }
             }
         }
@@ -1009,12 +1041,10 @@ struct ICloudSnapshotSyncView: View {
 
             Button(isAr ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
-            Text(isAr
-                ? "سيتم استبدال بيانات هذا الجهاز بنسخة iCloud الاحتياطية. سيتم إنشاء نسخة أمان محلية أولًا إن أمكن."
-                : "This will replace your device data with the iCloud backup. A local safety backup will be created first where possible.")
+            Text(restoreConfirmationMessage)
         }
         .task {
-            await checkStatus()
+            await store.fetchICloudStatus()
         }
     }
 
@@ -1033,32 +1063,52 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
-    private func checkStatus() async {
-        await runICloudAction {
-            await store.fetchICloudStatus()
-            statusMessage = isAr ? "تم تحديث حالة iCloud." : "iCloud status refreshed."
+    private var restoreConfirmationMessage: String {
+        guard let snapshot = cloudSnapshot else {
+            return isAr
+                ? "سيتم استبدال بيانات هذا الجهاز بنسخة iCloud الاحتياطية. سيتم إنشاء نسخة أمان محلية أولًا إن أمكن."
+                : "This will replace your device data with the iCloud backup. A local safety backup will be created first where possible."
         }
+
+        let dateStr = formattedOptionalDate(snapshot.exportedAt, fallback: isAr ? "تاريخ غير محدد" : "unknown date")
+        let device = store.iCloudRemoteMetadata?.deviceName
+            ?? snapshot.backupMetadata?.deviceName
+            ?? (isAr ? "جهاز غير معروف" : "unknown device")
+
+        return isAr
+            ? "سيتم استبدال بيانات هذا الجهاز بنسخة iCloud المحفوظة في \(dateStr) من جهاز: \(device). سيتم إنشاء نسخة أمان أولًا إن أمكن."
+            : "This replaces your device data with the iCloud backup from \(dateStr), saved from \(device). A local safety backup will be created first where possible."
     }
 
     private func performBackup() async {
         await runICloudAction {
             if await store.uploadBackupToICloud(force: true) {
                 cloudSnapshot = nil
-                statusMessage = isAr ? "تم رفع النسخة الاحتياطية إلى iCloud." : "Backed up to iCloud successfully."
+                noBackupFound = false
+                actionMessage = isAr ? "تم الحفظ الاحتياطي على iCloud بنجاح." : "Backed up to iCloud successfully."
                 errorMessage = nil
             } else {
                 errorMessage = localizedICloudError(store.lastICloudSyncError ?? "")
-                statusMessage = nil
+                actionMessage = nil
             }
         }
     }
 
     private func viewICloudBackup() async {
-        await runICloudAction {
+        isWorking = true
+        defer { isWorking = false }
+        cloudSnapshot = nil
+        noBackupFound = false
+        errorMessage = nil
+        actionMessage = nil
+
+        do {
             let snapshot = try await store.downloadICloudSnapshotForReview()
             cloudSnapshot = snapshot
-            statusMessage = backupComparisonMessage(for: snapshot)
-            errorMessage = nil
+        } catch WalletICloudSyncError.remoteSnapshotMissing {
+            noBackupFound = true
+        } catch {
+            errorMessage = localizedICloudError(error.localizedDescription)
         }
     }
 
@@ -1077,7 +1127,8 @@ struct ICloudSnapshotSyncView: View {
             store.iCloudConflictState = .none
             store.lastICloudSyncError = nil
             cloudSnapshot = nil
-            statusMessage = isAr
+            noBackupFound = false
+            actionMessage = isAr
                 ? "تمت الاستعادة من iCloud. نسخة الأمان: \(safetyBackupURL.lastPathComponent)"
                 : "Restored from iCloud. Safety backup: \(safetyBackupURL.lastPathComponent)"
             errorMessage = nil
@@ -1092,29 +1143,33 @@ struct ICloudSnapshotSyncView: View {
             try await action()
         } catch {
             errorMessage = localizedICloudError(error.localizedDescription)
-            statusMessage = nil
+            actionMessage = nil
         }
     }
 
-    private func backupComparisonMessage(for snapshot: WalletDataSnapshot) -> String {
+    private func recurringCount(in snapshot: WalletDataSnapshot) -> Int {
+        snapshot.financialEvents.filter { $0.repeatRule != .none }.count
+    }
+
+    private func backupComparisonNote(for snapshot: WalletDataSnapshot) -> String {
         let localDate = store.localDataUpdatedAt
         let cloudDate = snapshot.exportedAt
 
         if cloudDate > localDate.addingTimeInterval(1) {
             return isAr
-                ? "نسخة iCloud أحدث من هذا الجهاز. لا شيء يتغير بدون اختيارك."
-                : "iCloud backup is newer than this device. Nothing changes unless you choose."
+                ? "نسخة iCloud أحدث من هذا الجهاز."
+                : "iCloud backup is newer than this device."
         }
 
         if localDate > cloudDate.addingTimeInterval(1) {
             return isAr
-                ? "هذا الجهاز أحدث من نسخة iCloud. لا شيء يتغير بدون اختيارك."
-                : "This device is newer than the iCloud backup. Nothing changes unless you choose."
+                ? "هذا الجهاز أحدث من نسخة iCloud."
+                : "This device is newer than the iCloud backup."
         }
 
         return isAr
-            ? "نسخة iCloud وهذا الجهاز متقاربان في التاريخ. لا شيء يتغير بدون اختيارك."
-            : "This device and iCloud backup are close in date. Nothing changes unless you choose."
+            ? "نسخة iCloud وهذا الجهاز متقاربان في التاريخ."
+            : "This device and iCloud backup are close in date."
     }
 
     private func isUnavailable(_ availability: WalletICloudAvailability) -> Bool {
