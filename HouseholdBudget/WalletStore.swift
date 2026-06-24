@@ -159,6 +159,75 @@ final class WalletStore: ObservableObject {
         didSet { saveCreditCardPayments() }
     }
 
+    // MARK: - Active Records
+
+    var activeAccounts: [Account] {
+        accounts.filter { !$0.isDeleted }
+    }
+
+    var activeCategories: [Category] {
+        categories.filter { !$0.isDeleted }
+    }
+
+    var activeWalletEvents: [WalletEvent] {
+        walletEvents.filter { !$0.isDeleted }
+    }
+
+    var activeMerchantMemories: [MerchantMemory] {
+        merchantMemories.filter { !$0.isDeleted }
+    }
+
+    var activeFinancialEvents: [FinancialEvent] {
+        financialEvents.filter { !$0.isDeleted }
+    }
+
+    var activeInstallmentPlans: [InstallmentPlan] {
+        installmentPlans.filter { !$0.isDeleted }
+    }
+
+    var activeMonthlyBudgets: [WalletMonthlyBudget] {
+        monthlyBudgets.filter { !$0.isDeleted }
+    }
+
+    var activePersonDebts: [PersonDebt] {
+        personDebts.filter { !$0.isDeleted }
+    }
+
+    var activePersonDebtEntries: [PersonDebtEntry] {
+        personDebtEntries.filter { !$0.isDeleted }
+    }
+
+    var activeHistoricalMonthlySummaries: [HistoricalMonthlySummaryEntry] {
+        historicalMonthlySummaries.filter { !$0.isDeleted }
+    }
+
+    var activeCreditCardPurchases: [CreditCardPurchase] {
+        creditCardPurchases.filter { !$0.isDeleted }
+    }
+
+    var activeCreditCardPayments: [CreditCardPayment] {
+        creditCardPayments.filter { !$0.isDeleted }
+    }
+
+    func activeEntries(for personDebtID: UUID) -> [PersonDebtEntry] {
+        activePersonDebtEntries.filter { $0.debtID == personDebtID }
+    }
+
+    func activePurchases(for creditCardID: UUID) -> [CreditCardPurchase] {
+        activeCreditCardPurchases.filter { $0.cardID == creditCardID }
+    }
+
+    func activePayments(for creditCardID: UUID) -> [CreditCardPayment] {
+        activeCreditCardPayments.filter { $0.cardID == creditCardID }
+    }
+
+    func activeFinancialEvents(for accountName: String) -> [FinancialEvent] {
+        activeFinancialEvents.filter {
+            $0.accountName == accountName ||
+            $0.destinationAccountName == accountName
+        }
+    }
+
     @Published var monthlyLivingBurn: Double {
         didSet { saveMonthlyLivingBurn() }
     }
@@ -1632,7 +1701,7 @@ final class WalletStore: ObservableObject {
 
     var activeCreditCards: [CreditCard] {
         creditCards
-            .filter { $0.isActive }
+            .filter { $0.isActive && !$0.isDeleted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
