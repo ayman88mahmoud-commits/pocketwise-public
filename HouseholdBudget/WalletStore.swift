@@ -1256,7 +1256,7 @@ final class WalletStore: ObservableObject {
             return []
         }
 
-        let financialItems = financialEvents.compactMap { event -> ActualSpendingBreakdownItem? in
+        let financialItems = activeFinancialEvents.compactMap { event -> ActualSpendingBreakdownItem? in
             guard event.status == .paid,
                   event.date >= monthRange.start,
                   event.date < monthRange.end,
@@ -1285,7 +1285,7 @@ final class WalletStore: ObservableObject {
             )
         }
 
-        let creditCardItems = creditCardPurchases.compactMap { purchase -> ActualSpendingBreakdownItem? in
+        let creditCardItems = activeCreditCardPurchases.compactMap { purchase -> ActualSpendingBreakdownItem? in
             guard purchase.purchaseDate >= monthRange.start,
                   purchase.purchaseDate < monthRange.end else {
                 return nil
@@ -1296,7 +1296,7 @@ final class WalletStore: ObservableObject {
                 return nil
             }
 
-            let cardName = creditCards.first { $0.id == purchase.cardID }?.name
+            let cardName = activeCreditCards.first { $0.id == purchase.cardID }?.name
             return ActualSpendingBreakdownItem(
                 id: "card-purchase-\(purchase.id)",
                 title: purchase.title,
@@ -1332,7 +1332,7 @@ final class WalletStore: ObservableObject {
 
         var totals: [String: (categoryName: String, subCategoryName: String, totalAmount: Double, transactionCount: Int)] = [:]
 
-        for event in financialEvents
+        for event in activeFinancialEvents
         where event.status == .paid &&
         event.date >= monthRange.start &&
         event.date < monthRange.end &&
@@ -1349,7 +1349,7 @@ final class WalletStore: ObservableObject {
             )
         }
 
-        for purchase in creditCardPurchases
+        for purchase in activeCreditCardPurchases
         where purchase.purchaseDate >= monthRange.start &&
         purchase.purchaseDate < monthRange.end {
             let key = "\(purchase.categoryName)\u{1F}\(purchase.subCategoryName)"
@@ -1379,7 +1379,7 @@ final class WalletStore: ObservableObject {
             return []
         }
 
-        let oneOffEvents = financialEvents
+        let oneOffEvents = activeFinancialEvents
             .filter { event in
                 event.repeatRule == .none &&
                 event.status != .paid &&
@@ -1390,7 +1390,7 @@ final class WalletStore: ObservableObject {
                 isActualSpendingType(event.type)
             }
 
-        let recurringOccurrences = financialEvents
+        let recurringOccurrences = activeFinancialEvents
             .filter { event in
                 event.repeatRule != .none &&
                 event.status != .paid &&
@@ -1424,7 +1424,7 @@ final class WalletStore: ObservableObject {
             return []
         }
 
-        let oneOffEvents = financialEvents
+        let oneOffEvents = activeFinancialEvents
             .filter { event in
                 event.type == .income &&
                 event.repeatRule == .none &&
@@ -1436,7 +1436,7 @@ final class WalletStore: ObservableObject {
                 event.date < monthRange.end
             }
 
-        let recurringOccurrences = financialEvents
+        let recurringOccurrences = activeFinancialEvents
             .filter { event in
                 event.type == .income &&
                 event.repeatRule != .none &&
@@ -1481,7 +1481,7 @@ final class WalletStore: ObservableObject {
     }
 
     func paidRecurringOccurrence(sourceID: UUID, year: Int, month: Int) -> FinancialEvent? {
-        financialEvents.first { event in
+        activeFinancialEvents.first { event in
             event.status == .paid &&
             event.sourceRecurringEventID == sourceID &&
             event.recurringOccurrenceYear == year &&
@@ -1499,7 +1499,7 @@ final class WalletStore: ObservableObject {
             return expectedTotal
         }
 
-        let paidOneOff = financialEvents
+        let paidOneOff = activeFinancialEvents
             .filter { event in
                 event.type == .income &&
                 event.status == .paid &&
@@ -1510,7 +1510,7 @@ final class WalletStore: ObservableObject {
             }
             .map(\.amount).reduce(0, +)
 
-        let paidRecurring = financialEvents
+        let paidRecurring = activeFinancialEvents
             .filter { event in
                 event.type == .income &&
                 event.status == .paid &&
