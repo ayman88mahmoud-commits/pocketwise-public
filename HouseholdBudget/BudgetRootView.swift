@@ -1459,7 +1459,7 @@ struct ObligationsCenterView: View {
                 return store.upcomingKnownExpenseEvents(year: year, month: month)
                     .compactMap { occurrence in
                         guard let sourceID = occurrence.sourceRecurringEventID,
-                              let source = store.financialEvents.first(where: { $0.id == sourceID }) else {
+                              let source = store.activeFinancialEvents.first(where: { $0.id == sourceID }) else {
                             return nil
                         }
 
@@ -1470,7 +1470,7 @@ struct ObligationsCenterView: View {
     }
 
     private var installmentPlans: [InstallmentPlan] {
-        store.installmentPlans.sorted {
+        store.activeInstallmentPlans.sorted {
             let first = store.installmentPlanSummary(for: $0).nextDueDate ?? $0.firstDueDate
             let second = store.installmentPlanSummary(for: $1).nextDueDate ?? $1.firstDueDate
             return first < second
@@ -1482,7 +1482,7 @@ struct ObligationsCenterView: View {
     }
 
     private var futureExpenseItems: [FinancialEvent] {
-        store.financialEvents
+        store.activeFinancialEvents
             .filter { event in
                 event.repeatRule == .none &&
                 event.sourceInstallmentPlanID == nil &&
@@ -1495,7 +1495,7 @@ struct ObligationsCenterView: View {
     }
 
     private var expectedIncomeItems: [FinancialEvent] {
-        store.financialEvents
+        store.activeFinancialEvents
             .filter { event in
                 event.repeatRule == .none &&
                 event.status != .paid &&
@@ -1892,7 +1892,7 @@ private struct RecurringSeriesDetailView: View {
     @State private var paidSelection: RecurringOccurrenceSelection?
 
     private var event: FinancialEvent? {
-        store.financialEvents.first { $0.id == eventID }
+        store.activeFinancialEvents.first { $0.id == eventID }
     }
 
     var body: some View {
@@ -2725,11 +2725,11 @@ private struct CategoryUpcomingBreakdownSheet: View {
     @ViewBuilder
     private func destination(for item: FinancialEvent) -> some View {
         if let sourceID = item.sourceRecurringEventID,
-           store.financialEvents.contains(where: { $0.id == sourceID }) {
+           store.activeFinancialEvents.contains(where: { $0.id == sourceID }) {
             RecurringSeriesDetailView(eventID: sourceID)
                 .environmentObject(store)
         } else if let planID = item.sourceInstallmentPlanID,
-                  let plan = store.installmentPlans.first(where: { $0.id == planID }) {
+                  let plan = store.activeInstallmentPlans.first(where: { $0.id == planID }) {
             InstallmentPlanEditorView(plan: plan)
                 .environmentObject(store)
         } else if item.repeatRule != .none {
@@ -2745,12 +2745,12 @@ private struct CategoryUpcomingBreakdownSheet: View {
 
     private func canNavigate(_ item: FinancialEvent) -> Bool {
         if let sourceID = item.sourceRecurringEventID,
-           store.financialEvents.contains(where: { $0.id == sourceID }) {
+           store.activeFinancialEvents.contains(where: { $0.id == sourceID }) {
             return true
         }
 
         if let planID = item.sourceInstallmentPlanID,
-           store.installmentPlans.contains(where: { $0.id == planID }) {
+           store.activeInstallmentPlans.contains(where: { $0.id == planID }) {
             return true
         }
 
@@ -3798,7 +3798,7 @@ private struct ActualSpentBreakdownSheet: View {
             return nil
         }
 
-        return store.financialEvents.first { $0.id == eventID }
+        return store.activeFinancialEvents.first { $0.id == eventID }
     }
 
     private func sourceText(for item: ActualSpendingBreakdownItem) -> String {
@@ -4881,11 +4881,11 @@ private struct MonthCommittedBreakdownSheet: View {
     @ViewBuilder
     private func destination(for item: FinancialEvent) -> some View {
         if let sourceID = item.sourceRecurringEventID,
-           store.financialEvents.contains(where: { $0.id == sourceID }) {
+           store.activeFinancialEvents.contains(where: { $0.id == sourceID }) {
             RecurringSeriesDetailView(eventID: sourceID)
                 .environmentObject(store)
         } else if let planID = item.sourceInstallmentPlanID,
-                  let plan = store.installmentPlans.first(where: { $0.id == planID }) {
+                  let plan = store.activeInstallmentPlans.first(where: { $0.id == planID }) {
             InstallmentPlanEditorView(plan: plan)
                 .environmentObject(store)
         } else if item.repeatRule != .none {
@@ -4901,12 +4901,12 @@ private struct MonthCommittedBreakdownSheet: View {
 
     private func canNavigate(_ item: FinancialEvent) -> Bool {
         if let sourceID = item.sourceRecurringEventID,
-           store.financialEvents.contains(where: { $0.id == sourceID }) {
+           store.activeFinancialEvents.contains(where: { $0.id == sourceID }) {
             return true
         }
 
         if let planID = item.sourceInstallmentPlanID,
-           store.installmentPlans.contains(where: { $0.id == planID }) {
+           store.activeInstallmentPlans.contains(where: { $0.id == planID }) {
             return true
         }
 
@@ -5255,7 +5255,7 @@ private struct BudgetGridSnapshot {
     ) {
         self.monthDates = monthDates
 
-        var categoryNames = store.categories.filter { $0.isActive }.map { $0.name }
+        var categoryNames = store.activeCategories.map { $0.name }
         var dataByKey: [BudgetGridMonthKey: BudgetGridMonthData] = [:]
 
         for date in monthDates {

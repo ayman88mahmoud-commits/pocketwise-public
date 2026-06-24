@@ -79,7 +79,7 @@ struct PlanningInboxView: View {
 
     private var scopedEvents: [FinancialEvent] {
         let range = selectedRange
-        return store.financialEvents.filter { event in
+        return store.activeFinancialEvents.filter { event in
             event.date >= range.start && event.date <= range.end
         }
     }
@@ -436,7 +436,7 @@ struct PlanningInboxView: View {
 
     private func missingIncomeIssue(for monthDate: Date) -> PlanningIssue? {
         let monthKey = monthComponents(for: monthDate)
-        let hasIncome = store.financialEvents.contains { event in
+        let hasIncome = store.activeFinancialEvents.contains { event in
             guard event.type == .income,
                   event.status != .cancelled,
                   event.status != .skipped else {
@@ -479,7 +479,7 @@ struct PlanningInboxView: View {
             (item.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), item.plannedAmount)
         })
 
-        let mainBudgetCategories = store.categories
+        let mainBudgetCategories = store.activeCategories
             .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
@@ -802,7 +802,7 @@ enum PlanCheckSummaryBuilder {
         let end = endOfMonth(for: endMonth)
         let normalizedRange = start <= end ? (start: start, end: end) : (start: startOfMonth(for: endMonth), end: endOfMonth(for: startMonth))
         let months = selectedMonths(from: normalizedRange.start, through: normalizedRange.end)
-        let scopedEvents = store.financialEvents.filter { event in
+        let scopedEvents = store.activeFinancialEvents.filter { event in
             event.date >= normalizedRange.start && event.date <= normalizedRange.end
         }
 
@@ -915,7 +915,7 @@ enum PlanCheckSummaryBuilder {
 
     private static func hasIncome(in monthDate: Date, store: WalletStore) -> Bool {
         let monthKey = monthComponents(for: monthDate)
-        return store.financialEvents.contains { event in
+        return store.activeFinancialEvents.contains { event in
             guard event.type == .income,
                   event.status != .cancelled,
                   event.status != .skipped else {
@@ -942,7 +942,7 @@ enum PlanCheckSummaryBuilder {
             (item.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), item.plannedAmount)
         })
 
-        let mainBudgetCategories = store.categories
+        let mainBudgetCategories = store.activeCategories
             .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 

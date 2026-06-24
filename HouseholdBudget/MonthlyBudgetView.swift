@@ -535,7 +535,7 @@ struct MonthlyBudgetView: View {
             }
         }
 
-        for category in store.categories where category.isActive {
+        for category in store.activeCategories {
             values[category.name] = values[category.name] ?? ""
         }
 

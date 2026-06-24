@@ -95,7 +95,7 @@ struct TodayView: View {
     }
 
     private var quickAddEvents: [WalletEvent] {
-        store.walletEvents.filter { $0.isFavorite && $0.isActive }
+        store.activeWalletEvents.filter { $0.isFavorite && $0.isActive }
     }
 
     var body: some View {
@@ -233,7 +233,7 @@ struct TodayView: View {
                 RunwayBreakdownSheet(
                     route: route,
                     result: runwayCheck,
-                    accounts: store.accounts
+                    accounts: store.activeAccounts
                 )
                 .environmentObject(store)
             }
@@ -300,7 +300,7 @@ private struct QuickAddManagerSheet: View {
     }
 
     private var quickAddEvents: [WalletEvent] {
-        store.walletEvents.filter { $0.isFavorite && $0.isActive }
+        store.activeWalletEvents.filter { $0.isFavorite && $0.isActive }
     }
 
     private var trimmedNewName: String {
@@ -308,7 +308,7 @@ private struct QuickAddManagerSheet: View {
     }
 
     private var activeCategories: [Category] {
-        store.categories.filter { $0.isActive }
+        store.activeCategories
     }
 
     private var availableSubcategories: [String] {
@@ -316,7 +316,7 @@ private struct QuickAddManagerSheet: View {
     }
 
     private var activeAccounts: [Account] {
-        store.accounts.filter { $0.isActive }
+        store.activeAccounts
     }
 
     private var canAdd: Bool {
@@ -535,14 +535,14 @@ private struct ManageIncomeView: View {
     }
 
     private var recurringIncome: [FinancialEvent] {
-        store.financialEvents
+        store.activeFinancialEvents
             .filter { $0.type == .income && $0.repeatRule != .none }
             .sorted { $0.date < $1.date }
     }
 
     private var receivedIncome: [FinancialEvent] {
         Array(
-            store.financialEvents
+            store.activeFinancialEvents
                 .filter { $0.type == .income && $0.status == .paid }
                 .sorted { $0.date > $1.date }
                 .prefix(12)
@@ -958,21 +958,21 @@ private extension TodayView {
     }
 
     var hasMeaningfulSetupData: Bool {
-        !store.financialEvents.isEmpty ||
-        !store.walletEvents.isEmpty ||
-        !store.creditCardPurchases.isEmpty ||
-        !store.creditCardPayments.isEmpty ||
-        !store.installmentPlans.isEmpty ||
-        !store.personDebts.isEmpty ||
-        !store.personDebtEntries.isEmpty ||
-        store.monthlyBudgets.contains { budget in
+        !store.activeFinancialEvents.isEmpty ||
+        !store.activeWalletEvents.isEmpty ||
+        !store.activeCreditCardPurchases.isEmpty ||
+        !store.activeCreditCardPayments.isEmpty ||
+        !store.activeInstallmentPlans.isEmpty ||
+        !store.activePersonDebts.isEmpty ||
+        !store.activePersonDebtEntries.isEmpty ||
+        store.activeMonthlyBudgets.contains { budget in
             budget.items.contains { $0.plannedAmount > 0 }
         }
     }
 
     private var setupGuidanceState: SetupGuidanceState {
         guard !hasMeaningfulSetupData else { return .none }
-        if store.accounts.isEmpty && store.creditCards.isEmpty {
+        if store.activeAccounts.isEmpty && store.activeCreditCards.isEmpty {
             return .emptyWallet
         }
         return .incompleteSetup
@@ -2172,7 +2172,7 @@ private extension TodayView {
             return nil
         }
 
-        let hasSalaryBeforeResume = store.financialEvents.contains { event in
+        let hasSalaryBeforeResume = store.activeFinancialEvents.contains { event in
             event.type == .income &&
             event.effectiveIncomeType == .salary &&
             event.date < resumeDate &&
@@ -2356,7 +2356,7 @@ private extension TodayView {
                         }
 
                         if let accountName = event.accountName,
-                           let account = store.accounts.first(where: { $0.name == accountName }) {
+                           let account = store.activeAccounts.first(where: { $0.name == accountName }) {
                             AccountIdentityLabel(
                                 account: account,
                                 subtitle: "Account",
@@ -2801,7 +2801,7 @@ struct UpcomingPaymentConfirmationSheet: View {
                     AccountMenuPickerField(
                         title: isArabic ? "مدفوع من" : "Paid from",
                         selection: $selectedAccountName,
-                        accounts: store.accounts.filter { $0.isActive },
+                        accounts: store.activeAccounts,
                         placeholder: isArabic ? "اختر حساب الدفع" : "Choose payment account",
                         emptyTitle: isArabic ? "اختر حساب الدفع" : "Choose payment account"
                     )
@@ -2930,7 +2930,7 @@ struct UpcomingPaymentConfirmationSheet: View {
     }
 
     private var activeAccounts: [Account] {
-        store.accounts.filter { $0.isActive }
+        store.activeAccounts
     }
 
     private var availableSubcategories: [String] {
@@ -2971,7 +2971,7 @@ struct UpcomingPaymentConfirmationSheet: View {
         selectedPaymentMethod = UpcomingPaymentMethod.fromStoredValue(event.paymentMethodName)
         feeText = selectedPaymentMethod == .instaPay ? cleanNumberText(defaultInstaPayFee) : "0"
         paymentDate = Date()
-        selectedCategoryName = event.categoryName ?? store.categories.first { $0.isActive }?.name ?? ""
+        selectedCategoryName = event.categoryName ?? store.activeCategories.first?.name ?? ""
         selectedSubCategoryName = event.subCategoryName ?? availableSubcategories.first ?? ""
         ensureSubcategoryIsValid()
         note = event.note ?? ""
@@ -3100,7 +3100,7 @@ private struct GlobalSearchView: View {
     private var transactionResults: [FinancialEvent] {
         guard !trimmedQuery.isEmpty else { return [] }
 
-        return store.financialEvents
+        return store.activeFinancialEvents
             .filter { matchesFinancialEvent($0) }
             .sorted { first, second in
                 if first.date == second.date {
@@ -3116,7 +3116,7 @@ private struct GlobalSearchView: View {
     private var peopleDebtResults: [PersonDebt] {
         guard !trimmedQuery.isEmpty else { return [] }
 
-        return store.personDebts
+        return store.activePersonDebts
             .filter { matchesPersonDebt($0) }
             .sorted { first, second in
                 let firstRemaining = store.remainingAmount(for: first)
@@ -3134,7 +3134,7 @@ private struct GlobalSearchView: View {
     private var accountResults: [Account] {
         guard !trimmedQuery.isEmpty else { return [] }
 
-        return store.accounts
+        return store.activeAccounts
             .filter { matchesAccount($0) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .prefix(12)
@@ -3144,7 +3144,7 @@ private struct GlobalSearchView: View {
     private var categoryResults: [CategorySearchResult] {
         guard !trimmedQuery.isEmpty else { return [] }
 
-        return store.categories
+        return store.activeCategories
             .flatMap { category in
                 categorySearchResults(for: category)
             }
@@ -3398,7 +3398,7 @@ private struct GlobalSearchView: View {
 private extension GlobalSearchView {
 
     var allObligationResults: [ObligationSearchResult] {
-        let recurring = store.financialEvents
+        let recurring = store.activeFinancialEvents
             .filter { $0.repeatRule != .none && $0.status != .cancelled }
             .map { event in
                 let nextDate = nextRecurringDate(for: event) ?? event.date
@@ -3427,7 +3427,7 @@ private extension GlobalSearchView {
                 )
             }
 
-        let installments = store.installmentPlans.map { plan in
+        let installments = store.activeInstallmentPlans.map { plan in
             let summary = store.installmentPlanSummary(for: plan)
             let nextDate = summary.nextDueDate ?? plan.firstDueDate
             return ObligationSearchResult(
@@ -3455,7 +3455,7 @@ private extension GlobalSearchView {
             )
         }
 
-        let futureEvents = store.financialEvents
+        let futureEvents = store.activeFinancialEvents
             .filter { event in
                 event.repeatRule == .none &&
                 event.sourceInstallmentPlanID == nil &&
@@ -3476,7 +3476,7 @@ private extension GlobalSearchView {
                 )
             }
 
-        let debts = store.personDebts
+        let debts = store.activePersonDebts
             .filter { !$0.isArchived && $0.dueDate != nil && store.remainingAmount(for: $0) > 0 }
             .map { debt in
                 ObligationSearchResult(

@@ -46,8 +46,7 @@ struct MultiMonthPlannerView: View {
     }
 
     private var categoryNames: [String] {
-        var names = store.categories
-            .filter { $0.isActive }
+        var names = store.activeCategories
             .map { $0.name }
 
         for monthKey in monthKeys {

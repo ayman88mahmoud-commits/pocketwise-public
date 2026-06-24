@@ -148,7 +148,7 @@ struct TodayActualSpendingBreakdownSheet: View {
             return nil
         }
 
-        return store.financialEvents.first { $0.id == eventID }
+        return store.activeFinancialEvents.first { $0.id == eventID }
     }
 
     private func sourceText(for item: ActualSpendingBreakdownItem) -> String {
