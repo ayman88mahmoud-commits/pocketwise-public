@@ -2478,14 +2478,14 @@ final class WalletStore: ObservableObject {
     // MARK: - People / Debts
 
     var totalOwedToMe: Double {
-        personDebts
+        activePersonDebts
             .filter { $0.kind == .owedToMe && !$0.isArchived }
             .map { remainingAmount(for: $0) }
             .reduce(0, +)
     }
 
     var totalIOwe: Double {
-        personDebts
+        activePersonDebts
             .filter { $0.kind == .iOwe && !$0.isArchived }
             .map { remainingAmount(for: $0) }
             .reduce(0, +)
@@ -2496,7 +2496,7 @@ final class WalletStore: ObservableObject {
     }
 
     func entries(for debt: PersonDebt) -> [PersonDebtEntry] {
-        personDebtEntries
+        activePersonDebtEntries
             .filter { $0.debtID == debt.id }
             .sorted {
                 if $0.date == $1.date {
@@ -2522,7 +2522,7 @@ final class WalletStore: ObservableObject {
     }
 
     func expectedRepaymentEvents() -> [FinancialEvent] {
-        personDebts.compactMap { debt in
+        activePersonDebts.compactMap { debt in
             guard debt.kind == .owedToMe,
                   !debt.isArchived,
                   let dueDate = debt.dueDate else {
@@ -2560,7 +2560,7 @@ final class WalletStore: ObservableObject {
             return [:]
         }
 
-        let total = personDebtEntries
+        let total = activePersonDebtEntries
             .filter { entry in
                 entry.entryType == .repaymentReceived &&
                 entry.date >= monthRange.start &&
