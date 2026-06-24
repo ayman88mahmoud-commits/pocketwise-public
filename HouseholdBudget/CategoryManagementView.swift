@@ -12,7 +12,7 @@ struct CategoryManagementView: View {
     }
 
     private var sortedCategories: [Category] {
-        store.categories.sorted {
+        store.activeCategories.sorted {
             if $0.isActive == $1.isActive {
                 return $0.name < $1.name
             }
@@ -137,7 +137,7 @@ struct CategoryDetailManagementView: View {
     }
 
     private var category: Category? {
-        store.categories.first { $0.id == categoryID }
+        store.activeCategories.first { $0.id == categoryID }
     }
 
     private var sortedSubcategories: [String] {

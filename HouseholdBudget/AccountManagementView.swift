@@ -8,7 +8,7 @@ struct AccountManagementView: View {
     @State private var selectedAccount: Account?
 
     private var sortedAccounts: [Account] {
-        store.accounts.sorted {
+        store.activeAccounts.sorted {
             if $0.isActive == $1.isActive {
                 return $0.name < $1.name
             }

@@ -15,7 +15,15 @@ struct HistoricalSummaryView: View {
     }
 
     private var entries: [HistoricalMonthlySummaryEntry] {
-        store.historicalSummaries(year: monthComponents.year, month: monthComponents.month)
+        store.activeHistoricalMonthlySummaries
+            .filter { $0.year == monthComponents.year && $0.month == monthComponents.month }
+            .sorted {
+                if $0.categoryName == $1.categoryName {
+                    return $0.subCategoryName.localizedCaseInsensitiveCompare($1.subCategoryName) == .orderedAscending
+                }
+
+                return $0.categoryName.localizedCaseInsensitiveCompare($1.categoryName) == .orderedAscending
+            }
     }
 
     private var totalAmount: Double {
@@ -214,7 +222,7 @@ private struct HistoricalSummaryBulkEntryView: View {
     @State private var subcategoryNames: [String: String] = [:]
 
     private var activeCategories: [Category] {
-        store.categories
+        store.activeCategories
             .filter { $0.isActive }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -287,7 +295,8 @@ private struct HistoricalSummaryBulkEntryView: View {
     }
 
     private func loadExistingValues() {
-        let entries = store.historicalSummaries(year: year, month: month)
+        let entries = store.activeHistoricalMonthlySummaries
+            .filter { $0.year == year && $0.month == month }
         var loadedAmounts: [String: String] = [:]
         var loadedSubcategories: [String: String] = [:]
 
@@ -306,7 +315,8 @@ private struct HistoricalSummaryBulkEntryView: View {
             return
         }
 
-        let existingEntries = store.historicalSummaries(year: year, month: month)
+        let existingEntries = store.activeHistoricalMonthlySummaries
+            .filter { $0.year == year && $0.month == month }
 
         for category in activeCategories {
             let amount = Double((amountTexts[category.name] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
@@ -392,7 +402,7 @@ private struct HistoricalSummaryEditorView: View {
     }
 
     private var activeCategories: [Category] {
-        store.categories
+        store.activeCategories
             .filter { $0.isActive || $0.name == entry?.categoryName }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }

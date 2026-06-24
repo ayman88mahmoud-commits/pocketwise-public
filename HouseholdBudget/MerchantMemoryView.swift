@@ -8,7 +8,7 @@ struct MerchantMemoryView: View {
     @State private var editingMemory: MerchantMemory?
 
     private var memories: [MerchantMemory] {
-        store.merchantMemories.sorted {
+        store.activeMerchantMemories.sorted {
             $0.merchantName.localizedCaseInsensitiveCompare($1.merchantName) == .orderedAscending
         }
     }
@@ -119,7 +119,7 @@ private struct MerchantMemoryEditorView: View {
     }
 
     private var categories: [Category] {
-        store.categories.filter { $0.isActive || $0.name == memory?.defaultCategoryName }
+        store.activeCategories.filter { $0.isActive || $0.name == memory?.defaultCategoryName }
     }
 
     private var subcategories: [String] {
@@ -163,7 +163,7 @@ private struct MerchantMemoryEditorView: View {
                     AccountMenuPickerField(
                         title: store.appLanguage == .arabicEgyptian ? "الحساب الافتراضي" : "Default Account",
                         selection: $selectedAccountName,
-                        accounts: store.accounts.filter { $0.isActive },
+                        accounts: store.activeAccounts.filter { $0.isActive },
                         placeholder: store.appLanguage == .arabicEgyptian ? "بدون" : "None",
                         emptyTitle: store.appLanguage == .arabicEgyptian ? "بدون" : "None"
                     )
