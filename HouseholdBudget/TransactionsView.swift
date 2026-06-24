@@ -79,14 +79,14 @@ struct TransactionsView: View {
     }
 
     private var sortedItems: [TransactionListItem] {
-        let financialItems = store.financialEvents
+        let financialItems = store.activeFinancialEvents
             .filter { !($0.type == .income && $0.repeatRule != .none && $0.sourceRecurringEventID == nil) }
             .map(TransactionListItem.financialEvent)
         let recurringIncomeItems = store.upcomingKnownIncomeEvents()
             .filter { $0.sourceRecurringEventID != nil }
             .map(TransactionListItem.financialEvent)
-        let cardPurchaseItems = store.creditCardPurchases.map(TransactionListItem.creditCardPurchase)
-        let cardPaymentItems = store.creditCardPayments.map(TransactionListItem.creditCardPayment)
+        let cardPurchaseItems = store.activeCreditCardPurchases.map(TransactionListItem.creditCardPurchase)
+        let cardPaymentItems = store.activeCreditCardPayments.map(TransactionListItem.creditCardPayment)
 
         return (financialItems + recurringIncomeItems + cardPurchaseItems + cardPaymentItems).sorted(by: sortTransactionItems)
     }
@@ -135,7 +135,7 @@ struct TransactionsView: View {
             .filter { $0.isActive }
             .map { $0.name }
 
-        let usedNames = store.financialEvents.flatMap { event in
+        let usedNames = store.activeFinancialEvents.flatMap { event in
             [event.accountName, event.destinationAccountName].compactMap { $0 }
         }
 
@@ -143,7 +143,7 @@ struct TransactionsView: View {
             names.append(name)
         }
 
-        for name in store.creditCardPayments.map(\.fromAccountName)
+        for name in store.activeCreditCardPayments.map(\.fromAccountName)
         where !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             names.append(name)
         }
@@ -162,13 +162,13 @@ struct TransactionsView: View {
             .filter { $0.isActive }
             .map { $0.name }
 
-        let usedNames = store.financialEvents.compactMap { $0.categoryName }
+        let usedNames = store.activeFinancialEvents.compactMap { $0.categoryName }
 
         for name in usedNames where !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             names.append(name)
         }
 
-        for name in store.creditCardPurchases.map(\.categoryName)
+        for name in store.activeCreditCardPurchases.map(\.categoryName)
         where !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             names.append(name)
         }
@@ -1504,7 +1504,7 @@ private struct EditCreditCardPurchaseView: View {
     }
 
     private var cardsForEditing: [CreditCard] {
-        var cards = store.creditCards.filter { $0.isActive }
+        var cards = store.activeCreditCards
 
         if let inactiveCard = store.creditCards.first(where: { $0.id == selectedCardID && !$0.isActive }),
            !cards.contains(where: { $0.id == inactiveCard.id }) {

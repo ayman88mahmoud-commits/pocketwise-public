@@ -11,7 +11,7 @@ struct PeopleDebtsView: View {
     }
 
     private var visibleDebts: [PersonDebt] {
-        store.personDebts
+        store.activePersonDebts
             .filter { !$0.isArchived }
             .sorted {
                 if store.remainingAmount(for: $0) == store.remainingAmount(for: $1) {
@@ -451,11 +451,18 @@ struct PersonDebtDetailView: View {
     @State private var isConfirmingDelete = false
 
     private var currentDebt: PersonDebt {
-        store.personDebts.first { $0.id == debt.id } ?? debt
+        store.activePersonDebts.first { $0.id == debt.id } ?? debt
     }
 
     private var entries: [PersonDebtEntry] {
-        store.entries(for: currentDebt)
+        store.activeEntries(for: currentDebt.id)
+            .sorted {
+                if $0.date == $1.date {
+                    return $0.createdAt < $1.createdAt
+                }
+
+                return $0.date < $1.date
+            }
     }
 
     private var remainingAmount: Double {
@@ -748,7 +755,7 @@ struct AddDebtRepaymentView: View {
     @State private var didAttemptSave = false
 
     private var currentDebt: PersonDebt {
-        store.personDebts.first { $0.id == debt.id } ?? debt
+        store.activePersonDebts.first { $0.id == debt.id } ?? debt
     }
 
     private var activeAccounts: [Account] {

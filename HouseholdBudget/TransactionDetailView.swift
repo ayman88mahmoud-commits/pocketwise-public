@@ -233,7 +233,7 @@ struct TransactionDetailView: View {
             return nil
         }
 
-        return store.financialEvents.first { $0.id == seriesID }
+        return store.activeFinancialEvents.first { $0.id == seriesID }
     }
 
     private var recurringIncomeSeries: FinancialEvent? {

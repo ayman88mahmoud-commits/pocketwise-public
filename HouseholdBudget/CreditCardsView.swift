@@ -39,14 +39,12 @@ struct CreditCardsView: View {
     @State private var swipeHintHasRun = false
 
     private var activeCards: [CreditCard] {
-        store.creditCards
-            .filter { $0.isActive }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        store.activeCreditCards
     }
 
     private var inactiveCards: [CreditCard] {
         store.creditCards
-            .filter { !$0.isActive }
+            .filter { !$0.isActive && !$0.isDeleted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -333,7 +331,7 @@ struct CreditCardPaymentView: View {
             return nil
         }
 
-        return store.creditCards.first { $0.id == selectedCardID }
+        return store.creditCards.first { $0.id == selectedCardID && !$0.isDeleted }
     }
 
     private var activeAccounts: [Account] {
@@ -570,7 +568,7 @@ struct CreditCardPaymentView: View {
 
     private func applyDefaultAccount(for cardID: UUID?) {
         guard let cardID,
-              let card = store.creditCards.first(where: { $0.id == cardID }) else {
+              let card = store.activeCreditCards.first(where: { $0.id == cardID }) else {
             selectedAccountName = activeAccounts.first?.name ?? ""
             return
         }
