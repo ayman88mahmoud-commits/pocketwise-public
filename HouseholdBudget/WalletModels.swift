@@ -34,6 +34,10 @@ struct Account: Identifiable, Codable, Hashable {
     var recognitionAliases: [String] = []
     var recognitionCardEndings: [String] = []
     var appearanceColor: ProviderAppearanceColor?
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
 
     init(
         id: UUID = UUID(),
@@ -43,7 +47,11 @@ struct Account: Identifiable, Codable, Hashable {
         isActive: Bool = true,
         recognitionAliases: [String] = [],
         recognitionCardEndings: [String] = [],
-        appearanceColor: ProviderAppearanceColor? = nil
+        appearanceColor: ProviderAppearanceColor? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -53,6 +61,10 @@ struct Account: Identifiable, Codable, Hashable {
         self.recognitionAliases = recognitionAliases
         self.recognitionCardEndings = recognitionCardEndings
         self.appearanceColor = appearanceColor
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+        self.deletedAt = deletedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -64,6 +76,10 @@ struct Account: Identifiable, Codable, Hashable {
         case recognitionAliases
         case recognitionCardEndings
         case appearanceColor
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -77,6 +93,10 @@ struct Account: Identifiable, Codable, Hashable {
         recognitionAliases = try container.decodeIfPresent([String].self, forKey: .recognitionAliases) ?? []
         recognitionCardEndings = try container.decodeIfPresent([String].self, forKey: .recognitionCardEndings) ?? []
         appearanceColor = try container.decodeIfPresent(ProviderAppearanceColor.self, forKey: .appearanceColor)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 }
 
@@ -88,19 +108,31 @@ struct Category: Identifiable, Codable, Hashable {
     var subcategories: [String]
     var isActive: Bool = true
     var inactiveSubcategoryNames: [String] = []
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
 
     init(
         id: UUID = UUID(),
         name: String,
         subcategories: [String],
         isActive: Bool = true,
-        inactiveSubcategoryNames: [String] = []
+        inactiveSubcategoryNames: [String] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
         self.subcategories = subcategories
         self.isActive = isActive
         self.inactiveSubcategoryNames = inactiveSubcategoryNames
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+        self.deletedAt = deletedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -109,6 +141,10 @@ struct Category: Identifiable, Codable, Hashable {
         case subcategories
         case isActive
         case inactiveSubcategoryNames
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -119,6 +155,10 @@ struct Category: Identifiable, Codable, Hashable {
         subcategories = try container.decode([String].self, forKey: .subcategories)
         isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
         inactiveSubcategoryNames = try container.decodeIfPresent([String].self, forKey: .inactiveSubcategoryNames) ?? []
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -129,6 +169,10 @@ struct Category: Identifiable, Codable, Hashable {
         try container.encode(subcategories, forKey: .subcategories)
         try container.encode(isActive, forKey: .isActive)
         try container.encode(inactiveSubcategoryNames, forKey: .inactiveSubcategoryNames)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(isDeleted, forKey: .isDeleted)
+        try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
     }
 }
 
@@ -145,6 +189,42 @@ struct WalletEvent: Identifiable, Codable, Hashable {
     var defaultAccountName: String?
     var isFavorite: Bool = false
     var isActive: Bool = true
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case categoryName
+        case subCategoryName
+        case defaultAccountName
+        case isFavorite
+        case isActive
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension WalletEvent {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        categoryName = try container.decode(String.self, forKey: .categoryName)
+        subCategoryName = try container.decode(String.self, forKey: .subCategoryName)
+        defaultAccountName = try container.decodeIfPresent(String.self, forKey: .defaultAccountName)
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 struct MerchantMemory: Identifiable, Codable, Hashable {
@@ -160,6 +240,46 @@ struct MerchantMemory: Identifiable, Codable, Hashable {
     var isActive: Bool = true
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case merchantName
+        case aliases
+        case defaultCategoryName
+        case defaultSubCategoryName
+        case defaultAccountName
+        case defaultType
+        case lastUsedAt
+        case usageCount
+        case isActive
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension MerchantMemory {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        merchantName = try container.decode(String.self, forKey: .merchantName)
+        aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        defaultCategoryName = try container.decode(String.self, forKey: .defaultCategoryName)
+        defaultSubCategoryName = try container.decode(String.self, forKey: .defaultSubCategoryName)
+        defaultAccountName = try container.decodeIfPresent(String.self, forKey: .defaultAccountName)
+        defaultType = try container.decodeIfPresent(FinancialEventType.self, forKey: .defaultType) ?? .expense
+        lastUsedAt = try container.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+        usageCount = try container.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 // MARK: - Financial Event
@@ -282,7 +402,34 @@ struct RecurringScheduleOverride: Identifiable, Codable, Hashable {
     var amount: Double
     var isSkipped: Bool = false
     var note: String? = nil
+    var createdAt: Date = Date()
     var updatedAt: Date = Date()
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case year
+        case month
+        case amount
+        case isSkipped
+        case note
+        case createdAt
+        case updatedAt
+    }
+
+}
+
+extension RecurringScheduleOverride {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        year = try container.decode(Int.self, forKey: .year)
+        month = try container.decode(Int.self, forKey: .month)
+        amount = try container.decode(Double.self, forKey: .amount)
+        isSkipped = try container.decodeIfPresent(Bool.self, forKey: .isSkipped) ?? false
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    }
 }
 
 enum ConfidenceLevel: String, Codable, CaseIterable, Identifiable {
@@ -345,6 +492,81 @@ struct FinancialEvent: Identifiable, Codable, Hashable {
 
     var note: String? = nil
     var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case status
+        case title
+        case amount
+        case date
+        case accountName
+        case destinationAccountName
+        case paymentMethodName
+        case walletEventName
+        case categoryName
+        case subCategoryName
+        case incomeType
+        case reimbursementCategoryName
+        case repeatRule
+        case recurringEndKind
+        case recurringEndDate
+        case recurringEndPaymentCount
+        case recurringScheduleOverrides
+        case recurringAmountMode
+        case recurringEstimatedAmount
+        case confidence
+        case sourceInstallmentPlanID
+        case sourceRecurringEventID
+        case recurringOccurrenceYear
+        case recurringOccurrenceMonth
+        case note
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension FinancialEvent {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        type = try container.decode(FinancialEventType.self, forKey: .type)
+        status = try container.decode(FinancialEventStatus.self, forKey: .status)
+        title = try container.decode(String.self, forKey: .title)
+        amount = try container.decode(Double.self, forKey: .amount)
+        date = try container.decode(Date.self, forKey: .date)
+        accountName = try container.decodeIfPresent(String.self, forKey: .accountName)
+        destinationAccountName = try container.decodeIfPresent(String.self, forKey: .destinationAccountName)
+        paymentMethodName = try container.decodeIfPresent(String.self, forKey: .paymentMethodName)
+        walletEventName = try container.decodeIfPresent(String.self, forKey: .walletEventName)
+        categoryName = try container.decodeIfPresent(String.self, forKey: .categoryName)
+        subCategoryName = try container.decodeIfPresent(String.self, forKey: .subCategoryName)
+        incomeType = try container.decodeIfPresent(IncomeType.self, forKey: .incomeType)
+        reimbursementCategoryName = try container.decodeIfPresent(String.self, forKey: .reimbursementCategoryName)
+        repeatRule = try container.decodeIfPresent(RepeatRule.self, forKey: .repeatRule) ?? .none
+        recurringEndKind = try container.decodeIfPresent(RecurringEndKind.self, forKey: .recurringEndKind)
+        recurringEndDate = try container.decodeIfPresent(Date.self, forKey: .recurringEndDate)
+        recurringEndPaymentCount = try container.decodeIfPresent(Int.self, forKey: .recurringEndPaymentCount)
+        recurringScheduleOverrides = try container.decodeIfPresent([RecurringScheduleOverride].self, forKey: .recurringScheduleOverrides)
+        recurringAmountMode = try container.decodeIfPresent(RecurringAmountMode.self, forKey: .recurringAmountMode)
+        recurringEstimatedAmount = try container.decodeIfPresent(Double.self, forKey: .recurringEstimatedAmount)
+        confidence = try container.decodeIfPresent(ConfidenceLevel.self, forKey: .confidence)
+        sourceInstallmentPlanID = try container.decodeIfPresent(UUID.self, forKey: .sourceInstallmentPlanID)
+        sourceRecurringEventID = try container.decodeIfPresent(UUID.self, forKey: .sourceRecurringEventID)
+        recurringOccurrenceYear = try container.decodeIfPresent(Int.self, forKey: .recurringOccurrenceYear)
+        recurringOccurrenceMonth = try container.decodeIfPresent(Int.self, forKey: .recurringOccurrenceMonth)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 extension FinancialEvent {
@@ -441,6 +663,10 @@ struct InstallmentPlan: Identifiable, Codable, Hashable {
     var paymentMethodName: String = "Valu"
     var linkedCreditCardID: UUID? = nil
     var note: String? = nil
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
 
     var monthlyAmount: Double {
         guard installmentCount > 0 else { return 0 }
@@ -458,7 +684,11 @@ struct InstallmentPlan: Identifiable, Codable, Hashable {
         subCategoryName: String,
         paymentMethodName: String = "Valu",
         linkedCreditCardID: UUID? = nil,
-        note: String? = nil
+        note: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.purchaseName = purchaseName
@@ -471,6 +701,10 @@ struct InstallmentPlan: Identifiable, Codable, Hashable {
         self.paymentMethodName = paymentMethodName
         self.linkedCreditCardID = linkedCreditCardID
         self.note = note
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+        self.deletedAt = deletedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -485,6 +719,10 @@ struct InstallmentPlan: Identifiable, Codable, Hashable {
         case paymentMethodName
         case linkedCreditCardID
         case note
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -499,8 +737,12 @@ struct InstallmentPlan: Identifiable, Codable, Hashable {
         categoryName = try container.decode(String.self, forKey: .categoryName)
         subCategoryName = try container.decode(String.self, forKey: .subCategoryName)
         paymentMethodName = try container.decodeIfPresent(String.self, forKey: .paymentMethodName) ?? "Valu"
-        linkedCreditCardID = try container.decodeIfPresent(UUID.self, forKey: .linkedCreditCardID) ?? nil
+        linkedCreditCardID = try container.decodeIfPresent(UUID.self, forKey: .linkedCreditCardID)
         note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 }
 
@@ -541,6 +783,34 @@ struct WalletMonthlyBudget: Identifiable, Codable, Hashable {
     var items: [WalletMonthlyBudgetItem]
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case year
+        case month
+        case items
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension WalletMonthlyBudget {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        year = try container.decode(Int.self, forKey: .year)
+        month = try container.decode(Int.self, forKey: .month)
+        items = try container.decode([WalletMonthlyBudgetItem].self, forKey: .items)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 struct WalletMonthlyBudgetItem: Identifiable, Codable, Hashable {
@@ -585,6 +855,40 @@ struct PersonDebt: Identifiable, Codable, Hashable {
     var updatedAt: Date = Date()
     var dueDate: Date? = nil
     var isArchived: Bool = false
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case personName
+        case kind
+        case originalAmount
+        case note
+        case createdAt
+        case updatedAt
+        case dueDate
+        case isArchived
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension PersonDebt {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        personName = try container.decode(String.self, forKey: .personName)
+        kind = try container.decode(PersonDebtKind.self, forKey: .kind)
+        originalAmount = try container.decode(Double.self, forKey: .originalAmount)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 struct PersonDebtEntry: Identifiable, Codable, Hashable {
@@ -596,6 +900,41 @@ struct PersonDebtEntry: Identifiable, Codable, Hashable {
     var date: Date
     var note: String? = nil
     var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case debtID
+        case entryType
+        case amount
+        case accountName
+        case date
+        case note
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension PersonDebtEntry {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        debtID = try container.decode(UUID.self, forKey: .debtID)
+        entryType = try container.decode(PersonDebtEntryType.self, forKey: .entryType)
+        amount = try container.decode(Double.self, forKey: .amount)
+        accountName = try container.decode(String.self, forKey: .accountName)
+        date = try container.decode(Date.self, forKey: .date)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 // MARK: - Historical Summary-Only Data
@@ -610,6 +949,8 @@ struct HistoricalMonthlySummaryEntry: Identifiable, Codable, Hashable {
     var note: String?
     var createdAt: Date
     var updatedAt: Date
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
 
     init(
         id: UUID = UUID(),
@@ -620,7 +961,9 @@ struct HistoricalMonthlySummaryEntry: Identifiable, Codable, Hashable {
         amount: Double,
         note: String? = nil,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.year = year
@@ -631,6 +974,8 @@ struct HistoricalMonthlySummaryEntry: Identifiable, Codable, Hashable {
         self.note = note
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.isDeleted = isDeleted
+        self.deletedAt = deletedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -643,6 +988,8 @@ struct HistoricalMonthlySummaryEntry: Identifiable, Codable, Hashable {
         case note
         case createdAt
         case updatedAt
+        case isDeleted
+        case deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -657,6 +1004,8 @@ struct HistoricalMonthlySummaryEntry: Identifiable, Codable, Hashable {
         note = try container.decodeIfPresent(String.self, forKey: .note)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 }
 
@@ -687,6 +1036,8 @@ struct CreditCard: Identifiable, Codable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var note: String?
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
 
     init(
         id: UUID = UUID(),
@@ -704,7 +1055,9 @@ struct CreditCard: Identifiable, Codable, Hashable {
         isActive: Bool = true,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
-        note: String? = nil
+        note: String? = nil,
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -722,6 +1075,8 @@ struct CreditCard: Identifiable, Codable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.note = note
+        self.isDeleted = isDeleted
+        self.deletedAt = deletedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -741,6 +1096,8 @@ struct CreditCard: Identifiable, Codable, Hashable {
         case createdAt
         case updatedAt
         case note
+        case isDeleted
+        case deletedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -762,6 +1119,8 @@ struct CreditCard: Identifiable, Codable, Hashable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
         note = try container.decodeIfPresent(String.self, forKey: .note)
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
 }
 
@@ -776,6 +1135,42 @@ struct CreditCardPurchase: Identifiable, Codable, Hashable {
     var note: String?
     var createdAt: Date
     var updatedAt: Date
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case cardID
+        case title
+        case amount
+        case purchaseDate
+        case categoryName
+        case subCategoryName
+        case note
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension CreditCardPurchase {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        cardID = try container.decode(UUID.self, forKey: .cardID)
+        title = try container.decode(String.self, forKey: .title)
+        amount = try container.decode(Double.self, forKey: .amount)
+        purchaseDate = try container.decode(Date.self, forKey: .purchaseDate)
+        categoryName = try container.decode(String.self, forKey: .categoryName)
+        subCategoryName = try container.decode(String.self, forKey: .subCategoryName)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 struct CreditCardPayment: Identifiable, Codable, Hashable {
@@ -787,6 +1182,38 @@ struct CreditCardPayment: Identifiable, Codable, Hashable {
     var note: String?
     var createdAt: Date
     var updatedAt: Date
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case cardID
+        case fromAccountName
+        case amount
+        case paymentDate
+        case note
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+
+}
+
+extension CreditCardPayment {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        cardID = try container.decode(UUID.self, forKey: .cardID)
+        fromAccountName = try container.decode(String.self, forKey: .fromAccountName)
+        amount = try container.decode(Double.self, forKey: .amount)
+        paymentDate = try container.decode(Date.self, forKey: .paymentDate)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 struct CreditCardDueItem: Identifiable, Hashable {
@@ -904,7 +1331,7 @@ struct BackupValidationReport: Codable, Hashable {
 }
 
 struct WalletDataSnapshot: Codable, Hashable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var schemaVersion: Int = WalletDataSnapshot.currentSchemaVersion
     var exportedAt: Date = Date()
