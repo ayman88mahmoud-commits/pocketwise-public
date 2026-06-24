@@ -1776,14 +1776,14 @@ final class WalletStore: ObservableObject {
     }
 
     func creditCardOutstanding(cardID: UUID) -> Double {
-        let openingOutstanding = creditCards.first(where: { $0.id == cardID })?.openingOutstandingBalance ?? 0
+        let openingOutstanding = activeCreditCards.first(where: { $0.id == cardID })?.openingOutstandingBalance ?? 0
 
-        let totalPurchases = creditCardPurchases
+        let totalPurchases = activeCreditCardPurchases
             .filter { $0.cardID == cardID }
             .map(\.amount)
             .reduce(0, +)
 
-        let totalPayments = creditCardPayments
+        let totalPayments = activeCreditCardPayments
             .filter { $0.cardID == cardID }
             .map(\.amount)
             .reduce(0, +)
@@ -1792,14 +1792,14 @@ final class WalletStore: ObservableObject {
     }
 
     func creditCardPurchaseTotal(cardID: UUID) -> Double {
-        creditCardPurchases
+        activeCreditCardPurchases
             .filter { $0.cardID == cardID }
             .map(\.amount)
             .reduce(0, +)
     }
 
     func creditCardPaymentTotal(cardID: UUID) -> Double {
-        creditCardPayments
+        activeCreditCardPayments
             .filter { $0.cardID == cardID }
             .map(\.amount)
             .reduce(0, +)
@@ -1842,7 +1842,7 @@ final class WalletStore: ObservableObject {
         referenceDate: Date = Date(),
         horizonMonths: Int? = nil
     ) -> [CreditCardStatementLedgerEntry] {
-        guard let card = creditCards.first(where: { $0.id == cardID }) else {
+        guard let card = activeCreditCards.first(where: { $0.id == cardID }) else {
             return []
         }
 
@@ -1868,7 +1868,7 @@ final class WalletStore: ObservableObject {
 
             return dueDate >= start
         }
-        let cardPurchases = creditCardPurchases
+        let cardPurchases = activeCreditCardPurchases
             .filter { $0.cardID == card.id }
             .sorted {
                 if $0.purchaseDate == $1.purchaseDate {
@@ -1877,7 +1877,7 @@ final class WalletStore: ObservableObject {
 
                 return $0.purchaseDate < $1.purchaseDate
             }
-        var remainingPaymentAllocations = creditCardPayments
+        var remainingPaymentAllocations = activeCreditCardPayments
             .filter { $0.cardID == card.id }
             .sorted {
                 if $0.paymentDate == $1.paymentDate {
@@ -2152,7 +2152,7 @@ final class WalletStore: ObservableObject {
 
     private func creditCardStatementEligibleBalance(card: CreditCard, statementClosingDate: Date) -> Double {
         let openingOutstanding = card.openingOutstandingBalance
-        let eligiblePurchases = creditCardPurchases
+        let eligiblePurchases = activeCreditCardPurchases
             .filter { purchase in
                 purchase.cardID == card.id &&
                 creditCardStatementClosingDate(
