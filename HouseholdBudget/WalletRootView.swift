@@ -595,6 +595,29 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(store.appLanguage == .arabicEgyptian ? "لغة التطبيق" : "App Language")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+
+                        Picker(
+                            store.appLanguage == .arabicEgyptian ? "لغة التطبيق" : "App Language",
+                            selection: Binding(
+                                get: { store.appLanguage },
+                                set: { store.appLanguage = $0 }
+                            )
+                        ) {
+                            Text("English")
+                                .tag(AppLanguage.english)
+                            Text("عربي")
+                                .tag(AppLanguage.arabicEgyptian)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 Section(store.appLanguage == .arabicEgyptian ? "تجهيز المحفظة" : "Wallet Setup") {
                     NavigationLink {
                         OnboardingWelcomeView(presentationMode: .settings)
