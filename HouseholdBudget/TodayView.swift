@@ -133,6 +133,12 @@ struct TodayView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 24)
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: 8)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: 28)
+            }
             .accessibilityIdentifier("screen.today")
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
