@@ -1079,7 +1079,7 @@ struct TransactionHistoryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             PocketWiseIconBadge(
-                systemName: iconName,
+                systemName: paymentIconName,
                 semanticColor: semanticColor,
                 size: 36,
                 cornerRadius: 10
@@ -1133,6 +1133,50 @@ struct TransactionHistoryRow: View {
         }
     }
 
+    private var paymentIconName: String {
+        if event.type == .transfer {
+            return "arrow.left.arrow.right"
+        }
+
+        let combinedText = [
+            event.paymentMethodName,
+            event.accountName,
+            event.destinationAccountName
+        ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+
+        if containsAny(combinedText, ["instapay"]) {
+            return "arrow.left.arrow.right.circle.fill"
+        }
+
+        if containsAny(combinedText, ["cash", "كاش"]) {
+            return "banknote.fill"
+        }
+
+        if containsAny(combinedText, ["wallet", "محفظة"]) {
+            return "wallet.pass.fill"
+        }
+
+        if containsAny(combinedText, ["card", "credit", "visa", "mastercard", "كارت"]) {
+            return "creditcard.fill"
+        }
+
+        if containsAny(combinedText, ["bank", "account", "cib", "nbe", "حساب", "بنك"]) {
+            return "building.columns.fill"
+        }
+
+        switch event.type {
+        case .income:
+            return event.accountName == nil ? "arrow.down.circle.fill" : "building.columns.fill"
+        case .expense, .obligation, .expectedExpense, .installment:
+            return "wallet.pass.fill"
+        case .transfer:
+            return "arrow.left.arrow.right"
+        }
+    }
+
     private var amountColor: Color {
         switch event.type {
         case .income:
@@ -1169,29 +1213,47 @@ struct TransactionHistoryRow: View {
             parts.append(event.effectiveIncomeType.title(language: store.appLanguage))
         }
 
-        if let paymentLabel {
-            parts.append(paymentLabel)
-        }
+        parts.append(contentsOf: paymentDetailParts)
 
         return parts.isEmpty ? AppText.eventTypeLabel(event.type, language: store.appLanguage) : parts.joined(separator: " • ")
     }
 
-    private var paymentLabel: String? {
+    private var paymentDetailParts: [String] {
         if event.type == .transfer {
-            return store.appLanguage == .arabicEgyptian ? "تحويل" : "Transfer"
+            return []
         }
 
-        if let paymentMethodName = event.paymentMethodName,
-           !paymentMethodName.isEmpty {
-            return paymentMethodName
+        var parts: [String] = []
+
+        if let paymentMethodName = cleaned(event.paymentMethodName) {
+            parts.append(paymentMethodName)
         }
 
-        if let accountName = event.accountName,
-           !accountName.isEmpty {
-            return accountName
+        if let accountName = cleaned(event.accountName),
+           !parts.contains(where: { isDuplicatePaymentText($0, accountName) }) {
+            parts.append(accountName)
         }
 
-        return nil
+        return parts
+    }
+
+    private func cleaned(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+
+        return trimmed
+    }
+
+    private func isDuplicatePaymentText(_ first: String, _ second: String) -> Bool {
+        let lhs = first.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let rhs = second.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return lhs == rhs || lhs.contains(rhs) || rhs.contains(lhs)
+    }
+
+    private func containsAny(_ text: String, _ tokens: [String]) -> Bool {
+        tokens.contains { text.contains($0.lowercased()) }
     }
 
     private var chipLabels: [String] {
