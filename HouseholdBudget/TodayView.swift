@@ -141,6 +141,9 @@ struct TodayView: View {
             }
             .accessibilityIdentifier("screen.today")
             .background(Color(.systemGroupedBackground))
+            .overlay(alignment: .top) {
+                topSafeAreaBackground
+            }
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 runwaySafeTargetText = cleanNumberText(store.runwaySafeBalanceTarget)
@@ -265,6 +268,15 @@ struct TodayView: View {
                 }
             }
         }
+    }
+
+    private var topSafeAreaBackground: some View {
+        GeometryReader { proxy in
+            Color(.systemGroupedBackground)
+                .frame(height: proxy.safeAreaInsets.top)
+                .ignoresSafeArea(edges: .top)
+        }
+        .allowsHitTesting(false)
     }
 }
 
