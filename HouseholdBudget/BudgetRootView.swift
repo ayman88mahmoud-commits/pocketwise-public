@@ -2521,7 +2521,17 @@ private struct BudgetCellEditSheet: View {
                         LabelValueRow(title: store.appLanguage == .arabicEgyptian ? "ملتزم به" : "Committed", value: store.displayCurrency(selection.knownUpcomingAmount))
                     }
                     LabelValueRow(title: store.appLanguage == .arabicEgyptian ? "المتوقع إجمالًا" : "Total Expected", value: store.displayCurrency(selection.effectiveProjectedAmount))
-                    LabelValueRow(title: store.appLanguage == .arabicEgyptian ? "المتبقي من الميزانية" : "Budget Left", value: store.displayCurrency(selection.remainingAfterKnown))
+                    HStack {
+                        Text(selection.remainingAfterKnown >= 0
+                            ? (store.appLanguage == .arabicEgyptian ? "المتبقي من الميزانية" : "Budget Left")
+                            : (store.appLanguage == .arabicEgyptian ? "تجاوز الميزانية" : "Over Budget"))
+                            .foregroundStyle(selection.remainingAfterKnown < 0 ? Color.red : Color.primary)
+                        Spacer(minLength: 12)
+                        Text(store.displayCurrency(abs(selection.remainingAfterKnown)))
+                            .fontWeight(.semibold)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(selection.remainingAfterKnown < 0 ? Color.red : Color.primary)
+                    }
                 } footer: {
                     Text(store.appLanguage == .arabicEgyptian ? "المبالغ الملتزم بها مجدولة لكنها لم تُدفع بعد. لا تؤثر على رصيدك الفعلي." : "Committed amounts are scheduled but not yet paid. They don't affect your actual balance.")
                 }
@@ -5427,6 +5437,10 @@ private struct BudgetGridCellData {
             return .orange
         }
 
+        if plannedAmount <= 0 && paidActualAmount > 0 {
+            return .orange
+        }
+
         if plannedAmount > 0 && paidActualAmount + knownUpcomingAmount > plannedAmount {
             return .red
         }
@@ -5439,6 +5453,10 @@ private struct BudgetGridCellData {
             return .orange
         }
 
+        if plannedAmount <= 0 && paidActualAmount > 0 {
+            return .orange
+        }
+
         if plannedAmount > 0 && paidActualAmount + knownUpcomingAmount > plannedAmount {
             return .red
         }
@@ -5448,6 +5466,10 @@ private struct BudgetGridCellData {
 
     var backgroundColor: Color {
         if plannedAmount <= 0 && knownUpcomingAmount > 0 {
+            return Color.orange.opacity(0.10)
+        }
+
+        if plannedAmount <= 0 && paidActualAmount > 0 {
             return Color.orange.opacity(0.10)
         }
 
@@ -5465,6 +5487,10 @@ private struct BudgetGridCellData {
 
         if plannedAmount > 0 && knownUpcomingAmount > 0 {
             return language == .arabicEgyptian ? "ملتزم \(store.displayCurrency(knownUpcomingAmount))" : "Committed \(store.displayCurrency(knownUpcomingAmount))"
+        }
+
+        if plannedAmount <= 0 && paidActualAmount > 0 {
+            return language == .arabicEgyptian ? "مدفوع غير مخطط \(store.displayCurrency(paidActualAmount))" : "Unplanned paid \(store.displayCurrency(paidActualAmount))"
         }
 
         if paidActualAmount > 0 {
