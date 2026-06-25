@@ -112,10 +112,16 @@ struct TransactionsView: View {
             .map { group in
                 (
                     monthStart: group.key,
-                    items: group.value.sorted(by: sortTransactionItems)
+                    items: group.value.sorted(by: sortTransactionItemsForCurrentFilter)
                 )
             }
-            .sorted { $0.monthStart > $1.monthStart }
+            .sorted { first, second in
+                if mainFilter == .futureUpcoming {
+                    return first.monthStart < second.monthStart
+                }
+
+                return first.monthStart > second.monthStart
+            }
     }
 
     private func sortTransactionItems(_ first: TransactionListItem, _ second: TransactionListItem) -> Bool {
@@ -128,6 +134,18 @@ struct TransactionsView: View {
         }
 
         return first.date > second.date
+    }
+
+    private func sortTransactionItemsForCurrentFilter(_ first: TransactionListItem, _ second: TransactionListItem) -> Bool {
+        if mainFilter == .futureUpcoming {
+            if first.date == second.date {
+                return first.createdAt > second.createdAt
+            }
+
+            return first.date < second.date
+        }
+
+        return sortTransactionItems(first, second)
     }
 
     private var availableAccountNames: [String] {
@@ -643,15 +661,13 @@ struct TransactionsView: View {
                 return event.type == .transfer
 
             case .futureUpcoming:
-                return event.status == .expected ||
-                event.status == .unpaid ||
-                event.status == .planned ||
-                event.date > Date()
+                return event.date > Date()
 
             case .unpaidExpected:
-                return event.status == .unpaid ||
-                event.status == .expected ||
-                event.status == .planned
+                return (event.status == .unpaid ||
+                        event.status == .expected ||
+                        event.status == .planned) &&
+                event.date <= Date()
             }
 
         case .creditCardPurchase(let purchase):
@@ -660,15 +676,19 @@ struct TransactionsView: View {
                 return true
             case .expenses:
                 return purchase.purchaseDate <= Date()
-            case .income, .transfers, .futureUpcoming, .unpaidExpected:
+            case .futureUpcoming:
+                return purchase.purchaseDate > Date()
+            case .income, .transfers, .unpaidExpected:
                 return false
             }
 
-        case .creditCardPayment:
+        case .creditCardPayment(let payment):
             switch mainFilter {
             case .all, .transfers:
                 return true
-            case .expenses, .income, .futureUpcoming, .unpaidExpected:
+            case .futureUpcoming:
+                return payment.paymentDate > Date()
+            case .expenses, .income, .unpaidExpected:
                 return false
             }
         }
