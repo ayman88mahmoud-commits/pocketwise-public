@@ -1131,7 +1131,9 @@ private struct CurrentMonthBudgetView: View {
                     showRemainingSheet = true
                 } label: {
                     BudgetMetricCard(
-                        title: AppText.remaining(store.appLanguage),
+                        title: snapshot.remaining >= 0
+                            ? AppText.remaining(store.appLanguage)
+                            : (store.appLanguage == .arabicEgyptian ? "فوق الميزانية" : "Over Budget"),
                         value: abs(snapshot.remaining),
                         color: snapshot.remaining >= 0 ? .green : .red,
                         showsDisclosure: true
@@ -1160,7 +1162,9 @@ private struct CurrentMonthBudgetView: View {
                     showAfterCommittedSheet = true
                 } label: {
                     BudgetMetricCard(
-                        title: store.appLanguage == .arabicEgyptian ? "بعد الملتزم به" : "After Committed",
+                        title: snapshot.remainingAfterKnown >= 0
+                            ? (store.appLanguage == .arabicEgyptian ? "متبقي بعد الجاي" : "Remaining After Upcoming")
+                            : (store.appLanguage == .arabicEgyptian ? "زيادة بعد الجاي" : "Over After Upcoming"),
                         value: abs(snapshot.remainingAfterKnown),
                         color: snapshot.remainingAfterKnown >= 0 ? .green : .red,
                         showsDisclosure: true
@@ -1255,7 +1259,13 @@ private struct CurrentMonthBudgetView: View {
                 }
                 .buttonStyle(.plain)
 
-                BudgetMetricCard(title: store.appLanguage == .arabicEgyptian ? "بعد الجاي" : "After Upcoming", value: abs(afterUpcoming), color: afterUpcoming >= 0 ? .green : .red)
+                BudgetMetricCard(
+                    title: afterUpcoming >= 0
+                        ? (store.appLanguage == .arabicEgyptian ? "بعد الجاي" : "After Upcoming")
+                        : (store.appLanguage == .arabicEgyptian ? "زيادة بعد الجاي" : "Over After Upcoming"),
+                    value: abs(afterUpcoming),
+                    color: afterUpcoming >= 0 ? .green : .red
+                )
             }
         }
         .pocketWiseCard(
@@ -1273,6 +1283,10 @@ private struct CurrentMonthBudgetView: View {
             return .neutral
         }
 
+        if planned <= 0 && (paid + upcoming) > 0 {
+            return .warning
+        }
+
         return afterUpcoming >= 0 ? .success : .warning
     }
 
@@ -1283,7 +1297,7 @@ private struct CurrentMonthBudgetView: View {
     }
 
     private func statusText(planned: Double, paid: Double, upcoming: Double) -> String {
-        if planned <= 0 && upcoming > 0 { return store.appLanguage == .arabicEgyptian ? "جاي مش متخطط" : "Unplanned upcoming" }
+        if planned <= 0 && (paid + upcoming) > 0 { return store.appLanguage == .arabicEgyptian ? "إنفاق غير مخطط" : "Unplanned spend" }
         if planned > 0 && paid > planned { return store.appLanguage == .arabicEgyptian ? "فوق الخطة" : "Over plan" }
         if planned > 0 && paid + upcoming > planned { return store.appLanguage == .arabicEgyptian ? "محتاج متابعة" : "Watch" }
         return store.appLanguage == .arabicEgyptian ? "ماشي كويس" : "On track"
