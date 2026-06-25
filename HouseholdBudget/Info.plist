@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>PocketWise</string>
+	<string>WalletBoard</string>
 	<key>CFBundleName</key>
-	<string>PocketWise</string>
+	<string>WalletBoard</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
