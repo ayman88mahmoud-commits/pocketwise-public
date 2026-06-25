@@ -19,6 +19,7 @@ struct TodayView: View {
     @State private var isAddingRecurringPayment = false
     @State private var isAddingInstallmentPlan = false
     @State private var isShowingRunwayDetails = false
+    @State private var isEditingRunwaySafeTarget = false
     @State private var runwaySafeTargetText = ""
     @State private var runwaySafeTargetWasSaved = false
     @State private var runwaySafeTargetError: String?
@@ -1074,48 +1075,71 @@ private extension TodayView {
     }
 
     var headerSection: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(AppText.greeting(language: store.appLanguage, displayName: store.displayName))
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(AppText.greeting(language: store.appLanguage, displayName: store.displayName))
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
-                Text(AppText.readySubtitle(store.appLanguage))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            HStack(spacing: 10) {
-                TodayCircleIconButton(
-                    systemImage: "magnifyingglass",
-                    accessibilityLabel: store.appLanguage == .arabicEgyptian ? "بحث" : "Search"
-                ) {
-                    isShowingGlobalSearch = true
+                    Text(AppText.readySubtitle(store.appLanguage))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                NavigationLink {
-                    AccountManagementView()
-                        .environmentObject(store)
-                } label: {
-                    TodayHeaderBalanceSummary(
-                        title: AppText.available(store.appLanguage),
-                        value: formatCurrency(runwayCheck.availableCash),
-                        actionText: AppText.manageAccounts(store.appLanguage)
-                    )
-                }
-                .buttonStyle(.plain)
+                Spacer()
 
-                TodayCircleIconButton(
-                    systemImage: store.hideBalances ? "eye.slash.fill" : "eye.fill",
-                    accessibilityLabel: store.hideBalances ? AppText.showBalances(store.appLanguage) : AppText.hideBalances(store.appLanguage)
-                ) {
-                    store.toggleHideBalances()
+                HStack(spacing: 8) {
+                    TodayCircleIconButton(
+                        systemImage: "magnifyingglass",
+                        accessibilityLabel: store.appLanguage == .arabicEgyptian ? "بحث" : "Search"
+                    ) {
+                        isShowingGlobalSearch = true
+                    }
+
+                    TodayCircleIconButton(
+                        systemImage: store.hideBalances ? "eye.slash.fill" : "eye.fill",
+                        accessibilityLabel: store.hideBalances ? AppText.showBalances(store.appLanguage) : AppText.hideBalances(store.appLanguage)
+                    ) {
+                        store.toggleHideBalances()
+                    }
                 }
             }
+
+            NavigationLink {
+                AccountManagementView()
+                    .environmentObject(store)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(AppText.available(store.appLanguage))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        Text(formatCurrency(runwayCheck.availableCash))
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                            .monospacedDigit()
+                    }
+
+                    Spacer(minLength: 8)
+
+                    HStack(spacing: 4) {
+                        Text(AppText.manageAccounts(store.appLanguage))
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+
+                        Image(systemName: "chevron.forward")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(PocketWiseSemanticColor.accounts.tint)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .pocketWiseCard(semanticColor: .accounts, padding: 14, cornerRadius: 18, showsBorder: true)
     }
@@ -1257,15 +1281,6 @@ private extension TodayView {
             }
             .buttonStyle(.plain)
 
-            DatePicker(
-                AppText.targetDate(store.appLanguage),
-                selection: runwayTargetDateBinding,
-                displayedComponents: .date
-            )
-            .font(.caption)
-            .datePickerStyle(.compact)
-            .pocketWiseInputField(semanticColor: .accounts)
-
             VStack(alignment: .leading, spacing: 6) {
                 safeUntilSummaryLine(
                     title: AppText.availableNow(store.appLanguage),
@@ -1284,7 +1299,7 @@ private extension TodayView {
                     insightRoute: .nextMonths
                 )
             }
-            .pocketWiseCard(semanticColor: .accounts, padding: 10, cornerRadius: 12, showsBorder: true)
+            .pocketWiseCard(semanticColor: .accounts, padding: 9, cornerRadius: 12, showsBorder: true)
 
             NavigationLink {
                 AppPreferencesView()
@@ -1309,7 +1324,27 @@ private extension TodayView {
                 .buttonStyle(.plain)
             }
 
-            runwaySafeBalanceTargetEditor
+            DatePicker(
+                AppText.targetDate(store.appLanguage),
+                selection: runwayTargetDateBinding,
+                displayedComponents: .date
+            )
+            .font(.caption)
+            .datePickerStyle(.compact)
+            .pocketWiseInputField(semanticColor: .accounts)
+
+            DisclosureGroup(
+                isExpanded: $isEditingRunwaySafeTarget,
+                content: {
+                    runwaySafeBalanceTargetEditor
+                },
+                label: {
+                    Text(AppText.keepAtLeast(store.appLanguage))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+            )
+            .font(.caption)
 
             HStack(spacing: 12) {
                 TodaySmallMetricCard(
@@ -1353,8 +1388,6 @@ private extension TodayView {
             )
             .font(.caption)
 
-            Divider()
-
             Button {
                 isShowingRunwayChart = true
             } label: {
@@ -1371,11 +1404,11 @@ private extension TodayView {
             }
             .buttonStyle(.plain)
         }
-        .pocketWiseCard(semanticColor: .accounts, padding: 14, cornerRadius: 18, showsBorder: true, showsShadow: true)
+        .pocketWiseCard(semanticColor: .accounts, padding: 12, cornerRadius: 18, showsBorder: true, showsShadow: true)
     }
 
     var currentMonthBudgetCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppText.thisMonth(store.appLanguage))
@@ -1421,6 +1454,7 @@ private extension TodayView {
                             Text("\(Int((currentMonthPercentUsed * 100).rounded()))% used")
                                 .font(.title3)
                                 .fontWeight(.bold)
+                                .foregroundStyle(currentMonthBudgetStatus.color)
 
                             Spacer()
 
@@ -1817,10 +1851,10 @@ private extension TodayView {
     }
 
     var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             TodaySectionTitle(title: AppText.upcoming(store.appLanguage))
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 ForEach(upcomingEvents) { event in
                     upcomingEventRow(event)
                 }
@@ -1833,22 +1867,15 @@ private extension TodayView {
     }
 
     var recentActivitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             TodaySectionTitle(title: AppText.recentActivity(store.appLanguage))
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 ForEach(recentEvents) { event in
                     Button {
                         selectedFinancialEvent = event
                     } label: {
-                        TodayRecentEventRow(
-                            title: event.title,
-                            classification: classificationText(for: event),
-                            paymentLabel: paymentMethodLabel(for: event),
-                            amountText: formatCurrency(event.amount),
-                            dateText: formatDate(event.date),
-                            iconName: iconName(for: event.title)
-                        )
+                        recentEventRow(event)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -2346,18 +2373,18 @@ private extension TodayView {
     }
 
     func upcomingEventRow(_ event: FinancialEvent) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
                 openUpcomingSource(event)
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     NamedVisualMark(
                         name: event.title,
                         fallbackSystemImage: iconName(for: event.title),
-                        size: 36
+                        size: 32
                     )
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(event.title)
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -2391,7 +2418,7 @@ private extension TodayView {
 
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 6) {
+                    VStack(alignment: .trailing, spacing: 4) {
                         Text(amountText(for: event))
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -2419,19 +2446,63 @@ private extension TodayView {
                 .buttonStyle(.plain)
             }
         }
-        .pocketWiseCard(semanticColor: .obligations, padding: 14, cornerRadius: 18, showsBorder: true)
+        .pocketWiseCard(semanticColor: .obligations, padding: 10, cornerRadius: 16, showsBorder: true)
+    }
+
+    func recentEventRow(_ event: FinancialEvent) -> some View {
+        HStack(spacing: 10) {
+            NamedVisualMark(
+                name: event.title,
+                fallbackSystemImage: iconName(for: event.title),
+                size: 32
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(event.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+
+                Text(classificationText(for: event))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let paymentLabel = paymentMethodLabel(for: event) {
+                    Text(paymentLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(formatCurrency(event.amount))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(formatDate(event.date))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .pocketWiseCard(semanticColor: .spending, padding: 10, cornerRadius: 16, showsBorder: true)
     }
 
     func creditCardDueRow(_ dueItem: CreditCardDueItem) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             PocketWiseIconBadge(
                 systemName: "creditcard.trianglebadge.exclamationmark",
                 semanticColor: .warning,
-                size: 36,
+                size: 32,
                 cornerRadius: 10
             )
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(AppText.creditCardDue(store.appLanguage))
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -2468,7 +2539,7 @@ private extension TodayView {
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 4) {
                 Text(formatCurrency(dueItem.dueAmount))
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -2494,7 +2565,7 @@ private extension TodayView {
                 .buttonStyle(.plain)
             }
         }
-        .pocketWiseCard(semanticColor: .creditCards, padding: 14, cornerRadius: 18, showsBorder: true)
+        .pocketWiseCard(semanticColor: .creditCards, padding: 10, cornerRadius: 16, showsBorder: true)
     }
 
     func openCreditCardPayment(_ dueItem: CreditCardDueItem) {
