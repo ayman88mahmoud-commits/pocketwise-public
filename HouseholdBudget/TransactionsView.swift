@@ -340,7 +340,7 @@ struct TransactionsView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.appLanguage == .arabicEgyptian ? "الأشخاص / الديون" : "People / Debts")
+                    Text(store.appLanguage == .arabicEgyptian ? "الأشخاص والديون" : "People & Debts")
                         .font(.subheadline)
                         .fontWeight(.semibold)
 
@@ -860,7 +860,7 @@ private enum TransactionMainFilter: String, CaseIterable, Identifiable {
         case .futureUpcoming:
             return language == .arabicEgyptian ? "الجاي" : "Future"
         case .paid:
-            return language == .arabicEgyptian ? "المدفوع" : "History"
+            return language == .arabicEgyptian ? "المدفوع" : "Past Expenses"
         case .unpaidExpected:
             return language == .arabicEgyptian ? "لسه" : "Unpaid"
         }

@@ -30,7 +30,7 @@ struct PeopleDebtsView: View {
 
             Section {
                 Label {
-                    Text(isAr ? "الأشخاص والديون منفصلين عن الميزانية الشهرية والتقارير. السلف والاقتراض والسداد ممكن يحرّكوا أرصدة الحسابات، بس مش بيتحسبوا كمصاريف شهرية." : "People / Debts is separate from monthly budget and transaction reports. Lending, borrowing, and repayments can move account balances, but they are not counted as monthly spending.")
+                    Text(isAr ? "الأشخاص والديون منفصلين عن الميزانية الشهرية والتقارير. السلف والاقتراض والسداد ممكن يحرّكوا أرصدة الحسابات، بس مش بيتحسبوا كمصاريف شهرية." : "People & Debts is separate from monthly budget and transaction reports. Lending, borrowing, and repayments can move account balances, but they are not counted as monthly spending.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } icon: {
@@ -78,7 +78,7 @@ struct PeopleDebtsView: View {
                 }
             }
         }
-        .navigationTitle(isAr ? "الأشخاص والديون" : "People / Debts")
+        .navigationTitle(isAr ? "الأشخاص والديون" : "People & Debts")
         .sheet(item: $addDebtKind) { kind in
             AddPersonDebtView(kind: kind)
                 .environmentObject(store)

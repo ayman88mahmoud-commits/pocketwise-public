@@ -22,7 +22,7 @@ struct StartRealUseChecklistView: View {
         }
 
         return [
-            StartRealUseChecklistItem(title: "Export a backup before starting", detail: "Use Data Backup so you have a clean copy before entering real month-start data."),
+            StartRealUseChecklistItem(title: "Export a backup before starting", detail: "Use Manual Backup so you have a clean copy before entering real month-start data."),
             StartRealUseChecklistItem(title: "Verify account balances", detail: "Check Cash, bank accounts, wallets, and any other active accounts."),
             StartRealUseChecklistItem(title: "Review categories and subcategories", detail: "Make sure the categories you plan to use this month are active and clear."),
             StartRealUseChecklistItem(title: "Set up the current month budget", detail: "Enter planned amounts for the new month before daily spending starts."),
@@ -39,7 +39,7 @@ struct StartRealUseChecklistView: View {
     var body: some View {
         List {
             Section {
-                Text(store.appLanguage == .arabicEgyptian ? "قائمة قراءة بس قبل ما تبدأ استخدام حقيقي للشهر الجديد." : "Use this read-only checklist before starting real tracking for the new month.")
+                Text(store.appLanguage == .arabicEgyptian ? "راجع الخطوات قبل تسجيل شهر جديد." : "Review these steps before tracking a new month.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -64,7 +64,7 @@ struct StartRealUseChecklistView: View {
                 }
             }
         }
-        .navigationTitle(store.appLanguage == .arabicEgyptian ? "قائمة بداية الاستخدام" : "Start Real Use Checklist")
+        .navigationTitle(store.appLanguage == .arabicEgyptian ? "قائمة بداية الشهر" : "Month Start Checklist")
     }
 }
 

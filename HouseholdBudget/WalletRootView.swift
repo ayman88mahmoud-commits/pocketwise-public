@@ -410,7 +410,7 @@ struct AnalysisView: View {
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "افهم فلوسك بتروح فين." : "Understand where your money is going.")
+                    Text(store.appLanguage == .arabicEgyptian ? "افهم الصرف، فروق الميزانية، وتوقعات الكاش." : "Understand spending, budget gaps, and cash outlook.")
                         .foregroundStyle(.secondary)
 
                     NavigationLink {
@@ -444,8 +444,8 @@ struct AnalysisView: View {
                         BiggestDrainsReportView()
                     } label: {
                         AnalysisCard(
-                            title: store.appLanguage == .arabicEgyptian ? "أكتر حاجات سحبت فلوس" : "Biggest drains",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "أكبر بنود صرف في الشهر المختار." : "Top spending areas for the selected month.",
+                            title: store.appLanguage == .arabicEgyptian ? "أعلى بنود الصرف" : "Top spending areas",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "أعلى تصنيفات الصرف هذا الشهر." : "Your highest spending categories this month.",
                             icon: "drop.fill"
                         )
                     }
@@ -477,8 +477,8 @@ struct AnalysisView: View {
                         MonthlyDriverAnalysisReportView()
                     } label: {
                         AnalysisCard(
-                            title: store.appLanguage == .arabicEgyptian ? "سبب الزيادة" : "Monthly driver analysis",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "أكبر الفروق بين الخطة والصرف." : "Biggest gaps between plan and spending.",
+                            title: store.appLanguage == .arabicEgyptian ? "فروق الخطة والفعلي" : "Plan vs Actual Gaps",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "شوف أكبر اختلافات بين الصرف والخطة." : "See where spending differs most from your plan.",
                             icon: "point.topleft.down.curvedto.point.bottomright.up"
                         )
                     }
@@ -507,13 +507,13 @@ struct AnalysisView: View {
                     } label: {
                         AnalysisCard(
                             title: store.appLanguage == .arabicEgyptian ? "خط زمني للسيولة" : "Cash Timeline",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "حركات قادمة واضحة وأرصدة تشغيلية بعد كل حركة." : "Visible upcoming events and running balances.",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "حركات قادمة مع أرصدة كاش متتابعة." : "Upcoming events with running cash balances.",
                             icon: "calendar.badge.clock"
                         )
                     }
                     .buttonStyle(.plain)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "أدوات تانية" : "Other Tools")
+                    Text(store.appLanguage == .arabicEgyptian ? "بيانات قديمة" : "Past Data")
                         .font(.headline)
                         .fontWeight(.bold)
                         .padding(.top, 8)
@@ -522,8 +522,8 @@ struct AnalysisView: View {
                         HistoricalSummaryView()
                     } label: {
                         AnalysisCard(
-                            title: store.appLanguage == .arabicEgyptian ? "ملخص الشهور القديمة" : "Historical Summary Data",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "إجماليات قديمة بس، من غير تأثير على الأرصدة." : "Summary-only past spending that does not affect balances.",
+                            title: store.appLanguage == .arabicEgyptian ? "ملخصات الشهور السابقة" : "Past Month Summaries",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "ملخصات صرف قديمة لا تؤثر على أرصدة الحسابات." : "Past spending summaries that do not affect account balances.",
                             icon: "doc.text.magnifyingglass"
                         )
                     }
@@ -614,7 +614,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "جولة سريعة" : "Quick Tour",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على مزايا التطبيق بسرعة" : "A quick overview of WalletBoard features",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على مزايا التطبيق بسرعة" : "A quick overview of app features",
                             icon: "play.circle.fill",
                             semanticColor: .setup
                         )
@@ -721,8 +721,8 @@ struct SettingsView: View {
                         StartRealUseChecklistView()
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "قائمة بداية الاستخدام الحقيقي" : "Start Real Use Checklist",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "خطوات بداية الشهر قبل الاستخدام اليومي" : "Month-start setup steps before daily tracking",
+                            title: store.appLanguage == .arabicEgyptian ? "قائمة بداية الشهر" : "Month Start Checklist",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "راجع الخطوات قبل تسجيل شهر جديد" : "Review these steps before tracking a new month.",
                             icon: "checklist",
                             semanticColor: .setup
                         )
@@ -733,7 +733,7 @@ struct SettingsView: View {
                             .environmentObject(store)
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "نسخة احتياطية" : "Data Backup",
+                            title: store.appLanguage == .arabicEgyptian ? "نسخة احتياطية يدوية" : "Manual Backup",
                             subtitle: store.appLanguage == .arabicEgyptian ? "تصدير واستيراد البيانات" : "Manual export and import",
                             icon: "externaldrive",
                             semanticColor: .backupPrivacy
@@ -961,7 +961,7 @@ struct ICloudSnapshotSyncView: View {
                         value: "\(cloudSnapshot.monthlyBudgets.count)"
                     )
                     statusRow(
-                        title: isAr ? "الأشخاص / الديون" : "People / Debts",
+                        title: isAr ? "الأشخاص والديون" : "People & Debts",
                         value: "\(cloudSnapshot.personDebts.count)"
                     )
 

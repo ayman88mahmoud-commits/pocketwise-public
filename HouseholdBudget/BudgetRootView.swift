@@ -1374,13 +1374,13 @@ private struct BudgetSetupView: View {
                 .buttonStyle(.plain)
             }
 
-            Section(store.appLanguage == .arabicEgyptian ? "اختصارات الالتزامات" : "Obligation Shortcuts") {
+            Section(store.appLanguage == .arabicEgyptian ? "اختصارات التخطيط" : "Planning Shortcuts") {
                 Button {
                     isAddingRecurringPayment = true
                 } label: {
                     setupRow(
                         title: store.appLanguage == .arabicEgyptian ? "أضف دفع متكرر" : "Add Recurring Payment",
-                        subtitle: store.appLanguage == .arabicEgyptian ? "اختصار إضافة فقط. إدارة المتكرر من مركز الالتزامات." : "Add shortcut only. Manage recurring items in Obligations Center.",
+                        subtitle: store.appLanguage == .arabicEgyptian ? "اختصار إضافة فقط. إدارة المتكرر من مركز التخطيط." : "Add shortcut only. Manage recurring items in Planning Center.",
                         icon: "calendar.badge.plus"
                     )
                 }
@@ -1391,7 +1391,7 @@ private struct BudgetSetupView: View {
                 } label: {
                     setupRow(
                         title: store.appLanguage == .arabicEgyptian ? "أضف تقسيط" : "Add Installment Plan",
-                        subtitle: store.appLanguage == .arabicEgyptian ? "اختصار إضافة فقط. إدارة الأقساط من مركز الالتزامات." : "Add shortcut only. Manage installment plans in Obligations Center.",
+                        subtitle: store.appLanguage == .arabicEgyptian ? "اختصار إضافة فقط. إدارة الأقساط من مركز التخطيط." : "Add shortcut only. Manage installment plans in Planning Center.",
                         icon: "creditcard.and.123"
                     )
                 }
@@ -1545,6 +1545,12 @@ struct ObligationsCenterView: View {
     var body: some View {
         List {
             Section {
+                Text(store.appLanguage == .arabicEgyptian ? "المدفوعات القادمة، الدخل المتوقع، والسداد." : "Upcoming payments, expected income, and repayments.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 if recurringPayments.isEmpty {
                     emptyText(store.appLanguage == .arabicEgyptian ? "مفيش التزامات متكررة." : "No recurring obligations.")
                 } else {
@@ -1603,7 +1609,7 @@ struct ObligationsCenterView: View {
                     title: store.appLanguage == .arabicEgyptian ? "مستحقات كروت الائتمان" : "Credit Card Dues",
                     count: creditCardDueItems.count,
                     amount: creditCardDueTotal,
-                    qualifier: store.appLanguage == .arabicEgyptian ? "التزام كاش" : "cash obligation"
+                    qualifier: store.appLanguage == .arabicEgyptian ? "مستحق" : "due"
                 )
             ) {
                 if creditCardDueItems.isEmpty {
@@ -1629,7 +1635,7 @@ struct ObligationsCenterView: View {
                     title: AppText.futureItems(store.appLanguage),
                     count: futureExpenseItems.count,
                     amount: futureExpenseTotal,
-                    qualifier: AppText.total(store.appLanguage)
+                    qualifier: AppText.planned(store.appLanguage).lowercased()
                 )
             ) {
                 if futureExpenseItems.isEmpty {
@@ -1720,7 +1726,7 @@ struct ObligationsCenterView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(store.appLanguage == .arabicEgyptian ? "افتح الأشخاص / الديون" : "Open People / Debts")
+                            Text(store.appLanguage == .arabicEgyptian ? "افتح الأشخاص والديون" : "Open People & Debts")
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
 
@@ -1733,7 +1739,7 @@ struct ObligationsCenterView: View {
                 }
             }
         }
-        .navigationTitle(store.appLanguage == .arabicEgyptian ? "مركز الالتزامات" : "Obligations Center")
+        .navigationTitle(store.appLanguage == .arabicEgyptian ? "مركز التخطيط" : "Planning Center")
         .navigationBarTitleDisplayMode(.inline)
     }
 

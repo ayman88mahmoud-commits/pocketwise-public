@@ -62,7 +62,7 @@ enum AppText {
     }
 
     static func addExpense(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "أضف مصروف" : "Add Expense"
+        language == .arabicEgyptian ? "أضف مصروف" : "Log Expense"
     }
 
     static func addTransfer(_ language: AppLanguage) -> String {
@@ -128,7 +128,7 @@ enum AppText {
     }
 
     static func obligations(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "الالتزامات" : "Obligations"
+        language == .arabicEgyptian ? "التخطيط" : "Planning"
     }
 
     static func setup(_ language: AppLanguage) -> String {
@@ -152,7 +152,7 @@ enum AppText {
     }
 
     static func peopleDebts(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "أشخاص / ديون" : "People / Debts"
+        language == .arabicEgyptian ? "أشخاص وديون" : "People & Debts"
     }
 
     static func monthlyCommitted(_ language: AppLanguage) -> String {
@@ -196,7 +196,7 @@ enum AppText {
     }
 
     static func remainingUnpaid(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "متبقي غير مدفوع" : "remaining unpaid"
+        language == .arabicEgyptian ? "غير مدفوع" : "unpaid"
     }
 
     static func total(_ language: AppLanguage) -> String {
@@ -234,7 +234,7 @@ enum AppText {
     }
 
     static func pay(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "دفع" : "Pay"
+        language == .arabicEgyptian ? "تسجيل كمدفوع" : "Mark Paid"
     }
 
     static func payDue(_ language: AppLanguage) -> String {

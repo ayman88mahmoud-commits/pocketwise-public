@@ -1509,19 +1509,19 @@ private extension TodayView {
                     Button {
                         isAddingIncome = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "دخل تم استلامه" : "Received income", systemImage: "checkmark.circle.fill")
+                        Label(store.appLanguage == .arabicEgyptian ? "سجّل دخل مستلم" : "Log received income", systemImage: "checkmark.circle.fill")
                     }
 
                     Button {
                         isAddingExpectedIncome = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "دخل متوقع" : "Expected income", systemImage: "calendar.badge.clock")
+                        Label(store.appLanguage == .arabicEgyptian ? "خطط دخل متوقع" : "Plan expected income", systemImage: "calendar.badge.clock")
                     }
 
                     Button {
                         isAddingRecurringIncome = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "دخل متكرر / مرتب" : "Recurring income / salary", systemImage: "repeat.circle.fill")
+                        Label(store.appLanguage == .arabicEgyptian ? "اضبط مرتب متكرر" : "Set recurring salary", systemImage: "repeat.circle.fill")
                     }
 
                     Divider()
@@ -1529,7 +1529,7 @@ private extension TodayView {
                     Button {
                         isShowingManageIncome = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "إدارة الدخل" : "Manage income", systemImage: "tray.full.fill")
+                        Label(store.appLanguage == .arabicEgyptian ? "إدارة مصادر الدخل" : "Manage income sources", systemImage: "tray.full.fill")
                     }
                     .accessibilityIdentifier("button.manageIncome")
                 } label: {
@@ -1556,19 +1556,19 @@ private extension TodayView {
                     Button {
                         isAddingFutureItem = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "أضف حاجة جاية" : "Add Future Item", systemImage: "calendar.badge.plus")
+                        Label(store.appLanguage == .arabicEgyptian ? "خطط دفعة قادمة" : "Plan upcoming payment", systemImage: "calendar.badge.plus")
                     }
 
                     Button {
                         isAddingRecurringPayment = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "أضف دفع متكرر" : "Add Recurring Payment", systemImage: "calendar.badge.clock")
+                        Label(store.appLanguage == .arabicEgyptian ? "أضف دفعة متكررة" : "Add recurring payment", systemImage: "calendar.badge.clock")
                     }
 
                     Button {
                         isAddingInstallmentPlan = true
                     } label: {
-                        Label(store.appLanguage == .arabicEgyptian ? "أضف تقسيط" : "Add Installment Plan", systemImage: "creditcard.and.123")
+                        Label(store.appLanguage == .arabicEgyptian ? "أضف خطة تقسيط" : "Add installment plan", systemImage: "creditcard.and.123")
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -3308,7 +3308,7 @@ private struct GlobalSearchView: View {
         }
 
         if !peopleDebtResults.isEmpty {
-            Section(isArabic ? "الأشخاص / الديون" : "People / Debts") {
+            Section(isArabic ? "الأشخاص والديون" : "People & Debts") {
                 ForEach(peopleDebtResults) { debt in
                     NavigationLink {
                         PeopleDebtsView()
@@ -3319,7 +3319,7 @@ private struct GlobalSearchView: View {
                             title: debt.personName,
                             subtitle: debtSubtitle(for: debt),
                             detail: store.displayCurrency(store.remainingAmount(for: debt)),
-                            badge: isArabic ? "الأشخاص / الديون" : "People / Debts",
+                            badge: isArabic ? "الأشخاص والديون" : "People & Debts",
                             dateText: debt.dueDate.map { shortDate($0) }
                         )
                     }
@@ -3492,7 +3492,7 @@ private extension GlobalSearchView {
                     subtitle: debtSubtitle(for: debt),
                     amount: store.remainingAmount(for: debt),
                     date: debt.dueDate,
-                    badge: isArabic ? "الأشخاص / الديون" : "People / Debts",
+                    badge: isArabic ? "الأشخاص والديون" : "People & Debts",
                     icon: "person.2.fill",
                     searchableText: personDebtSearchText(debt)
                 )

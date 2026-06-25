@@ -94,7 +94,7 @@ struct DataBackupView: View {
             }
         }
         .accessibilityIdentifier("screen.dataBackup")
-        .navigationTitle(store.appLanguage == .arabicEgyptian ? "نسخة احتياطية" : "Data Backup")
+        .navigationTitle(store.appLanguage == .arabicEgyptian ? "نسخة احتياطية يدوية" : "Manual Backup")
         .fileExporter(
             isPresented: $isExporting,
             document: backupDocument,
