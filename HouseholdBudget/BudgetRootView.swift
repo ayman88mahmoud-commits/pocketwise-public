@@ -5338,7 +5338,8 @@ private struct BudgetGridSnapshot {
                 monthData: monthData
             )
             let income = monthData?.plannedIncome ?? 0
-            let closing = opening + income - plannedExpenses
+            let remainingExposure = max(0, projectedExpenses - paidActual)
+            let closing = opening + income - remainingExposure
             defer { opening = closing }
             return BudgetMonthProjection(
                 date: date,
