@@ -79,8 +79,21 @@ struct TransactionsView: View {
     }
 
     private var sortedItems: [TransactionListItem] {
-        let financialItems = store.activeFinancialEvents
-            .filter { !($0.type == .income && $0.repeatRule != .none && $0.sourceRecurringEventID == nil) }
+        let activeFinancialEvents = store.activeFinancialEvents
+        let existingRecurringOccurrenceKeys = Set(
+            activeFinancialEvents.compactMap(recurringOccurrenceKey(for:))
+        )
+        let financialItems = activeFinancialEvents
+            .filter { !isRecurringTemplate($0) }
+            .map(TransactionListItem.financialEvent)
+        let recurringExpenseItems = upcomingRecurringExpenseEvents()
+            .filter { event in
+                guard let key = recurringOccurrenceKey(for: event) else {
+                    return true
+                }
+
+                return !existingRecurringOccurrenceKeys.contains(key)
+            }
             .map(TransactionListItem.financialEvent)
         let recurringIncomeItems = store.upcomingKnownIncomeEvents()
             .filter { $0.sourceRecurringEventID != nil }
@@ -88,7 +101,7 @@ struct TransactionsView: View {
         let cardPurchaseItems = store.activeCreditCardPurchases.map(TransactionListItem.creditCardPurchase)
         let cardPaymentItems = store.activeCreditCardPayments.map(TransactionListItem.creditCardPayment)
 
-        return (financialItems + recurringIncomeItems + cardPurchaseItems + cardPaymentItems).sorted(by: sortTransactionItems)
+        return (financialItems + recurringExpenseItems + recurringIncomeItems + cardPurchaseItems + cardPaymentItems).sorted(by: sortTransactionItems)
     }
 
     private var filteredItems: [TransactionListItem] {
@@ -120,6 +133,21 @@ struct TransactionsView: View {
                     return first.monthStart < second.monthStart
                 }
 
+                if mainFilter == .all {
+                    let firstRank = groupRankForAll(first.items)
+                    let secondRank = groupRankForAll(second.items)
+
+                    if firstRank != secondRank {
+                        return firstRank < secondRank
+                    }
+
+                    if firstRank == 0 {
+                        return first.monthStart > second.monthStart
+                    }
+
+                    return first.monthStart < second.monthStart
+                }
+
                 return first.monthStart > second.monthStart
             }
     }
@@ -145,7 +173,93 @@ struct TransactionsView: View {
             return first.date < second.date
         }
 
+        if mainFilter == .all {
+            let firstRank = itemRankForAll(first)
+            let secondRank = itemRankForAll(second)
+
+            if firstRank != secondRank {
+                return firstRank < secondRank
+            }
+
+            if firstRank == 0 {
+                return sortTransactionItems(first, second)
+            }
+
+            if first.date == second.date {
+                return first.createdAt > second.createdAt
+            }
+
+            return first.date < second.date
+        }
+
         return sortTransactionItems(first, second)
+    }
+
+    private func isRecurringTemplate(_ event: FinancialEvent) -> Bool {
+        event.repeatRule != .none && event.sourceRecurringEventID == nil
+    }
+
+    private func upcomingRecurringExpenseEvents() -> [FinancialEvent] {
+        let calendar = Calendar.current
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+
+        return (0..<max(store.forecastHorizonMonths, 1))
+            .compactMap { calendar.date(byAdding: .month, value: $0, to: start) }
+            .flatMap { monthDate -> [FinancialEvent] in
+                let components = calendar.dateComponents([.year, .month], from: monthDate)
+                guard let year = components.year,
+                      let month = components.month else {
+                    return []
+                }
+
+                return store.upcomingKnownExpenseEvents(year: year, month: month)
+                    .filter { $0.sourceRecurringEventID != nil }
+            }
+    }
+
+    private func recurringOccurrenceKey(for event: FinancialEvent) -> String? {
+        guard let sourceID = event.sourceRecurringEventID,
+              let year = event.recurringOccurrenceYear,
+              let month = event.recurringOccurrenceMonth else {
+            return nil
+        }
+
+        return "\(sourceID.uuidString)-\(year)-\(month)"
+    }
+
+    private func groupRankForAll(_ items: [TransactionListItem]) -> Int {
+        items.map(itemRankForAll).min() ?? 1
+    }
+
+    private func itemRankForAll(_ item: TransactionListItem) -> Int {
+        isRecentRealActivity(item) ? 0 : 1
+    }
+
+    private func isRecentRealActivity(_ item: TransactionListItem) -> Bool {
+        let tomorrow = Calendar.current.date(
+            byAdding: .day,
+            value: 1,
+            to: Calendar.current.startOfDay(for: Date())
+        ) ?? Date()
+
+        switch item {
+        case .financialEvent(let event):
+            if event.date >= tomorrow {
+                return false
+            }
+
+            if event.type == .transfer {
+                return true
+            }
+
+            return event.status == .paid
+
+        case .creditCardPurchase(let purchase):
+            return purchase.purchaseDate < tomorrow
+
+        case .creditCardPayment(let payment):
+            return payment.paymentDate < tomorrow
+        }
     }
 
     private var availableAccountNames: [String] {
