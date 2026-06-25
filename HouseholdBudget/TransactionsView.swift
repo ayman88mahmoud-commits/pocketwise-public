@@ -72,7 +72,7 @@ struct TransactionsView: View {
 
     init(initialFilter: TransactionInitialFilter? = nil) {
         _searchText = State(initialValue: initialFilter?.searchText ?? "")
-        _mainFilter = State(initialValue: initialFilter?.incomeOnly == true ? .income : (initialFilter?.paidOnly == true ? .paid : .all))
+        _mainFilter = State(initialValue: initialFilter?.incomeOnly == true ? .income : (initialFilter?.paidOnly == true ? .expenses : .all))
         _selectedCategoryName = State(initialValue: initialFilter?.categoryName)
         _monthFilter = State(initialValue: initialFilter?.monthDate == nil ? .allTime : .selectedMonth)
         _selectedMonthDate = State(initialValue: initialFilter?.monthDate)
@@ -220,7 +220,7 @@ struct TransactionsView: View {
             return nil
         }
 
-        if selectedMonthDate != nil && mainFilter == .paid && selectedCategoryName == nil {
+        if selectedMonthDate != nil && mainFilter == .expenses && selectedCategoryName == nil {
             return store.appLanguage == .arabicEgyptian ? "معاملات الشهر الحالي" : "This month transactions"
         }
 
@@ -343,8 +343,9 @@ struct TransactionsView: View {
                     Text(store.appLanguage == .arabicEgyptian ? "الأشخاص والديون" : "People & Debts")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .lineLimit(1)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "حركات الأشخاص والديون تتم إدارتها بشكل منفصل وقد لا تظهر داخل المعاملات." : "People/Debts cash movements are managed separately and may not appear in Transactions.")
+                    Text(store.appLanguage == .arabicEgyptian ? "تابع الفلوس اللي ليك أو عليك." : "Track money owed to you or by you.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -572,6 +573,11 @@ struct TransactionsView: View {
     private func filterChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .padding(.horizontal, 1)
                 .pocketWiseChip(semanticColor: transactionFilterSemanticColor(for: title), isSelected: isSelected)
         }
         .buttonStyle(.plain)
@@ -628,7 +634,7 @@ struct TransactionsView: View {
                 return true
 
             case .expenses:
-                return isExpenseLike(event.type)
+                return isExpenseLike(event.type) && event.status == .paid && event.date <= Date()
 
             case .income:
                 return event.type == .income
@@ -642,26 +648,25 @@ struct TransactionsView: View {
                 event.status == .planned ||
                 event.date > Date()
 
-            case .paid:
-                return event.status == .paid
-
             case .unpaidExpected:
                 return event.status == .unpaid ||
                 event.status == .expected ||
                 event.status == .planned
             }
 
-        case .creditCardPurchase:
+        case .creditCardPurchase(let purchase):
             switch mainFilter {
-            case .all, .expenses, .paid:
+            case .all:
                 return true
+            case .expenses:
+                return purchase.purchaseDate <= Date()
             case .income, .transfers, .futureUpcoming, .unpaidExpected:
                 return false
             }
 
         case .creditCardPayment:
             switch mainFilter {
-            case .all, .transfers, .paid:
+            case .all, .transfers:
                 return true
             case .expenses, .income, .futureUpcoming, .unpaidExpected:
                 return false
@@ -842,7 +847,6 @@ private enum TransactionMainFilter: String, CaseIterable, Identifiable {
     case income
     case transfers
     case futureUpcoming
-    case paid
     case unpaidExpected
 
     var id: String { rawValue }
@@ -859,8 +863,6 @@ private enum TransactionMainFilter: String, CaseIterable, Identifiable {
             return language == .arabicEgyptian ? "التحويلات" : "Transfers"
         case .futureUpcoming:
             return language == .arabicEgyptian ? "الجاي" : "Future"
-        case .paid:
-            return language == .arabicEgyptian ? "المدفوع" : "Past Expenses"
         case .unpaidExpected:
             return language == .arabicEgyptian ? "لسه" : "Unpaid"
         }
@@ -1065,8 +1067,6 @@ struct TransactionHistoryRow: View {
             labels.append(event.status == .paid ? localizedChip("Received") : localizedChip("Expected income"))
         } else if event.status != .paid {
             labels.append(statusLabel)
-        } else {
-            labels.append(localizedChip("Paid"))
         }
 
         switch event.type {
@@ -1075,7 +1075,9 @@ struct TransactionHistoryRow: View {
         case .transfer:
             labels.append(localizedChip("Transfer"))
         case .expense:
-            labels.append(localizedChip("Expense"))
+            if event.status != .paid {
+                labels.append(localizedChip("Expense"))
+            }
         case .obligation, .expectedExpense, .installment:
             labels.append(localizedChip("Future"))
         }

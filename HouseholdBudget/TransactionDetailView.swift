@@ -48,7 +48,7 @@ struct TransactionDetailView: View {
                             .fontWeight(.semibold)
                     }
                 }
-                detailRow(store.appLanguage == .arabicEgyptian ? "المبلغ" : "Amount", formatCurrency(event.amount))
+                detailRow(amountDetailTitle, formatCurrency(event.amount))
                 detailRow(store.appLanguage == .arabicEgyptian ? "النوع" : "Type", AppText.eventTypeLabel(event.type, language: store.appLanguage))
                 detailRow(store.appLanguage == .arabicEgyptian ? "الحالة" : "Status", AppText.statusLabel(event.status, language: store.appLanguage))
                 detailRow(store.appLanguage == .arabicEgyptian ? "التاريخ والوقت" : "Date & Time", formatDate(event.date))
@@ -262,6 +262,17 @@ struct TransactionDetailView: View {
         }
 
         return store.appLanguage == .arabicEgyptian ? "المعاملات المدفوعة هتعكس أثرها على رصيد الحساب قبل الحذف." : "Paid transactions will reverse their account balance impact before being removed."
+    }
+
+    private var amountDetailTitle: String {
+        switch event.type {
+        case .income:
+            return store.appLanguage == .arabicEgyptian ? "فلوس داخلة" : "Money in"
+        case .transfer:
+            return store.appLanguage == .arabicEgyptian ? "المبلغ" : "Amount"
+        case .expense, .obligation, .expectedExpense, .installment:
+            return store.appLanguage == .arabicEgyptian ? "فلوس خارجة" : "Money out"
+        }
     }
 
     private var canManageSeries: Bool {
