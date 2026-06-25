@@ -1509,15 +1509,8 @@ struct ObligationsCenterView: View {
         store.expectedRepaymentEvents().sorted { $0.date < $1.date }
     }
 
-    private var recurringSourceCount: Int {
-        Set(recurringPayments.map { $0.source.id }).count
-    }
-
-    private var currentMonthRecurringTotal: Double {
-        recurringPayments
-            .filter { Calendar.current.isDate($0.occurrence.date, equalTo: Date(), toGranularity: .month) }
-            .map(\.occurrence.amount)
-            .reduce(0, +)
+    private var recurringUpcomingTotal: Double {
+        recurringPayments.map(\.occurrence.amount).reduce(0, +)
     }
 
     private var installmentRemainingTotal: Double {
@@ -1545,7 +1538,7 @@ struct ObligationsCenterView: View {
     var body: some View {
         List {
             Section {
-                Text(store.appLanguage == .arabicEgyptian ? "المدفوعات القادمة، الدخل المتوقع، والسداد." : "Upcoming payments, expected income, and repayments.")
+                Text(store.appLanguage == .arabicEgyptian ? "التزامات قادمة، فلوس داخلة متوقعة، وسداد." : "Upcoming commitments, expected money in, and repayments.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -1632,14 +1625,14 @@ struct ObligationsCenterView: View {
 
             Section(
                 summaryHeader(
-                    title: AppText.futureItems(store.appLanguage),
+                    title: store.appLanguage == .arabicEgyptian ? "بنود مخططة / غير مدفوعة" : "Planned / Unpaid Items",
                     count: futureExpenseItems.count,
                     amount: futureExpenseTotal,
                     qualifier: AppText.planned(store.appLanguage).lowercased()
                 )
             ) {
                 if futureExpenseItems.isEmpty {
-                    emptyText(store.appLanguage == .arabicEgyptian ? "مفيش مصاريف مستقبلية." : "No future expense items.")
+                    emptyText(store.appLanguage == .arabicEgyptian ? "مفيش بنود مخططة أو غير مدفوعة." : "No planned or unpaid items.")
                 } else {
                     ForEach(futureExpenseItems) { event in
                         NavigationLink {
@@ -1748,14 +1741,22 @@ struct ObligationsCenterView: View {
     }
 
     private var recurringSummaryHeader: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("\(AppText.recurringSeries(store.appLanguage)) • \(recurringSourceCount)")
-            Text("\(AppText.thisMonthCommitted(store.appLanguage)) • \(store.displayCurrency(currentMonthRecurringTotal))")
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(store.appLanguage == .arabicEgyptian ? "دفعات متكررة قادمة" : "Upcoming recurring payments") • \(recurringPayments.count)")
+            Text("\(store.appLanguage == .arabicEgyptian ? "الـ ١٢ شهر الجايين" : "Next 12 months") • \(store.displayCurrency(recurringUpcomingTotal))")
+            Text(store.appLanguage == .arabicEgyptian ? "مولدة من قواعد الدفع المتكرر. المدفوع والمتخطي غير محسوب هنا." : "Generated from recurring rules. Paid and skipped occurrences are not included here.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
         }
     }
 
     private var activeText: String {
         store.appLanguage == .arabicEgyptian ? "نشط" : "Active"
+    }
+
+    private var upcomingPaymentText: String {
+        store.appLanguage == .arabicEgyptian ? "دفعة قادمة" : "Upcoming payment"
     }
 
     private var endedText: String {
@@ -1778,7 +1779,7 @@ struct ObligationsCenterView: View {
             return store.appLanguage == .arabicEgyptian ? "مستحق اليوم" : "Due today"
         }
 
-        return activeText
+        return upcomingPaymentText
     }
 
     private func creditCardDueStatus(for date: Date) -> String {
@@ -1849,19 +1850,15 @@ struct ObligationsCenterView: View {
     }
 
     private func recurringStatus(for event: FinancialEvent) -> String {
-        if event.effectiveRecurringEndKind != .never {
-            return endedText
-        }
-
-        if event.isRecurringOccurrenceSkipped(on: Date()) {
-            return store.appLanguage == .arabicEgyptian ? "متخطي الشهر ده" : "Skipped this month"
+        if event.isRecurringOccurrenceSkipped(on: event.date) {
+            return store.appLanguage == .arabicEgyptian ? "متخطي" : "Skipped"
         }
 
         if event.effectiveRecurringAmountMode != .fixedAmount {
             return store.appLanguage == .arabicEgyptian ? "يحتاج تأكيد" : "Needs confirmation"
         }
 
-        return activeText
+        return upcomingPaymentText
     }
 
     private func nextDate(for event: FinancialEvent) -> Date? {
@@ -2079,7 +2076,7 @@ private struct RecurringSeriesDetailView: View {
                 month: month,
                 amount: 0,
                 isSkipped: true,
-                note: store.appLanguage == .arabicEgyptian ? "تم الحذف من مركز الالتزامات" : "Deleted from Obligations Center",
+                note: store.appLanguage == .arabicEgyptian ? "تم الحذف من مركز التخطيط" : "Deleted from Planning Center",
                 updatedAt: Date()
             )
 
