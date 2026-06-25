@@ -142,7 +142,7 @@ struct CreditCardEditorView: View {
                     }
                     .pocketWiseInputField(semanticColor: .creditCards)
 
-                    Text(isArabic ? "الشبكة محفوظة كنص فقط. PocketWise بيستخدم أيقونة كارت عامة بدل شعارات الشبكات الرسمية." : "Network is stored as text only. PocketWise uses a generic card icon instead of official card-network logos.")
+                    Text(isArabic ? "الشبكة محفوظة كنص فقط. WalletBoard بيستخدم أيقونة كارت عامة بدل شعارات الشبكات الرسمية." : "Network is stored as text only. WalletBoard uses a generic card icon instead of official card-network logos.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

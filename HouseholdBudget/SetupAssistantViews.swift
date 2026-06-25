@@ -131,7 +131,7 @@ struct OnboardingWelcomeView: View {
                 .foregroundStyle(PocketWiseSemanticColor.setup.tint)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            Text(store.appLanguage == .arabicEgyptian ? "جهّز PocketWise" : "Set up PocketWise")
+            Text(store.appLanguage == .arabicEgyptian ? "جهّز WalletBoard" : "Set up WalletBoard")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .fixedSize(horizontal: false, vertical: true)
@@ -687,7 +687,7 @@ struct OnboardingCategoryBuilderSetupView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text(store.appLanguage == .arabicEgyptian ? "اختر ما يناسب حياتك. PocketWise سيقترح فئات وفئات فرعية تقدر تعدلها لاحقًا." : "Choose what applies to your life. PocketWise will suggest categories and subcategories you can edit later.")
+                Text(store.appLanguage == .arabicEgyptian ? "اختر ما يناسب حياتك. WalletBoard سيقترح فئات وفئات فرعية تقدر تعدلها لاحقًا." : "Choose what applies to your life. WalletBoard will suggest categories and subcategories you can edit later.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -1113,7 +1113,7 @@ struct OnboardingCreditCardEditorSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "الشبكة تظهر كنص فقط. PocketWise يستخدم أيقونة آمنة بدل الشعارات الرسمية." : "Network appears as text only. PocketWise uses a safe generic icon instead of official logos.")
+                    Text(store.appLanguage == .arabicEgyptian ? "الشبكة تظهر كنص فقط. WalletBoard يستخدم أيقونة آمنة بدل الشعارات الرسمية." : "Network appears as text only. WalletBoard uses a safe generic icon instead of official logos.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -151,7 +151,10 @@ final class WalletICloudSyncService {
         ),
               let profileData = try? Data(contentsOf: profileURL),
               let profileText = String(data: profileData, encoding: .isoLatin1) else {
-            return false
+            // embedded.mobileprovision is absent in TestFlight and App Store signed builds.
+            // Entitlements are enforced by the code signature — assume the iCloud
+            // container entitlement is present and let CloudKit surface any real errors.
+            return true
         }
 
         return profileText.contains(iCloudContainersEntitlement)

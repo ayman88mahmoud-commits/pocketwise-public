@@ -608,7 +608,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "جولة سريعة" : "Quick Tour",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على مزايا التطبيق بسرعة" : "A quick overview of PocketWise features",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على مزايا التطبيق بسرعة" : "A quick overview of WalletBoard features",
                             icon: "play.circle.fill",
                             semanticColor: .setup
                         )
@@ -870,8 +870,8 @@ struct ICloudSnapshotSyncView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(isAr
-                        ? "يمكن لـ PocketWise حفظ نسخة احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
-                        : "PocketWise can save a private backup to your iCloud. Restoring from iCloud always requires confirmation.")
+                        ? "يمكن لـ WalletBoard حفظ نسخة احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
+                        : "WalletBoard can save a private backup to your iCloud. Restoring from iCloud always requires confirmation.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 

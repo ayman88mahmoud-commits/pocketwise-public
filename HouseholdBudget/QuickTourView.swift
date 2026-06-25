@@ -28,9 +28,9 @@ struct QuickTourView: View {
         TourPage(
             tint: .blue,
             titleEn: "Plan before you spend",
-            bodyEn: "PocketWise helps you plan household money ahead, then track what actually happens.",
+            bodyEn: "WalletBoard helps you plan household money ahead, then track what actually happens.",
             titleAr: "خطط قبل ما تصرف",
-            bodyAr: "PocketWise بيساعدك تخطط لفلوس البيت مسبقًا وتتابع اللي بيحصل فعلًا.",
+            bodyAr: "WalletBoard بيساعدك تخطط لفلوس البيت مسبقًا وتتابع اللي بيحصل فعلًا.",
             visual: .tabMap
         ),
         TourPage(
@@ -284,7 +284,7 @@ private struct TourPageScaffold<Visual: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("PocketWise", systemImage: "wallet.pass.fill")
+                Label("WalletBoard", systemImage: "wallet.pass.fill")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(tint)
 
@@ -570,7 +570,7 @@ private struct TourTabBarMockup: View {
                 HStack {
                     Image(systemName: "wallet.pass.fill")
                         .foregroundStyle(color)
-                    Text("PocketWise")
+                    Text("WalletBoard")
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }

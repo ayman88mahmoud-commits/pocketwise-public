@@ -3,7 +3,7 @@ import SwiftUI
 struct PocketWiseLoadingView: View {
 
     private let stageMessages = [
-        "Preparing your PocketWise hub",
+        "Preparing your WalletBoard hub",
         "Organizing budgets",
         "Checking bills",
         "Syncing wallets & cards",
@@ -45,7 +45,7 @@ struct PocketWiseLoadingView: View {
                 .frame(width: 340, height: 340)
 
                 VStack(spacing: 12) {
-                    Text("PocketWise")
+                    Text("WalletBoard")
                         .font(.system(size: 38, weight: .bold, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(

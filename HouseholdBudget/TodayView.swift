@@ -1113,7 +1113,7 @@ private extension TodayView {
                 )
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(store.appLanguage == .arabicEgyptian ? "أهلًا بك في PocketWise" : "Welcome to PocketWise")
+                    Text(store.appLanguage == .arabicEgyptian ? "أهلًا بك في WalletBoard" : "Welcome to WalletBoard")
                         .font(.headline)
                         .fontWeight(.bold)
 
@@ -1165,11 +1165,11 @@ private extension TodayView {
                 )
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(store.appLanguage == .arabicEgyptian ? "واصل إعداد PocketWise" : "Continue setting up PocketWise")
+                    Text(store.appLanguage == .arabicEgyptian ? "واصل إعداد WalletBoard" : "Continue setting up WalletBoard")
                         .font(.headline)
                         .fontWeight(.bold)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "أضف دخل، التزامات، مدفوعات متكررة، أو ميزانيات عشان PocketWise يبدأ يخطط فلوسك بوضوح." : "Add income, obligations, recurring payments, or budgets so PocketWise can start planning your money clearly.")
+                    Text(store.appLanguage == .arabicEgyptian ? "أضف دخل، التزامات، مدفوعات متكررة، أو ميزانيات عشان WalletBoard يبدأ يخطط فلوسك بوضوح." : "Add income, obligations, recurring payments, or budgets so WalletBoard can start planning your money clearly.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -2731,7 +2731,7 @@ final class WalletStore: ObservableObject {
         ).max()
         let backupMetadata = WalletBackupMetadata(
             backupCreatedAt: exportedAt,
-            appName: "PocketWise",
+            appName: "WalletBoard",
             appVersion: appVersion,
             backupSchemaVersion: WalletDataSnapshot.currentSchemaVersion,
             deviceName: nil,

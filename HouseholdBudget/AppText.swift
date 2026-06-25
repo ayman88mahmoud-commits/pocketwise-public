@@ -58,7 +58,7 @@ enum AppText {
     }
 
     static func appTagline(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "رتب فلوسك" : "PocketWise helps you plan your money clearly"
+        language == .arabicEgyptian ? "رتب فلوسك" : "WalletBoard helps you plan your money clearly"
     }
 
     static func addExpense(_ language: AppLanguage) -> String {
