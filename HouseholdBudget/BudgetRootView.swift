@@ -235,6 +235,7 @@ private struct BudgetGridView: View {
                             description: Text(store.appLanguage == .arabicEgyptian ? "أضف بنود من الإعدادات عشان تبدأ التخطيط." : "Add categories in Setup to start planning.")
                         )
                     } else {
+                        gridSummaryStrip(projectionRows: projectionRows)
                         gridTable(snapshot: snapshot, projectionRows: projectionRows)
                             .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
                     }
@@ -246,7 +247,10 @@ private struct BudgetGridView: View {
                     )
                 }
             } footer: {
-                Text(store.appLanguage == .arabicEgyptian ? "ملتزم به جاي من مصاريف لسه ما اتدفعتش. مش محسوب كمدفوع، ومش بيغيّر المخطط إلا لو عدّلته بنفسك." : "Committed comes from future/unpaid items. It is not counted as paid, and it does not overwrite planned budget unless you edit it.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.appLanguage == .arabicEgyptian ? "اسحب الجدول يمين وشمال لرؤية البنود والإجماليات والرصيد النهائي." : "Swipe the grid left and right to see categories, totals, and End Balance.")
+                    Text(store.appLanguage == .arabicEgyptian ? "ملتزم به جاي من مصاريف لسه ما اتدفعتش. مش محسوب كمدفوع، ومش بيغيّر المخطط إلا لو عدّلته بنفسك." : "Committed comes from future/unpaid items. It is not counted as paid, and it does not overwrite planned budget unless you edit it.")
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -633,6 +637,54 @@ private struct BudgetGridView: View {
         return gridTable(snapshot: snapshot, projectionRows: snapshot.projectionRows)
     }
 
+    @ViewBuilder
+    private func gridSummaryStrip(projectionRows: [BudgetMonthProjection]) -> some View {
+        let displayRow = projectionRows.first(where: {
+            Calendar.current.isDate($0.date, equalTo: Date(), toGranularity: .month)
+        }) ?? projectionRows.first
+        if let row = displayRow {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(BudgetDateHelper.monthTitle(row.date))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppText.budget(store.appLanguage))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(store.displayCurrency(row.plannedExpenses))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppText.totalExpected(store.appLanguage))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(store.displayCurrency(row.projectedExpenses))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.blue)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(AppText.endBalance(store.appLanguage))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(store.displayCurrency(row.projectedClosingBalance))
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(row.endBalanceColor)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+        }
+    }
+
     private func headerScrollableRow(categories: [String]) -> some View {
         HStack(spacing: 0) {
             gridHeaderCell(store.appLanguage == .arabicEgyptian ? "الشهر" : "Month", width: rowHeaderWidth)
@@ -645,7 +697,7 @@ private struct BudgetGridView: View {
                         visibleMonths: monthDates
                     )
                 } label: {
-                    gridHeaderCell(category, width: cellWidth)
+                    gridEditableHeaderCell(category, width: cellWidth)
                 }
                 .buttonStyle(.plain)
             }
@@ -769,6 +821,22 @@ private struct BudgetGridView: View {
             .frame(minHeight: 42)
     }
 
+    private func gridEditableHeaderCell(_ text: String, width: CGFloat) -> some View {
+        VStack(spacing: 2) {
+            Text(text)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+            Image(systemName: "pencil")
+                .font(.system(size: 8))
+                .foregroundStyle(Color.blue.opacity(0.7))
+        }
+        .padding(.horizontal, 4)
+        .frame(width: width, alignment: .center)
+        .frame(minHeight: 42)
+    }
+
     private func gridMonthCell(_ date: Date) -> some View {
         let isCurrent = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .month)
         return HStack(spacing: 0) {
@@ -815,15 +883,21 @@ private struct BudgetGridView: View {
     }
 
     private func endBalanceCell(_ amount: Double, width: CGFloat, color: Color) -> some View {
-        Text(store.displayCurrency(amount))
-            .font(.subheadline)
-            .fontWeight(.bold)
-            .foregroundStyle(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.65)
-            .padding(.horizontal, 4)
-            .frame(width: width, alignment: .center)
-            .frame(minHeight: 46)
+        VStack(spacing: 2) {
+            Text(store.displayCurrency(amount))
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Image(systemName: "lock.fill")
+                .font(.system(size: 7))
+                .foregroundStyle(Color.secondary.opacity(0.4))
+        }
+        .padding(.horizontal, 4)
+        .frame(width: width, alignment: .center)
+        .frame(minHeight: 46)
+        .background(Color(.tertiarySystemGroupedBackground))
     }
 
     private func gridBudgetCell(_ cell: BudgetGridCellData) -> some View {
@@ -3336,9 +3410,9 @@ private struct CategoryAcrossMonthsSheet: View {
         func title(_ language: AppLanguage) -> String {
             switch self {
             case .allVisible:
-                return language == .arabicEgyptian ? "كل الشهور الظاهرة" : "All Visible Months"
+                return language == .arabicEgyptian ? "كل الظاهر" : "All visible"
             case .fromSelectedForward:
-                return language == .arabicEgyptian ? "من الشهر المختار لقدام" : "From Selected Month Forward"
+                return language == .arabicEgyptian ? "من المحدد" : "From selected"
             }
         }
     }
@@ -3361,10 +3435,26 @@ private struct CategoryAcrossMonthsSheet: View {
         NavigationStack {
             Form {
                 Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(store.appLanguage == .arabicEgyptian ? "طبّق مبلغ مخطط واحد على عدة شهور." : "Apply one planned amount across multiple months.")
+                            .font(.subheadline)
+                        Text(store.appLanguage == .arabicEgyptian ? "ده بيغير الميزانية المخططة فقط. المصروف المدفوع والأرصدة الحقيقية لا تتغير." : "This changes planned budget only. Paid spending and real balances do not change.")
+                            .font(.footnote)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+                }
+
+                Section {
                     LabelValueRow(title: store.appLanguage == .arabicEgyptian ? "البند" : "Category", value: categoryName)
                     TextField(store.appLanguage == .arabicEgyptian ? "المبلغ" : "Amount", text: $amountText)
                         .keyboardType(.decimalPad)
                         .pocketWiseInputField(semanticColor: .budgets, isProminent: true)
+                    if parsedAmount == nil {
+                        Text(store.appLanguage == .arabicEgyptian ? "أدخل مبلغ للتطبيق." : "Enter an amount to apply.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section(store.appLanguage == .arabicEgyptian ? "طبّق على" : "Apply To") {
@@ -3385,7 +3475,8 @@ private struct CategoryAcrossMonthsSheet: View {
                     .disabled(parsedAmount == nil)
                 }
             }
-            .navigationTitle(store.appLanguage == .arabicEgyptian ? "بند عبر الشهور" : "Category Across Months")
+            .navigationTitle(store.appLanguage == .arabicEgyptian ? "تعديل ميزانية البند" : "Edit Category Budget")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(store.appLanguage == .arabicEgyptian ? "إلغاء" : "Cancel") {
