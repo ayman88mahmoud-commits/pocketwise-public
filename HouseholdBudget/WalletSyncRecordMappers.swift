@@ -97,6 +97,7 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

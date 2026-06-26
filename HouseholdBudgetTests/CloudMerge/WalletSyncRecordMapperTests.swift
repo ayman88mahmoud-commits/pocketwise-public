@@ -100,7 +100,7 @@ final class WalletSyncRecordMapperTests: XCTestCase {
 
     // MARK: - Category mapper tests
 
-    func testCategoryMapsToCategroyEntity() {
+    func testCategoryMapsToCategoryEntity() {
         let category = makeCategory()
 
         let dto = WalletSyncRecordMappers.dto(for: category)
