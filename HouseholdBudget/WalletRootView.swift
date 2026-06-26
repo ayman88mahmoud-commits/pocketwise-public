@@ -771,7 +771,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "نسخة iCloud الاحتياطية" : "iCloud backup",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "نسخة snapshot يدوية خاصة، وليست مزامنة تلقائية" : "Manual private snapshot backup, not automatic device sync.",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "نسخة يدوية خاصة على iCloud، وليست مزامنة تلقائية" : "Manual private iCloud backup copy, not automatic device sync.",
                             icon: "icloud",
                             semanticColor: .backupPrivacy
                         )
@@ -900,14 +900,14 @@ struct ICloudSnapshotSyncView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(isAr
-                        ? "يمكن لـ WalletBoard حفظ نسخة snapshot احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
-                        : "WalletBoard can save a private snapshot backup to your iCloud. Restoring from iCloud always requires confirmation.")
+                        ? "يمكن لـ WalletBoard حفظ نسخة احتياطية يدوية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
+                        : "WalletBoard can save a private manual backup copy to your iCloud. Restoring from iCloud always requires confirmation.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                     Text(isAr
                         ? "هذه نسخة احتياطية يدوية، وليست مزامنة تلقائية بين الأجهزة."
-                        : "This is a manual iCloud snapshot backup, not automatic device sync.")
+                        : "This is a manual iCloud backup copy, not automatic device sync.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
@@ -942,8 +942,8 @@ struct ICloudSnapshotSyncView: View {
                     .foregroundStyle(.secondary)
 
                     Text(isAr
-                        ? "اضغط «نسخ احتياطي الآن» لإنشاء أول snapshot احتياطي يدوي."
-                        : "Tap \"Back Up Now\" to create your first manual snapshot backup.")
+                        ? "اضغط «نسخ احتياطي الآن» لإنشاء أول نسخة احتياطية يدوية على iCloud."
+                        : "Tap \"Back Up Now\" to create your first manual iCloud backup copy.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
@@ -1057,8 +1057,8 @@ struct ICloudSnapshotSyncView: View {
             Button(isAr ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
             Text(isAr
-                ? "سيتم رفع snapshot من بيانات هذا الجهاز إلى iCloud. النسخة الموجودة في iCloud ستُستبدل ببياناتك الحالية."
-                : "A snapshot of this device data will be uploaded to iCloud. This overwrites the existing iCloud backup.")
+                ? "سيتم رفع نسخة احتياطية من بيانات هذا الجهاز إلى iCloud. النسخة الموجودة في iCloud ستُستبدل ببياناتك الحالية."
+                : "A backup copy of this device data will be uploaded to iCloud. This overwrites the existing iCloud backup.")
         }
         .confirmationDialog(
             isAr ? "استعادة البيانات من نسخة iCloud؟" : "Restore from iCloud backup?",
@@ -1115,7 +1115,7 @@ struct ICloudSnapshotSyncView: View {
             if await store.uploadBackupToICloud(force: true) {
                 cloudSnapshot = nil
                 noBackupFound = false
-                actionMessage = isAr ? "تم حفظ snapshot احتياطي على iCloud بنجاح." : "iCloud snapshot backup saved successfully."
+                actionMessage = isAr ? "تم حفظ نسخة احتياطية يدوية على iCloud بنجاح." : "Manual iCloud backup copy saved successfully."
                 errorMessage = nil
             } else {
                 errorMessage = localizedICloudError(store.lastICloudSyncError ?? "")

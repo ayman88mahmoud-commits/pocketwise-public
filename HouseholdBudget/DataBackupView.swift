@@ -30,7 +30,7 @@ struct DataBackupView: View {
                             .font(.subheadline)
                             .foregroundStyle(.primary)
 
-                        Text(store.appLanguage == .arabicEgyptian ? "الاستيراد بيستبدل بيانات التطبيق الحالية بعد التأكيد." : "Import replaces current app data after confirmation.")
+                        Text(store.appLanguage == .arabicEgyptian ? "الاستيراد يفتح معاينة أولًا، ثم يستبدل بيانات التطبيق بعد تأكيد الاستعادة." : "Import opens a review first, then restores and replaces current app data after confirmation.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -55,7 +55,7 @@ struct DataBackupView: View {
                 Button {
                     isImporting = true
                 } label: {
-                    Label(store.appLanguage == .arabicEgyptian ? "استورد نسخة احتياطية" : "Import Backup File", systemImage: "square.and.arrow.down")
+                    Label(store.appLanguage == .arabicEgyptian ? "استورد ملف للمراجعة" : "Import Backup File to Review", systemImage: "square.and.arrow.down")
                 }
                 .tint(PocketWiseSemanticColor.backupPrivacy.tint)
             }

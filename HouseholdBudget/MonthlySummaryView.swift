@@ -473,7 +473,7 @@ struct MonthlySummaryView: View {
                             .frame(width: 24)
 
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(store.appLanguage == .arabicEgyptian ? "حركات نقدية" : "Cash Movements")
+                            Text(store.appLanguage == .arabicEgyptian ? "حركات الأشخاص والديون النقدية" : "People & Debt Cash Movements")
                                 .font(.headline)
                                 .fontWeight(.semibold)
 
