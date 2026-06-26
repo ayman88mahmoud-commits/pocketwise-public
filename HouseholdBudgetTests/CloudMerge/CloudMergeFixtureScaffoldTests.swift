@@ -1,5 +1,5 @@
 import XCTest
-@testable import PocketWise
+@testable import WalletBoard
 
 final class CloudMergeFixtureScaffoldTests: XCTestCase {
 
