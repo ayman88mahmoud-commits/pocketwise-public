@@ -1,0 +1,70 @@
+{
+  "fixtureName": "financial-event-paid-status-conflict",
+  "purpose": "Future merge validation must detect paid/unpaid status conflict for the same FinancialEvent and require review because applying paid status may imply balance impact.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "44444444-cccc-4444-cccc-444444444444",
+        "name": "Test Cash",
+        "updatedAt": "2026-06-01T08:00:00Z"
+      }
+    ],
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "55555555-cccc-5555-cccc-555555555555",
+        "type": "expense",
+        "status": "unpaid",
+        "title": "Test Grocery",
+        "amount": 200,
+        "date": "2026-06-15T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Grocery",
+        "updatedAt": "2026-06-15T09:30:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "55555555-cccc-5555-cccc-555555555555",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Grocery",
+        "amount": 200,
+        "date": "2026-06-15T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Grocery",
+        "updatedAt": "2026-06-15T09:45:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "55555555-cccc-5555-cccc-555555555555"
+    ],
+    "reason": "Paid status conflict may imply account balance impact and cannot be applied through merge."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "financial-event-paid-status-conflict",
+    "message": "FinancialEvent paid status differs between local and cloud records.",
+    "recordIDs": [
+      "55555555-cccc-5555-cccc-555555555555"
+    ],
+    "localStatus": "unpaid",
+    "cloudStatus": "paid"
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call mark-paid behavior.",
+    "Do not call transaction posting functions.",
+    "Do not mutate account balances.",
+    "Keep the conflict staged for review."
+  ]
+}

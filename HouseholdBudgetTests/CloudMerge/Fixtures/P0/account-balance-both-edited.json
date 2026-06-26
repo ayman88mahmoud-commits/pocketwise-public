@@ -1,0 +1,52 @@
+{
+  "fixtureName": "account-balance-both-edited",
+  "purpose": "Future merge validation must detect when the same account balance was edited differently on local and cloud and require review instead of silently choosing one.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "33333333-bbbb-3333-bbbb-333333333333",
+        "name": "Test Cash",
+        "balance": 1000,
+        "updatedAt": "2026-06-14T09:00:00Z"
+      }
+    ],
+    "lastKnownSyncedAt": "2026-06-13T08:00:00Z"
+  },
+  "cloudState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "33333333-bbbb-3333-bbbb-333333333333",
+        "name": "Test Cash",
+        "balance": 1250,
+        "updatedAt": "2026-06-14T09:05:00Z"
+      }
+    ],
+    "lastKnownSyncedAt": "2026-06-13T08:00:00Z"
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "33333333-bbbb-3333-bbbb-333333333333"
+    ],
+    "reason": "The same account balance changed differently on local and cloud after the last known sync."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "account-balance-both-edited",
+    "message": "Account balance was edited on both sides and requires review.",
+    "recordIDs": [
+      "33333333-bbbb-3333-bbbb-333333333333"
+    ],
+    "localBalance": 1000,
+    "cloudBalance": 1250
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not combine balances.",
+    "Do not recalculate balances during merge.",
+    "Do not replay transactions.",
+    "Do not choose a balance winner automatically."
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "fixtureName": "missing-account-reference",
+  "purpose": "Future merge validation must block live apply when a paid or balance-impacting cloud financial event references an account that does not exist locally or in staged merged accounts.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "11111111-aaaa-1111-aaaa-111111111111",
+        "name": "Test Cash",
+        "updatedAt": "2026-06-01T08:00:00Z"
+      }
+    ],
+    "financialEvents": []
+  },
+  "cloudState": {
+    "accounts": [],
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "22222222-aaaa-2222-aaaa-222222222222",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Grocery",
+        "amount": 150,
+        "date": "2026-06-12T09:00:00Z",
+        "accountName": "Missing Test Account",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Grocery",
+        "updatedAt": "2026-06-12T10:00:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "22222222-aaaa-2222-aaaa-222222222222"
+    ],
+    "reason": "Paid financial event references an account that is missing from local and staged cloud account records."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "missing-account-reference",
+    "message": "Paid or balance-impacting financial event references a missing account.",
+    "recordIDs": [
+      "22222222-aaaa-2222-aaaa-222222222222"
+    ],
+    "missingReferences": [
+      {
+        "field": "accountName",
+        "value": "Missing Test Account"
+      }
+    ]
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call transaction posting functions.",
+    "Do not mutate account balances.",
+    "Do not infer a replacement account by name.",
+    "Keep the cloud event staged until the missing account reference is resolved."
+  ]
+}
