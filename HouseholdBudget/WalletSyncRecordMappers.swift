@@ -162,6 +162,67 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dto(for card: CreditCard) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .creditCard, id: card.id),
+            updatedAt: card.updatedAt,
+            deletedAt: card.deletedAt,
+            isDeleted: card.isDeleted,
+            fields: [
+                "name": .string(card.name),
+                "bankName": .string(card.bankName),
+                "lastFourDigits": card.lastFourDigits.map { .string($0) } ?? .null,
+                "cardNetwork": .string(card.cardNetwork.rawValue),
+                "appearanceColor": card.appearanceColor.map { .string($0.rawValue) } ?? .null,
+                "creditLimit": .double(card.creditLimit),
+                "openingOutstandingBalance": .double(card.openingOutstandingBalance),
+                "openingOutstandingDate": card.openingOutstandingDate.map { .date($0) } ?? .null,
+                "statementClosingDay": .int(card.statementClosingDay),
+                "paymentDueDay": .int(card.paymentDueDay),
+                "defaultPaymentAccountName": card.defaultPaymentAccountName.map { .string($0) } ?? .null,
+                "isActive": .bool(card.isActive),
+                "note": card.note.map { .string($0) } ?? .null,
+                "createdAt": .date(card.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for purchase: CreditCardPurchase) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .creditCardPurchase, id: purchase.id),
+            updatedAt: purchase.updatedAt,
+            deletedAt: purchase.deletedAt,
+            isDeleted: purchase.isDeleted,
+            fields: [
+                "cardID": .uuid(purchase.cardID),
+                "title": .string(purchase.title),
+                "amount": .double(purchase.amount),
+                "purchaseDate": .date(purchase.purchaseDate),
+                "categoryName": .string(purchase.categoryName),
+                "subCategoryName": .string(purchase.subCategoryName),
+                "note": purchase.note.map { .string($0) } ?? .null,
+                "createdAt": .date(purchase.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for payment: CreditCardPayment) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .creditCardPayment, id: payment.id),
+            updatedAt: payment.updatedAt,
+            deletedAt: payment.deletedAt,
+            isDeleted: payment.isDeleted,
+            fields: [
+                "cardID": .uuid(payment.cardID),
+                "fromAccountName": .string(payment.fromAccountName),
+                "amount": .double(payment.amount),
+                "paymentDate": .date(payment.paymentDate),
+                "note": payment.note.map { .string($0) } ?? .null,
+                "createdAt": .date(payment.createdAt)
+            ]
+        )
+    }
+
     // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(

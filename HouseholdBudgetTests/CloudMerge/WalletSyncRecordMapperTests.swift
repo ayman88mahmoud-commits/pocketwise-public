@@ -1063,4 +1063,352 @@ final class WalletSyncRecordMapperTests: XCTestCase {
         entry.deletedAt = deletedAt
         return entry
     }
+
+    // MARK: - CreditCard mapper tests
+
+    func testCreditCardMapsToCreditCardEntity() {
+        let card = makeCreditCard()
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.entity, .creditCard)
+    }
+
+    func testCreditCardRecordNameIsStable() {
+        let card = makeCreditCard()
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.recordName, "CreditCard_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .creditCard, id: card.id).recordName)
+    }
+
+    func testCreditCardIDIsPreserved() {
+        let card = makeCreditCard()
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.id, card.id)
+    }
+
+    func testCreditCardImportantFieldsArePresent() {
+        let card = makeCreditCard()
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.fields["name"], .string("Visa Gold"))
+        XCTAssertEqual(dto.fields["bankName"], .string("Test Bank"))
+        XCTAssertEqual(dto.fields["cardNetwork"], .string("Visa"))
+        XCTAssertEqual(dto.fields["creditLimit"], .double(10000.00))
+        XCTAssertEqual(dto.fields["openingOutstandingBalance"], .double(500.00))
+        XCTAssertEqual(dto.fields["statementClosingDay"], .int(25))
+        XCTAssertEqual(dto.fields["paymentDueDay"], .int(10))
+        XCTAssertEqual(dto.fields["isActive"], .bool(true))
+        XCTAssertEqual(dto.fields["createdAt"], .date(card.createdAt))
+    }
+
+    func testCreditCardOptionalFieldsMapToNullWhenAbsent() {
+        let card = makeCreditCard()
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.fields["lastFourDigits"], .null)
+        XCTAssertEqual(dto.fields["appearanceColor"], .null)
+        XCTAssertEqual(dto.fields["openingOutstandingDate"], .null)
+        XCTAssertEqual(dto.fields["defaultPaymentAccountName"], .null)
+        XCTAssertEqual(dto.fields["note"], .null)
+    }
+
+    func testCreditCardLastFourDigitsIsPreserved() {
+        let card = makeCreditCard(lastFourDigits: "4321")
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.fields["lastFourDigits"], .string("4321"))
+    }
+
+    func testCreditCardDefaultPaymentAccountLinkageIsPreserved() {
+        let card = makeCreditCard(defaultPaymentAccountName: "Main Wallet")
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(dto.fields["defaultPaymentAccountName"], .string("Main Wallet"))
+    }
+
+    func testCreditCardTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let card = makeCreditCard(isDeleted: true, deletedAt: deletedAt)
+
+        let dto = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, card.updatedAt)
+    }
+
+    func testCreditCardMapperIsDeterministic() {
+        let card = makeCreditCard()
+
+        let first = WalletSyncRecordMappers.dto(for: card)
+        let second = WalletSyncRecordMappers.dto(for: card)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeCreditCard(
+        lastFourDigits: String? = nil,
+        defaultPaymentAccountName: String? = nil,
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
+    ) -> CreditCard {
+        CreditCard(
+            id: UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")!,
+            name: "Visa Gold",
+            bankName: "Test Bank",
+            lastFourDigits: lastFourDigits,
+            cardNetwork: .visa,
+            creditLimit: 10000.00,
+            openingOutstandingBalance: 500.00,
+            statementClosingDay: 25,
+            paymentDueDay: 10,
+            defaultPaymentAccountName: defaultPaymentAccountName,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            isDeleted: isDeleted,
+            deletedAt: deletedAt
+        )
+    }
+
+    // MARK: - CreditCardPurchase mapper tests
+
+    func testCreditCardPurchaseMapsToCreditCardPurchaseEntity() {
+        let purchase = makeCreditCardPurchase()
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.entity, .creditCardPurchase)
+    }
+
+    func testCreditCardPurchaseRecordNameIsStable() {
+        let purchase = makeCreditCardPurchase()
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.recordName, "CreditCardPurchase_ffffffff-ffff-ffff-ffff-ffffffffffff")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .creditCardPurchase, id: purchase.id).recordName)
+    }
+
+    func testCreditCardPurchaseIDIsPreserved() {
+        let purchase = makeCreditCardPurchase()
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.id, purchase.id)
+    }
+
+    func testCreditCardPurchaseCardLinkageIsPreserved() {
+        let cardID = UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")!
+        let purchase = makeCreditCardPurchase(cardID: cardID)
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.fields["cardID"], .uuid(cardID))
+    }
+
+    func testCreditCardPurchaseImportantFieldsArePresent() {
+        let purchase = makeCreditCardPurchase()
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.fields["title"], .string("Laptop"))
+        XCTAssertEqual(dto.fields["amount"], .double(2500.00))
+        XCTAssertEqual(dto.fields["purchaseDate"], .date(purchase.purchaseDate))
+        XCTAssertEqual(dto.fields["categoryName"], .string("Electronics"))
+        XCTAssertEqual(dto.fields["subCategoryName"], .string("Computers"))
+        XCTAssertEqual(dto.fields["createdAt"], .date(purchase.createdAt))
+    }
+
+    func testCreditCardPurchaseNoteIsPreserved() {
+        let purchase = makeCreditCardPurchase(note: "Work laptop")
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.fields["note"], .string("Work laptop"))
+    }
+
+    func testCreditCardPurchaseNilNoteMapsToNull() {
+        let purchase = makeCreditCardPurchase()
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(dto.fields["note"], .null)
+    }
+
+    func testCreditCardPurchaseTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        var purchase = makeCreditCardPurchase()
+        purchase.isDeleted = true
+        purchase.deletedAt = deletedAt
+
+        let dto = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, purchase.updatedAt)
+    }
+
+    func testCreditCardPurchaseMapperIsDeterministic() {
+        let purchase = makeCreditCardPurchase()
+
+        let first = WalletSyncRecordMappers.dto(for: purchase)
+        let second = WalletSyncRecordMappers.dto(for: purchase)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeCreditCardPurchase(
+        cardID: UUID = UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")!,
+        note: String? = nil
+    ) -> CreditCardPurchase {
+        CreditCardPurchase(
+            id: UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff")!,
+            cardID: cardID,
+            title: "Laptop",
+            amount: 2500.00,
+            purchaseDate: Date(timeIntervalSince1970: 1_800_000_000),
+            categoryName: "Electronics",
+            subCategoryName: "Computers",
+            note: note,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000)
+        )
+    }
+
+    // MARK: - CreditCardPayment mapper tests
+
+    func testCreditCardPaymentMapsToCreditCardPaymentEntity() {
+        let payment = makeCreditCardPayment()
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.entity, .creditCardPayment)
+    }
+
+    func testCreditCardPaymentRecordNameIsStable() {
+        let payment = makeCreditCardPayment()
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.recordName, "CreditCardPayment_e0e0e0e0-e0e0-e0e0-e0e0-e0e0e0e0e0e0")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .creditCardPayment, id: payment.id).recordName)
+    }
+
+    func testCreditCardPaymentIDIsPreserved() {
+        let payment = makeCreditCardPayment()
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.id, payment.id)
+    }
+
+    func testCreditCardPaymentCardLinkageIsPreserved() {
+        let cardID = UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")!
+        let payment = makeCreditCardPayment(cardID: cardID)
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.fields["cardID"], .uuid(cardID))
+    }
+
+    func testCreditCardPaymentImportantFieldsArePresent() {
+        let payment = makeCreditCardPayment()
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.fields["fromAccountName"], .string("Main Wallet"))
+        XCTAssertEqual(dto.fields["amount"], .double(1000.00))
+        XCTAssertEqual(dto.fields["paymentDate"], .date(payment.paymentDate))
+        XCTAssertEqual(dto.fields["createdAt"], .date(payment.createdAt))
+    }
+
+    func testCreditCardPaymentAccountLinkageIsPreserved() {
+        let payment = makeCreditCardPayment(fromAccountName: "Savings Account")
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.fields["fromAccountName"], .string("Savings Account"))
+    }
+
+    func testCreditCardPaymentNoteIsPreserved() {
+        let payment = makeCreditCardPayment(note: "Monthly payment")
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.fields["note"], .string("Monthly payment"))
+    }
+
+    func testCreditCardPaymentNilNoteMapsToNull() {
+        let payment = makeCreditCardPayment()
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(dto.fields["note"], .null)
+    }
+
+    func testCreditCardPaymentTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        var payment = makeCreditCardPayment()
+        payment.isDeleted = true
+        payment.deletedAt = deletedAt
+
+        let dto = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, payment.updatedAt)
+    }
+
+    func testCreditCardPaymentMapperIsDeterministic() {
+        let payment = makeCreditCardPayment()
+
+        let first = WalletSyncRecordMappers.dto(for: payment)
+        let second = WalletSyncRecordMappers.dto(for: payment)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeCreditCardPayment(
+        cardID: UUID = UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")!,
+        fromAccountName: String = "Main Wallet",
+        note: String? = nil
+    ) -> CreditCardPayment {
+        CreditCardPayment(
+            id: UUID(uuidString: "e0e0e0e0-e0e0-e0e0-e0e0-e0e0e0e0e0e0")!,
+            cardID: cardID,
+            fromAccountName: fromAccountName,
+            amount: 1000.00,
+            paymentDate: Date(timeIntervalSince1970: 1_800_000_000),
+            note: note,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000)
+        )
+    }
 }
