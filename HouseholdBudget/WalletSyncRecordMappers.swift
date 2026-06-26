@@ -223,6 +223,26 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dto(for entry: HistoricalMonthlySummaryEntry) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .historicalMonthlySummary, id: entry.id),
+            updatedAt: entry.updatedAt,
+            deletedAt: entry.deletedAt,
+            isDeleted: entry.isDeleted,
+            fields: [
+                "year": .int(entry.year),
+                "month": .int(entry.month),
+                "categoryName": .string(entry.categoryName),
+                "subCategoryName": .string(entry.subCategoryName),
+                "amount": .double(entry.amount),
+                "note": entry.note.map { .string($0) } ?? .null,
+                "createdAt": .date(entry.createdAt)
+            ]
+        )
+    }
+
+    // HouseholdSettings mapper is intentionally omitted — no HouseholdSettings model struct exists in WalletModels yet. The .householdSettings entity case is reserved. Map once the model is defined.
+
     // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(

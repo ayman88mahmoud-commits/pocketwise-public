@@ -1411,4 +1411,106 @@ final class WalletSyncRecordMapperTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_800_010_000)
         )
     }
+
+    // MARK: - HistoricalMonthlySummaryEntry mapper tests
+
+    func testHistoricalMonthlySummaryEntryMapsToHistoricalMonthlySummaryEntity() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.entity, .historicalMonthlySummary)
+    }
+
+    func testHistoricalMonthlySummaryEntryRecordNameIsStable() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.recordName, "HistoricalMonthlySummary_1a1a1a1a-1a1a-1a1a-1a1a-1a1a1a1a1a1a")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .historicalMonthlySummary, id: entry.id).recordName)
+    }
+
+    func testHistoricalMonthlySummaryEntryIDIsPreserved() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.id, entry.id)
+    }
+
+    func testHistoricalMonthlySummaryEntryImportantFieldsArePresent() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.fields["year"], .int(2024))
+        XCTAssertEqual(dto.fields["month"], .int(11))
+        XCTAssertEqual(dto.fields["categoryName"], .string("Food"))
+        XCTAssertEqual(dto.fields["subCategoryName"], .string("Supermarket"))
+        XCTAssertEqual(dto.fields["amount"], .double(350.00))
+        XCTAssertEqual(dto.fields["createdAt"], .date(entry.createdAt))
+    }
+
+    func testHistoricalMonthlySummaryEntryNoteIsPreserved() {
+        let entry = makeHistoricalMonthlySummaryEntry(note: "Carryover from Oct")
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.fields["note"], .string("Carryover from Oct"))
+    }
+
+    func testHistoricalMonthlySummaryEntryNilNoteMapsToNull() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(dto.fields["note"], .null)
+    }
+
+    func testHistoricalMonthlySummaryEntryTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let entry = makeHistoricalMonthlySummaryEntry(isDeleted: true, deletedAt: deletedAt)
+
+        let dto = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, entry.updatedAt)
+    }
+
+    func testHistoricalMonthlySummaryEntryMapperIsDeterministic() {
+        let entry = makeHistoricalMonthlySummaryEntry()
+
+        let first = WalletSyncRecordMappers.dto(for: entry)
+        let second = WalletSyncRecordMappers.dto(for: entry)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeHistoricalMonthlySummaryEntry(
+        note: String? = nil,
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
+    ) -> HistoricalMonthlySummaryEntry {
+        HistoricalMonthlySummaryEntry(
+            id: UUID(uuidString: "1a1a1a1a-1a1a-1a1a-1a1a-1a1a1a1a1a1a")!,
+            year: 2024,
+            month: 11,
+            categoryName: "Food",
+            subCategoryName: "Supermarket",
+            amount: 350.00,
+            note: note,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            isDeleted: isDeleted,
+            deletedAt: deletedAt
+        )
+    }
 }
