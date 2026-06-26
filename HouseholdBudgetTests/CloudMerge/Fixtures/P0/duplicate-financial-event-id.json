@@ -1,0 +1,59 @@
+{
+  "fixtureName": "duplicate-financial-event-id",
+  "purpose": "Future merge validation must detect duplicate FinancialEvent IDs with divergent payloads and block live apply.",
+  "localState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "11111111-1111-1111-1111-111111111111",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Grocery Local",
+        "amount": 100,
+        "date": "2026-06-10T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Subcategory",
+        "updatedAt": "2026-06-10T10:00:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "11111111-1111-1111-1111-111111111111",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Grocery Cloud",
+        "amount": 125,
+        "date": "2026-06-10T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Subcategory",
+        "updatedAt": "2026-06-10T10:05:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "11111111-1111-1111-1111-111111111111"
+    ],
+    "reason": "Duplicate FinancialEvent ID has divergent balance-impacting payloads."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "duplicate-financial-event-id",
+    "message": "Duplicate FinancialEvent ID detected with divergent local and cloud payloads.",
+    "recordIDs": [
+      "11111111-1111-1111-1111-111111111111"
+    ]
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call transaction posting functions.",
+    "Do not mutate account balances.",
+    "Do not choose a winner automatically for divergent paid transaction payloads."
+  ]
+}

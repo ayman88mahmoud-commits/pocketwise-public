@@ -1,0 +1,73 @@
+{
+  "fixtureName": "duplicate-recurring-paid-occurrence-identity",
+  "purpose": "Future merge validation must detect two paid recurring occurrences with different IDs but the same sourceRecurringEventID, recurringOccurrenceYear, and recurringOccurrenceMonth.",
+  "localState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "22222222-2222-2222-2222-222222222222",
+        "type": "obligation",
+        "status": "paid",
+        "title": "Test Recurring Rent",
+        "amount": 2500,
+        "date": "2026-07-01T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Rent",
+        "sourceRecurringEventID": "33333333-3333-3333-3333-333333333333",
+        "recurringOccurrenceYear": 2026,
+        "recurringOccurrenceMonth": 7,
+        "updatedAt": "2026-07-01T10:00:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "44444444-4444-4444-4444-444444444444",
+        "type": "obligation",
+        "status": "paid",
+        "title": "Test Recurring Rent",
+        "amount": 2500,
+        "date": "2026-07-01T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Rent",
+        "sourceRecurringEventID": "33333333-3333-3333-3333-333333333333",
+        "recurringOccurrenceYear": 2026,
+        "recurringOccurrenceMonth": 7,
+        "updatedAt": "2026-07-01T10:05:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "22222222-2222-2222-2222-222222222222",
+      "44444444-4444-4444-4444-444444444444"
+    ],
+    "duplicateIdentity": {
+      "sourceRecurringEventID": "33333333-3333-3333-3333-333333333333",
+      "recurringOccurrenceYear": 2026,
+      "recurringOccurrenceMonth": 7
+    },
+    "reason": "Two paid recurring occurrences share the same recurring source and occurrence month."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "duplicate-recurring-paid-occurrence-identity",
+    "message": "Duplicate paid recurring occurrence identity detected.",
+    "recordIDs": [
+      "22222222-2222-2222-2222-222222222222",
+      "44444444-4444-4444-4444-444444444444"
+    ]
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call mark-paid behavior.",
+    "Do not call transaction posting functions.",
+    "Do not mutate account balances.",
+    "Do not generate recurring occurrences during fixture evaluation."
+  ]
+}
