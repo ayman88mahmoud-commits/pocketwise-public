@@ -130,6 +130,38 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dto(for item: WalletMonthlyBudgetItem) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .monthlyBudgetItem, id: item.id),
+            updatedAt: item.updatedAt,
+            deletedAt: item.deletedAt,
+            isDeleted: item.isDeleted,
+            fields: [
+                "categoryName": .string(item.categoryName),
+                "plannedAmount": .double(item.plannedAmount),
+                "createdAt": .date(item.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for entry: PersonDebtEntry) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .personDebtEntry, id: entry.id),
+            updatedAt: entry.updatedAt,
+            deletedAt: entry.deletedAt,
+            isDeleted: entry.isDeleted,
+            fields: [
+                "debtID": .uuid(entry.debtID),
+                "entryType": .string(entry.entryType.rawValue),
+                "amount": .double(entry.amount),
+                "accountName": .string(entry.accountName),
+                "date": .date(entry.date),
+                "note": entry.note.map { .string($0) } ?? .null,
+                "createdAt": .date(entry.createdAt)
+            ]
+        )
+    }
+
     // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(

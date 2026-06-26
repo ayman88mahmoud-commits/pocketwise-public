@@ -8,6 +8,7 @@ enum WalletSyncRecordEntity: String, CaseIterable, Codable, Hashable {
     case merchantMemory = "MerchantMemory"
     case installmentPlan = "InstallmentPlan"
     case monthlyBudget = "MonthlyBudget"
+    case monthlyBudgetItem = "MonthlyBudgetItem"
     case personDebt = "PersonDebt"
     case personDebtEntry = "PersonDebtEntry"
     case creditCard = "CreditCard"
