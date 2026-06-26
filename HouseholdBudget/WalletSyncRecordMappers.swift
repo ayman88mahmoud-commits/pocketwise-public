@@ -54,6 +54,49 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dto(for memory: MerchantMemory) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .merchantMemory, id: memory.id),
+            updatedAt: memory.updatedAt,
+            deletedAt: memory.deletedAt,
+            isDeleted: memory.isDeleted,
+            fields: [
+                "merchantName": .string(memory.merchantName),
+                "aliases": .stringArray(memory.aliases),
+                "defaultCategoryName": .string(memory.defaultCategoryName),
+                "defaultSubCategoryName": .string(memory.defaultSubCategoryName),
+                "defaultAccountName": memory.defaultAccountName.map { .string($0) } ?? .null,
+                "defaultType": .string(memory.defaultType.rawValue),
+                "lastUsedAt": memory.lastUsedAt.map { .date($0) } ?? .null,
+                "usageCount": .int(memory.usageCount),
+                "isActive": .bool(memory.isActive),
+                "createdAt": .date(memory.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for plan: InstallmentPlan) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .installmentPlan, id: plan.id),
+            updatedAt: plan.updatedAt,
+            deletedAt: plan.deletedAt,
+            isDeleted: plan.isDeleted,
+            fields: [
+                "purchaseName": .string(plan.purchaseName),
+                "totalAmount": .double(plan.totalAmount),
+                "installmentCount": .int(plan.installmentCount),
+                "firstDueDate": .date(plan.firstDueDate),
+                "accountName": plan.accountName.map { .string($0) } ?? .null,
+                "categoryName": .string(plan.categoryName),
+                "subCategoryName": .string(plan.subCategoryName),
+                "paymentMethodName": .string(plan.paymentMethodName),
+                "linkedCreditCardID": plan.linkedCreditCardID.map { .uuid($0) } ?? .null,
+                "note": plan.note.map { .string($0) } ?? .null,
+                "createdAt": .date(plan.createdAt)
+            ]
+        )
+    }
+
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

@@ -431,4 +431,240 @@ final class WalletSyncRecordMapperTests: XCTestCase {
         event.updatedAt = Date(timeIntervalSince1970: 1_800_010_000)
         return event
     }
+
+    // MARK: - MerchantMemory mapper tests
+
+    func testMerchantMemoryMapsToMerchantMemoryEntity() {
+        let memory = makeMerchantMemory()
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.entity, .merchantMemory)
+    }
+
+    func testMerchantMemoryRecordNameIsStable() {
+        let memory = makeMerchantMemory()
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.recordName, "MerchantMemory_77777777-7777-7777-7777-777777777777")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .merchantMemory, id: memory.id).recordName)
+    }
+
+    func testMerchantMemoryIDIsPreserved() {
+        let memory = makeMerchantMemory()
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.id, memory.id)
+    }
+
+    func testMerchantMemoryImportantFieldsArePresent() {
+        let memory = makeMerchantMemory()
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.fields["merchantName"], .string("Starbucks"))
+        XCTAssertEqual(dto.fields["aliases"], .stringArray(["Star Bucks", "SB Coffee"]))
+        XCTAssertEqual(dto.fields["defaultCategoryName"], .string("Food"))
+        XCTAssertEqual(dto.fields["defaultSubCategoryName"], .string("Coffee"))
+        XCTAssertEqual(dto.fields["defaultType"], .string("Expense"))
+        XCTAssertEqual(dto.fields["usageCount"], .int(5))
+        XCTAssertEqual(dto.fields["isActive"], .bool(true))
+        XCTAssertEqual(dto.fields["createdAt"], .date(memory.createdAt))
+    }
+
+    func testMerchantMemoryDefaultAccountLinkageIsPreserved() {
+        var memory = makeMerchantMemory()
+        memory.defaultAccountName = "Main Wallet"
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.fields["defaultAccountName"], .string("Main Wallet"))
+    }
+
+    func testMerchantMemoryNilDefaultAccountMapsToNull() {
+        let memory = makeMerchantMemory()
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.fields["defaultAccountName"], .null)
+    }
+
+    func testMerchantMemoryLastUsedAtIsPreserved() {
+        let lastUsed = Date(timeIntervalSince1970: 1_800_005_000)
+        var memory = makeMerchantMemory()
+        memory.lastUsedAt = lastUsed
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(dto.fields["lastUsedAt"], .date(lastUsed))
+    }
+
+    func testMerchantMemoryTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        var memory = makeMerchantMemory()
+        memory.isDeleted = true
+        memory.deletedAt = deletedAt
+
+        let dto = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, memory.updatedAt)
+    }
+
+    func testMerchantMemoryMapperIsDeterministic() {
+        let memory = makeMerchantMemory()
+
+        let first = WalletSyncRecordMappers.dto(for: memory)
+        let second = WalletSyncRecordMappers.dto(for: memory)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeMerchantMemory() -> MerchantMemory {
+        var memory = MerchantMemory(
+            merchantName: "Starbucks",
+            defaultCategoryName: "Food",
+            defaultSubCategoryName: "Coffee",
+            defaultAccountName: nil,
+            usageCount: 5
+        )
+        memory.id = UUID(uuidString: "77777777-7777-7777-7777-777777777777")!
+        memory.aliases = ["Star Bucks", "SB Coffee"]
+        memory.createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        memory.updatedAt = Date(timeIntervalSince1970: 1_800_010_000)
+        return memory
+    }
+
+    // MARK: - InstallmentPlan mapper tests
+
+    func testInstallmentPlanMapsToInstallmentPlanEntity() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.entity, .installmentPlan)
+    }
+
+    func testInstallmentPlanRecordNameIsStable() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.recordName, "InstallmentPlan_88888888-8888-8888-8888-888888888888")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .installmentPlan, id: plan.id).recordName)
+    }
+
+    func testInstallmentPlanIDIsPreserved() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.id, plan.id)
+    }
+
+    func testInstallmentPlanImportantFieldsArePresent() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.fields["purchaseName"], .string("iPhone 16"))
+        XCTAssertEqual(dto.fields["totalAmount"], .double(1200.00))
+        XCTAssertEqual(dto.fields["installmentCount"], .int(12))
+        XCTAssertEqual(dto.fields["firstDueDate"], .date(plan.firstDueDate))
+        XCTAssertEqual(dto.fields["categoryName"], .string("Electronics"))
+        XCTAssertEqual(dto.fields["subCategoryName"], .string("Phones"))
+        XCTAssertEqual(dto.fields["paymentMethodName"], .string("Valu"))
+        XCTAssertEqual(dto.fields["createdAt"], .date(plan.createdAt))
+    }
+
+    func testInstallmentPlanAccountLinkageIsPreserved() {
+        let plan = makeInstallmentPlan(accountName: "Main Wallet")
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.fields["accountName"], .string("Main Wallet"))
+    }
+
+    func testInstallmentPlanNilAccountMapsToNull() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.fields["accountName"], .null)
+    }
+
+    func testInstallmentPlanCreditCardLinkageIsPreserved() {
+        let cardID = UUID(uuidString: "99999999-9999-9999-9999-999999999999")!
+        let plan = makeInstallmentPlan(linkedCreditCardID: cardID)
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.fields["linkedCreditCardID"], .uuid(cardID))
+    }
+
+    func testInstallmentPlanNilCreditCardMapsToNull() {
+        let plan = makeInstallmentPlan()
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(dto.fields["linkedCreditCardID"], .null)
+    }
+
+    func testInstallmentPlanTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let plan = makeInstallmentPlan(isDeleted: true, deletedAt: deletedAt)
+
+        let dto = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, plan.updatedAt)
+    }
+
+    func testInstallmentPlanMapperIsDeterministic() {
+        let plan = makeInstallmentPlan()
+
+        let first = WalletSyncRecordMappers.dto(for: plan)
+        let second = WalletSyncRecordMappers.dto(for: plan)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeInstallmentPlan(
+        accountName: String? = nil,
+        linkedCreditCardID: UUID? = nil,
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
+    ) -> InstallmentPlan {
+        InstallmentPlan(
+            id: UUID(uuidString: "88888888-8888-8888-8888-888888888888")!,
+            purchaseName: "iPhone 16",
+            totalAmount: 1200.00,
+            installmentCount: 12,
+            firstDueDate: Date(timeIntervalSince1970: 1_800_000_000),
+            accountName: accountName,
+            categoryName: "Electronics",
+            subCategoryName: "Phones",
+            linkedCreditCardID: linkedCreditCardID,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            isDeleted: isDeleted,
+            deletedAt: deletedAt
+        )
+    }
 }
