@@ -410,7 +410,7 @@ struct AnalysisView: View {
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "افهم الصرف، فروق الميزانية، وتوقعات الكاش." : "Understand spending, budget gaps, and cash outlook.")
+                    Text(store.appLanguage == .arabicEgyptian ? "افهم الصرف، فروق الخطة، وتوقعات الكاش." : "Understand spending, plan gaps, and cash outlook.")
                         .foregroundStyle(.secondary)
 
                     NavigationLink {
@@ -418,7 +418,7 @@ struct AnalysisView: View {
                     } label: {
                         AnalysisCard(
                             title: store.appLanguage == .arabicEgyptian ? "ملخص الشهر" : "Monthly Summary",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "المخطط مقابل الفعلي، معدل الصرف، وحالة الشهر." : "See planned vs actual, burn rate, and month status.",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "المخطط مقابل المصروف، معدل الصرف، وحالة الشهر." : "See planned vs spent, burn rate, and month status.",
                             icon: "gauge.with.dots.needle.bottom.50percent"
                         )
                     }
@@ -513,7 +513,7 @@ struct AnalysisView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Text(store.appLanguage == .arabicEgyptian ? "بيانات قديمة" : "Past Data")
+                    Text(store.appLanguage == .arabicEgyptian ? "ملخصات الشهور السابقة" : "Past month summaries")
                         .font(.headline)
                         .fontWeight(.bold)
                         .padding(.top, 8)
@@ -554,11 +554,12 @@ struct AnalysisCard: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.headline)
-                .frame(width: 36, height: 36)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
                 .background(Color(.secondarySystemGroupedBackground))
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -577,7 +578,7 @@ struct AnalysisCard: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(12)
+        .padding(14)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }

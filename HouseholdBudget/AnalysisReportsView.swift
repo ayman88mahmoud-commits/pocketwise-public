@@ -37,7 +37,10 @@ struct WhereMoneyWentReportView: View {
             selectedMonthDate: $selectedMonthDate
         ) {
             if rows.isEmpty && cashMovementRows.isEmpty {
-                AnalysisEmptyState(text: store.appLanguage == .arabicEgyptian ? "مفيش مصاريف أو حركات أشخاص/ديون للشهر ده." : "No spending or People/Debts cash movements recorded for this month.")
+                AnalysisEmptyState(
+                    title: store.appLanguage == .arabicEgyptian ? "مفيش نشاط للشهر ده." : "No activity for this month.",
+                    message: store.appLanguage == .arabicEgyptian ? "جرّب شهر تاني أو أضف حركات مدفوعة علشان التقرير يظهر." : "Try another month or add paid transactions to see this report."
+                )
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     if !rows.isEmpty {
@@ -119,12 +122,15 @@ struct BiggestDrainsReportView: View {
 
     var body: some View {
         AnalysisReportShell(
-            title: store.appLanguage == .arabicEgyptian ? "أكبر مصاريف سحبت الفلوس" : "Biggest Drains",
+            title: store.appLanguage == .arabicEgyptian ? "أعلى بنود الصرف" : "Top spending areas",
             subtitle: store.appLanguage == .arabicEgyptian ? "أعلى مصروفات في الشهر المختار." : "Top spending areas for the selected month.",
             selectedMonthDate: $selectedMonthDate
         ) {
             if rows.isEmpty {
-                AnalysisEmptyState(text: store.appLanguage == .arabicEgyptian ? "مفيش مصاريف مسجلة للشهر ده." : "No spending recorded for this month.")
+                AnalysisEmptyState(
+                    title: store.appLanguage == .arabicEgyptian ? "مفيش صرف مدفوع للشهر ده." : "No paid spending for this month.",
+                    message: store.appLanguage == .arabicEgyptian ? "جرّب شهر تاني أو أضف حركات مدفوعة علشان التقرير يظهر." : "Try another month or add paid transactions to see this report."
+                )
             } else {
                 VStack(spacing: 10) {
                     Text(store.appLanguage == .arabicEgyptian ? "بيتم عرض أعلى ٨ تصنيفات" : "Showing top 8 categories")
@@ -202,7 +208,10 @@ struct WhatChangedReportView: View {
             selectedMonthDate: $selectedMonthDate
         ) {
             if rows.isEmpty {
-                AnalysisEmptyState(text: store.appLanguage == .arabicEgyptian ? "مفيش مصاريف في الشهر الحالي أو اللي قبله للمقارنة." : "No current or previous month spending to compare.")
+                AnalysisEmptyState(
+                    title: store.appLanguage == .arabicEgyptian ? "مفيش صرف كفاية للمقارنة." : "Not enough spending to compare.",
+                    message: store.appLanguage == .arabicEgyptian ? "اختار شهر فيه صرف مدفوع أو الشهر اللي قبله فيه بيانات." : "Choose a month with paid spending and a previous month to compare."
+                )
             } else {
                 VStack(spacing: 10) {
                     Text(store.appLanguage == .arabicEgyptian ? "بيتم عرض أعلى ١٠ تغييرات" : "Showing top 10 changes")
@@ -272,7 +281,10 @@ struct SubcategoryBreakdownReportView: View {
             selectedMonthDate: $selectedMonthDate
         ) {
             if rows.isEmpty {
-                AnalysisEmptyState(text: AppText.noPaidSpendingThisMonth(store.appLanguage))
+                AnalysisEmptyState(
+                    title: AppText.noPaidSpendingThisMonth(store.appLanguage),
+                    message: store.appLanguage == .arabicEgyptian ? "جرّب شهر تاني أو أضف حركات مدفوعة بتصنيفات فرعية." : "Try another month or add paid transactions with subcategories."
+                )
             } else {
                 VStack(spacing: 10) {
                     ForEach(rows) { row in
@@ -343,12 +355,15 @@ struct MonthlyDriverAnalysisReportView: View {
 
     var body: some View {
         AnalysisReportShell(
-            title: store.appLanguage == .arabicEgyptian ? "سبب الزيادة" : "Monthly Driver Analysis",
-            subtitle: store.appLanguage == .arabicEgyptian ? "أكبر الفروق بين الخطة واللي اتصرف فعليًا." : "Largest gaps between plan and actual spending.",
+            title: store.appLanguage == .arabicEgyptian ? "فروق الخطة والفعلي" : "Plan vs Actual Gaps",
+            subtitle: store.appLanguage == .arabicEgyptian ? "أكبر الفروق بين الخطة واللي اتصرف فعليًا." : "Largest gaps between planned and spent amounts.",
             selectedMonthDate: $selectedMonthDate
         ) {
             if rows.isEmpty {
-                AnalysisEmptyState(text: store.appLanguage == .arabicEgyptian ? "مفيش بيانات كفاية للتحليل." : "Not enough data for driver analysis.")
+                AnalysisEmptyState(
+                    title: store.appLanguage == .arabicEgyptian ? "مفيش بيانات كفاية للخطة والفعلي." : "Not enough data for plan vs actual.",
+                    message: store.appLanguage == .arabicEgyptian ? "أضف ميزانية شهرية وصرف مدفوع علشان تقارن." : "Add a monthly budget and paid spending to compare."
+                )
             } else {
                 VStack(spacing: 10) {
                     ForEach(rows.prefix(10)) { row in
@@ -377,6 +392,8 @@ struct MonthlyDriverAnalysisReportView: View {
 }
 
 private struct AnalysisReportShell<Content: View>: View {
+
+    @EnvironmentObject private var store: WalletStore
 
     let title: String
     let subtitle: String
@@ -415,30 +432,37 @@ private struct AnalysisReportShell<Content: View>: View {
     }
 
     private var monthSelector: some View {
-        HStack {
-            Button {
-                moveMonth(by: -1)
-            } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(.borderless)
-
-            Spacer()
-
-            Text(formatMonth(selectedMonthDate))
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(store.appLanguage == .arabicEgyptian ? "شهر التقرير" : "Report month")
+                .font(.caption)
                 .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
 
-            Spacer()
+            HStack {
+                Button {
+                    moveMonth(by: -1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.borderless)
 
-            Button {
-                moveMonth(by: 1)
-            } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 36, height: 36)
+                Spacer()
+
+                Text(formatMonth(selectedMonthDate))
+                    .font(.headline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                Button {
+                    moveMonth(by: 1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
         }
         .padding(16)
         .background(Color(.systemBackground))
@@ -481,7 +505,7 @@ private struct AnalysisSpendRow: View {
             ProgressView(value: share)
 
             HStack {
-                Text(store.appLanguage == .arabicEgyptian ? "\(Int((share * 100).rounded()))٪ من المصروفات المعروضة" : "\(Int((share * 100).rounded()))% of shown spending")
+                Text(store.appLanguage == .arabicEgyptian ? "\(Int((share * 100).rounded()))٪ من أعلى البنود دي" : "\(Int((share * 100).rounded()))% of these top categories")
 
                 Spacer()
 
@@ -494,9 +518,9 @@ private struct AnalysisSpendRow: View {
 
             if row.reimbursementAmount > 0 {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.appLanguage == .arabicEgyptian ? "إجمالي المصروف: \(store.displayCurrency(row.totalAmount))" : "Gross Spend: \(store.displayCurrency(row.totalAmount))")
+                    Text(store.appLanguage == .arabicEgyptian ? "إجمالي المصروف: \(store.displayCurrency(row.totalAmount))" : "Total spent: \(store.displayCurrency(row.totalAmount))")
                     Text(store.appLanguage == .arabicEgyptian ? "تم استرداده: \(store.displayCurrency(row.reimbursementAmount))" : "Reimbursed: \(store.displayCurrency(row.reimbursementAmount))")
-                    Text(store.appLanguage == .arabicEgyptian ? "الصافي عليك: \(store.displayCurrency(row.netAmount))" : "Net Cost: \(store.displayCurrency(row.netAmount))")
+                    Text(store.appLanguage == .arabicEgyptian ? "الصافي عليك: \(store.displayCurrency(row.netAmount))" : "Net spending: \(store.displayCurrency(row.netAmount))")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -578,14 +602,22 @@ private struct AnalysisChangeReportRow: View {
 }
 
 private struct AnalysisEmptyState: View {
-    let text: String
+    let title: String
+    let message: String
 
     var body: some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 6)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
     }
 }
 
@@ -615,9 +647,9 @@ private struct AnalysisSubcategoryReportRow: View {
             }
 
             HStack {
-                Text(store.appLanguage == .arabicEgyptian ? "\(row.transactionCount) عملية" : "\(row.transactionCount) tx")
+                Text(store.appLanguage == .arabicEgyptian ? "\(row.transactionCount) عملية" : "\(row.transactionCount) transactions")
                 Spacer()
-                Text(store.appLanguage == .arabicEgyptian ? "المتوسط \(store.displayCurrency(row.averageAmount))" : "Avg \(store.displayCurrency(row.averageAmount))")
+                Text(store.appLanguage == .arabicEgyptian ? "المتوسط \(store.displayCurrency(row.averageAmount))" : "Average \(store.displayCurrency(row.averageAmount))")
                 Spacer()
                 Text(row.changeAmount >= 0 ? "+\(store.displayCurrency(row.changeAmount))" : "-\(store.displayCurrency(abs(row.changeAmount)))")
                     .foregroundStyle(row.changeAmount >= 0 ? .red : .green)
@@ -650,9 +682,9 @@ private struct AnalysisDriverReportRow: View {
             }
 
             HStack {
-                Text(store.appLanguage == .arabicEgyptian ? "المخطط \(store.displayCurrency(row.plannedAmount))" : "Plan \(store.displayCurrency(row.plannedAmount))")
+                Text(store.appLanguage == .arabicEgyptian ? "المخطط \(store.displayCurrency(row.plannedAmount))" : "Planned \(store.displayCurrency(row.plannedAmount))")
                 Spacer()
-                Text(store.appLanguage == .arabicEgyptian ? "الفعلي \(store.displayCurrency(row.actualAmount))" : "Actual \(store.displayCurrency(row.actualAmount))")
+                Text(store.appLanguage == .arabicEgyptian ? "المصروف \(store.displayCurrency(row.actualAmount))" : "Spent \(store.displayCurrency(row.actualAmount))")
             }
             .font(.caption)
             .foregroundStyle(.secondary)

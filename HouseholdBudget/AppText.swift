@@ -332,7 +332,7 @@ enum AppText {
     }
 
     static func cashMovements(_ language: AppLanguage) -> String {
-        language == .arabicEgyptian ? "حركات نقدية" : "Cash Movements"
+        language == .arabicEgyptian ? "حركات الأشخاص والديون النقدية" : "People & Debt Cash Movements"
     }
 
     static func managedInPeopleDebts(_ language: AppLanguage) -> String {
