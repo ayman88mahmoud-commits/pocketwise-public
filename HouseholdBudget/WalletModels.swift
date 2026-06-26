@@ -456,6 +456,12 @@ enum AppLanguage: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+struct RecurringPaidOccurrenceIdentity: Codable, Hashable {
+    var sourceRecurringEventID: UUID
+    var year: Int
+    var month: Int
+}
+
 struct FinancialEvent: Identifiable, Codable, Hashable {
     var id = UUID()
 
@@ -570,6 +576,21 @@ extension FinancialEvent {
 }
 
 extension FinancialEvent {
+    var recurringPaidOccurrenceIdentity: RecurringPaidOccurrenceIdentity? {
+        guard status == .paid,
+              let sourceRecurringEventID,
+              let recurringOccurrenceYear,
+              let recurringOccurrenceMonth else {
+            return nil
+        }
+
+        return RecurringPaidOccurrenceIdentity(
+            sourceRecurringEventID: sourceRecurringEventID,
+            year: recurringOccurrenceYear,
+            month: recurringOccurrenceMonth
+        )
+    }
+
     var effectiveIncomeType: IncomeType {
         incomeType ?? .unknown
     }
@@ -817,6 +838,33 @@ struct WalletMonthlyBudgetItem: Identifiable, Codable, Hashable {
     var id = UUID()
     var categoryName: String
     var plannedAmount: Double
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var isDeleted: Bool = false
+    var deletedAt: Date? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case categoryName
+        case plannedAmount
+        case createdAt
+        case updatedAt
+        case isDeleted
+        case deletedAt
+    }
+}
+
+extension WalletMonthlyBudgetItem {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        categoryName = try container.decode(String.self, forKey: .categoryName)
+        plannedAmount = try container.decode(Double.self, forKey: .plannedAmount)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+    }
 }
 
 // MARK: - People / Debts
