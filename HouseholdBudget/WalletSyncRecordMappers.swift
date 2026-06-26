@@ -97,6 +97,39 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    // items ([WalletMonthlyBudgetItem]) is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet. Each item syncs independently via the .monthlyBudget entity's child records.
+    static func dto(for budget: WalletMonthlyBudget) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .monthlyBudget, id: budget.id),
+            updatedAt: budget.updatedAt,
+            deletedAt: budget.deletedAt,
+            isDeleted: budget.isDeleted,
+            fields: [
+                "year": .int(budget.year),
+                "month": .int(budget.month),
+                "createdAt": .date(budget.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for debt: PersonDebt) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .personDebt, id: debt.id),
+            updatedAt: debt.updatedAt,
+            deletedAt: debt.deletedAt,
+            isDeleted: debt.isDeleted,
+            fields: [
+                "personName": .string(debt.personName),
+                "kind": .string(debt.kind.rawValue),
+                "originalAmount": .double(debt.originalAmount),
+                "note": debt.note.map { .string($0) } ?? .null,
+                "dueDate": debt.dueDate.map { .date($0) } ?? .null,
+                "isArchived": .bool(debt.isArchived),
+                "createdAt": .date(debt.createdAt)
+            ]
+        )
+    }
+
     // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(

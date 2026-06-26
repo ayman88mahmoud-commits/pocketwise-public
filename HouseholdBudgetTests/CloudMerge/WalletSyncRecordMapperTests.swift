@@ -667,4 +667,209 @@ final class WalletSyncRecordMapperTests: XCTestCase {
             deletedAt: deletedAt
         )
     }
+
+    // MARK: - WalletMonthlyBudget mapper tests
+
+    func testMonthlyBudgetMapsToMonthlyBudgetEntity() {
+        let budget = makeMonthlyBudget()
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertEqual(dto.entity, .monthlyBudget)
+    }
+
+    func testMonthlyBudgetRecordNameIsStable() {
+        let budget = makeMonthlyBudget()
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertEqual(dto.recordName, "MonthlyBudget_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .monthlyBudget, id: budget.id).recordName)
+    }
+
+    func testMonthlyBudgetIDIsPreserved() {
+        let budget = makeMonthlyBudget()
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertEqual(dto.id, budget.id)
+    }
+
+    func testMonthlyBudgetScalarFieldsArePresent() {
+        let budget = makeMonthlyBudget()
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertEqual(dto.fields["year"], .int(2025))
+        XCTAssertEqual(dto.fields["month"], .int(6))
+        XCTAssertEqual(dto.fields["createdAt"], .date(budget.createdAt))
+    }
+
+    func testMonthlyBudgetItemsFieldIsAbsent() {
+        // items ([WalletMonthlyBudgetItem]) is intentionally not mapped — nested object arrays have no matching WalletSyncFieldValue type yet.
+        let budget = makeMonthlyBudget()
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertNil(dto.fields["items"])
+    }
+
+    func testMonthlyBudgetTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let budget = makeMonthlyBudget(isDeleted: true, deletedAt: deletedAt)
+
+        let dto = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, budget.updatedAt)
+    }
+
+    func testMonthlyBudgetMapperIsDeterministic() {
+        let budget = makeMonthlyBudget()
+
+        let first = WalletSyncRecordMappers.dto(for: budget)
+        let second = WalletSyncRecordMappers.dto(for: budget)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeMonthlyBudget(
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
+    ) -> WalletMonthlyBudget {
+        WalletMonthlyBudget(
+            id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!,
+            year: 2025,
+            month: 6,
+            items: [],
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            isDeleted: isDeleted,
+            deletedAt: deletedAt
+        )
+    }
+
+    // MARK: - PersonDebt mapper tests
+
+    func testPersonDebtMapsToPersonDebtEntity() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.entity, .personDebt)
+    }
+
+    func testPersonDebtRecordNameIsStable() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.recordName, "PersonDebt_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .personDebt, id: debt.id).recordName)
+    }
+
+    func testPersonDebtIDIsPreserved() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.id, debt.id)
+    }
+
+    func testPersonDebtImportantFieldsArePresent() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.fields["personName"], .string("Ahmed"))
+        XCTAssertEqual(dto.fields["kind"], .string("Owed to Me"))
+        XCTAssertEqual(dto.fields["originalAmount"], .double(500.00))
+        XCTAssertEqual(dto.fields["isArchived"], .bool(false))
+        XCTAssertEqual(dto.fields["createdAt"], .date(debt.createdAt))
+    }
+
+    func testPersonDebtNoteIsPreserved() {
+        let debt = makePersonDebt(note: "Borrowed for trip")
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.fields["note"], .string("Borrowed for trip"))
+    }
+
+    func testPersonDebtNilNoteMapsToNull() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.fields["note"], .null)
+    }
+
+    func testPersonDebtDueDateIsPreserved() {
+        let dueDate = Date(timeIntervalSince1970: 1_800_050_000)
+        let debt = makePersonDebt(dueDate: dueDate)
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.fields["dueDate"], .date(dueDate))
+    }
+
+    func testPersonDebtNilDueDateMapsToNull() {
+        let debt = makePersonDebt()
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(dto.fields["dueDate"], .null)
+    }
+
+    func testPersonDebtTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        var debt = makePersonDebt()
+        debt.isDeleted = true
+        debt.deletedAt = deletedAt
+
+        let dto = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, debt.updatedAt)
+    }
+
+    func testPersonDebtMapperIsDeterministic() {
+        let debt = makePersonDebt()
+
+        let first = WalletSyncRecordMappers.dto(for: debt)
+        let second = WalletSyncRecordMappers.dto(for: debt)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makePersonDebt(
+        note: String? = nil,
+        dueDate: Date? = nil
+    ) -> PersonDebt {
+        var debt = PersonDebt(
+            personName: "Ahmed",
+            kind: .owedToMe,
+            originalAmount: 500.00
+        )
+        debt.id = UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!
+        debt.createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        debt.updatedAt = Date(timeIntervalSince1970: 1_800_010_000)
+        debt.note = note
+        debt.dueDate = dueDate
+        return debt
+    }
 }
