@@ -16,7 +16,7 @@ struct DataBackupView: View {
 
     var body: some View {
         List {
-            Section(store.appLanguage == .arabicEgyptian ? "النسخة الاحتياطية" : "Backup") {
+            Section(store.appLanguage == .arabicEgyptian ? "نسخة احتياطية يدوية" : "Manual backup") {
                 HStack(alignment: .top, spacing: 12) {
                     PocketWiseIconBadge(
                         systemName: "externaldrive.fill",
@@ -26,11 +26,11 @@ struct DataBackupView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(store.appLanguage == .arabicEgyptian ? "التصدير بيعمل نسخة كاملة من بيانات المحفظة." : "Export creates a full copy of your wallet data.")
+                        Text(store.appLanguage == .arabicEgyptian ? "التصدير بيعمل ملف نسخة كاملة من بيانات المحفظة." : "Export creates a full backup file of your wallet data.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
 
-                        Text(store.appLanguage == .arabicEgyptian ? "الاستيراد بيبدّل بيانات التطبيق بعد التأكيد." : "Import replaces current app data after confirmation.")
+                        Text(store.appLanguage == .arabicEgyptian ? "الاستيراد بيستبدل بيانات التطبيق الحالية بعد التأكيد." : "Import replaces current app data after confirmation.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -38,7 +38,7 @@ struct DataBackupView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        Text(store.appLanguage == .arabicEgyptian ? "اختار مجلد آمن يدويًا وقت الحفظ. الاستيراد بيقبل ملفات JSON المتوافقة، بما فيها النسخ القديمة." : "Choose a safe folder manually when saving. Import accepts compatible JSON backup files, including older exports.")
+                        Text(store.appLanguage == .arabicEgyptian ? "اختار مجلد آمن يدويًا وقت الحفظ. الاستيراد يقبل ملفات JSON المتوافقة، بما فيها النسخ القديمة." : "Choose a safe folder manually when saving. Import accepts compatible JSON backup files, including older exports.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -48,7 +48,7 @@ struct DataBackupView: View {
                 Button {
                     exportBackup()
                 } label: {
-                    Label(store.appLanguage == .arabicEgyptian ? "صدّر نسخة احتياطية" : "Export Backup / Save Backup File", systemImage: "square.and.arrow.up")
+                    Label(store.appLanguage == .arabicEgyptian ? "صدّر ملف نسخة احتياطية" : "Export Backup File", systemImage: "square.and.arrow.up")
                 }
                 .tint(PocketWiseSemanticColor.backupPrivacy.tint)
 
@@ -60,7 +60,7 @@ struct DataBackupView: View {
                 .tint(PocketWiseSemanticColor.backupPrivacy.tint)
             }
 
-            Section(store.appLanguage == .arabicEgyptian ? "البيانات اللي جوه النسخة" : "Included Data") {
+            Section(store.appLanguage == .arabicEgyptian ? "محتويات النسخة" : "Included data") {
                 backupDetailRow("Accounts", store.accounts.count)
                 backupDetailRow("Categories", store.categories.count)
                 backupDetailRow("Quick Events", store.walletEvents.count)
@@ -75,13 +75,13 @@ struct DataBackupView: View {
                 backupDetailRow("Debt Entries", store.personDebtEntries.count)
             }
 
-            Section(store.appLanguage == .arabicEgyptian ? "الحالة" : "Status") {
+            Section(store.appLanguage == .arabicEgyptian ? "حالة النسخ اليدوي" : "Manual backup status") {
                 if let statusMessage {
                     Text(statusMessage)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(store.appLanguage == .arabicEgyptian ? "لسه مفيش تصدير أو استيراد في الجلسة دي." : "No backup exported or imported in this session.")
+                    Text(store.appLanguage == .arabicEgyptian ? "لم يتم تصدير أو استيراد نسخة احتياطية في هذه الجلسة." : "No backup file has been exported or imported in this session.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -163,7 +163,7 @@ struct DataBackupView: View {
             let data = try store.encodeBackupSnapshotToJSON()
             backupDocument = WalletBackupDocument(data: data)
             backupFileName = makeBackupFileName()
-            statusMessage = "Backup file ready to save/share."
+            statusMessage = "Backup file is ready to save or share."
             errorMessage = nil
             isExporting = true
         } catch {
@@ -175,7 +175,7 @@ struct DataBackupView: View {
     private func handleExportResult(_ result: Result<URL, Error>) {
         switch result {
         case .success:
-            statusMessage = "Backup exported successfully."
+            statusMessage = "Backup file exported successfully."
             errorMessage = nil
 
         case .failure(let error):
@@ -226,9 +226,9 @@ struct DataBackupView: View {
             let validationReport = pendingRestorePreview?.validationReport
             try store.importBackupSnapshotFromJSON(pendingImportData)
             if let validationReport, validationReport.hasIssues {
-                statusMessage = "Backup imported successfully. \(validationReport.summaryText)"
+                statusMessage = "Backup restored successfully. \(validationReport.summaryText)"
             } else {
-                statusMessage = "Backup imported successfully."
+                statusMessage = "Backup restored successfully."
             }
             errorMessage = nil
             self.pendingImportData = nil

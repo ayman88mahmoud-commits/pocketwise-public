@@ -22,7 +22,7 @@ struct AppPreferencesView: View {
                 TextField(language == .arabicEgyptian ? "اسمك" : "Display Name", text: $displayName)
                     .textInputAutocapitalization(.words)
 
-                Text(language == .arabicEgyptian ? "الاسم ده هيظهر في تحية النهارده بس." : "This name is used only in the Today greeting.")
+                Text(language == .arabicEgyptian ? "الاسم ده يظهر في تحية شاشة النهارده فقط." : "This name appears only in the Today greeting.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -37,7 +37,7 @@ struct AppPreferencesView: View {
             }
 
             Section(language == .arabicEgyptian ? "التخطيط" : "Planning") {
-                Picker(language == .arabicEgyptian ? "مدة التوقع" : "Forecast Horizon", selection: $forecastHorizonMonths) {
+                Picker(language == .arabicEgyptian ? "مدة النظرة المستقبلية" : "Forecast horizon", selection: $forecastHorizonMonths) {
                     ForEach([6, 12, 18, 24], id: \.self) { months in
                         Text(language == .arabicEgyptian ? "\(months) شهر" : "\(months) months")
                             .tag(months)
@@ -63,7 +63,7 @@ struct AppPreferencesView: View {
                     )
                 }
 
-                Text(language == .arabicEgyptian ? "الإعداد ده بيوضح افتراضات اختبار الأمان، من غير ما يضيف دخل أو يغيّر الرصيد." : "This clarifies Runway Check assumptions without adding income or changing balances.")
+                Text(language == .arabicEgyptian ? "الإعداد ده يوضح افتراضات اختبار الأمان، من غير ما يضيف دخل أو يغيّر الأرصدة." : "This clarifies Runway Check assumptions without adding income or changing balances.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -71,7 +71,7 @@ struct AppPreferencesView: View {
             Section(AppText.privacy(language)) {
                 Toggle(AppText.hideBalances(language), isOn: $hideBalances)
 
-                Text(language == .arabicEgyptian ? "بيخفي الأرقام في الشاشات اللي بتعرض البيانات، من غير ما يغيّر أي قيمة محفوظة." : "Masks read-only amounts across the app without changing saved values.")
+                Text(language == .arabicEgyptian ? "بيخفي الأرقام المعروضة فقط، من غير ما يغيّر أي بيانات محفوظة." : "Hides displayed amounts only. Saved data and balances do not change.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -89,7 +89,7 @@ struct AppPreferencesView: View {
                 }
             }
         }
-        .navigationTitle(language == .arabicEgyptian ? "الملف واللغة" : "Profile & App Preferences")
+        .navigationTitle(language == .arabicEgyptian ? "الملف والتفضيلات" : "Profile & Preferences")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             displayName = store.displayName

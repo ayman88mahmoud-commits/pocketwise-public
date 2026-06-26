@@ -619,14 +619,14 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                Section(store.appLanguage == .arabicEgyptian ? "تجهيز المحفظة" : "Wallet Setup") {
+                Section(store.appLanguage == .arabicEgyptian ? "الإعداد والإدارة" : "Setup and management") {
                     NavigationLink {
                         OnboardingWelcomeView(presentationMode: .settings)
                             .environmentObject(store)
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "مساعد الإعداد" : "Setup Assistant",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "واجهة إعداد آمنة بدون تسجيل معاملات" : "Safe setup shell without recording transactions",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "راجع أساسيات المحفظة بدون تسجيل معاملات" : "Review wallet basics without recording transactions.",
                             icon: "sparkles",
                             semanticColor: .setup
                         )
@@ -638,7 +638,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "جولة سريعة" : "Quick Tour",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على مزايا التطبيق بسرعة" : "A quick overview of app features",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "تعرّف على الشاشات الأساسية بسرعة" : "A quick walkthrough of the main screens.",
                             icon: "play.circle.fill",
                             semanticColor: .setup
                         )
@@ -649,8 +649,8 @@ struct SettingsView: View {
                             .environmentObject(store)
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "الملف واللغة" : "Profile & App Preferences",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "الاسم، اللغة، ومدة التوقع" : "Display name, language, and forecast horizon",
+                            title: store.appLanguage == .arabicEgyptian ? "الملف والتفضيلات" : "Profile & Preferences",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "الاسم، اللغة، ومدة النظرة المستقبلية" : "Display name, language, and forecast horizon.",
                             icon: "person.crop.circle",
                             semanticColor: .accounts
                         )
@@ -662,7 +662,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "إدارة الحسابات" : "Manage Accounts",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "أضف وعدّل الحسابات والأرصدة" : "Add, edit, deactivate, and update balances",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "أضف وعدّل الحسابات والأرصدة" : "Add, edit, deactivate, and update balances.",
                             icon: "wallet.pass.fill",
                             semanticColor: .accounts
                         )
@@ -674,7 +674,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "كروت الائتمان" : "Credit Cards",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "إعداد الكروت بدون تغيير الأرصدة" : "Set up cards without changing cash balances",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "إعداد الكروت بدون تغيير أرصدة الكاش" : "Set up cards without changing cash balances.",
                             icon: "creditcard.fill",
                             semanticColor: .creditCards
                         )
@@ -687,7 +687,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "إدارة البنود" : "Manage Categories",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "رتّب البنود والبنود الفرعية" : "Add, edit, deactivate, and organize subcategories",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "أضف وعدّل ورتّب البنود الفرعية" : "Add, edit, deactivate, and organize subcategories.",
                             icon: "tag.fill",
                             semanticColor: .categories
                         )
@@ -699,14 +699,14 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "التجار والاختصارات" : "Merchant Memory",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "احفظ التجار وتصنيفاتهم الافتراضية" : "Save merchants, aliases, and default categories",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "احفظ التجار والاختصارات والتصنيفات الافتراضية" : "Save merchants, aliases, and default categories.",
                             icon: "storefront",
                             semanticColor: .spending
                         )
                     }
 
                     HStack {
-                        Text(store.appLanguage == .arabicEgyptian ? "الكاش المتاح" : "Available Cash")
+                        Text(store.appLanguage == .arabicEgyptian ? "الكاش المتاح الحالي" : "Current available cash")
                         Spacer()
                         Text(formatCurrency(store.availableCash))
                             .fontWeight(.bold)
@@ -719,17 +719,17 @@ struct SettingsView: View {
                         set: { store.setHideBalances($0) }
                     ))
 
-                    Text(store.appLanguage == .arabicEgyptian ? "بيخفي الأرقام في الشاشات اللي بتعرض البيانات بس." : "Masks read-only amounts across the app.")
+                    Text(store.appLanguage == .arabicEgyptian ? "بيخفي الأرقام المعروضة فقط، من غير ما يغيّر أي بيانات محفوظة." : "Hides displayed amounts only. Saved data and balances do not change.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section(store.appLanguage == .arabicEgyptian ? "قواعد الدفع" : "Payment Rules") {
+                Section(store.appLanguage == .arabicEgyptian ? "إعدادات الدفع" : "Payment settings") {
                     Button {
                         isEditingInstaPayFees = true
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "رسوم InstaPay" : "InstaPay Fees",
+                            title: store.appLanguage == .arabicEgyptian ? "قواعد رسوم InstaPay" : "InstaPay fee rules",
                             subtitle: store.appLanguage == .arabicEgyptian
                                 ? "\(cleanNumberText(store.instaPayFeePercent))%، أدنى \(formatCurrency(store.instaPayMinimumFee))، أقصى \(formatCurrency(store.instaPayMaximumFee))"
                                 : "\(cleanNumberText(store.instaPayFeePercent))%, min \(formatCurrency(store.instaPayMinimumFee)), max \(formatCurrency(store.instaPayMaximumFee))",
@@ -740,13 +740,13 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                 }
 
-                Section(store.appLanguage == .arabicEgyptian ? "البيانات والنسخ" : "Data Management") {
+                Section(store.appLanguage == .arabicEgyptian ? "البيانات والنسخ والاستعادة" : "Data, backup & restore") {
                     NavigationLink {
                         StartRealUseChecklistView()
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "قائمة بداية الشهر" : "Month Start Checklist",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "راجع الخطوات قبل تسجيل شهر جديد" : "Review these steps before tracking a new month.",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "راجع الخطوات قبل تسجيل شهر جديد" : "Review the steps before tracking a new month.",
                             icon: "checklist",
                             semanticColor: .setup
                         )
@@ -758,7 +758,7 @@ struct SettingsView: View {
                     } label: {
                         settingsRow(
                             title: store.appLanguage == .arabicEgyptian ? "نسخة احتياطية يدوية" : "Manual Backup",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "تصدير واستيراد البيانات" : "Manual export and import",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "صدّر ملف نسخة احتياطية أو استرجع منه يدويًا" : "Export a backup file or restore one manually.",
                             icon: "externaldrive",
                             semanticColor: .backupPrivacy
                         )
@@ -770,8 +770,8 @@ struct SettingsView: View {
                             .environmentObject(store)
                     } label: {
                         settingsRow(
-                            title: store.appLanguage == .arabicEgyptian ? "نسخة iCloud الاحتياطية" : "iCloud Backup",
-                            subtitle: store.appLanguage == .arabicEgyptian ? "نسخة احتياطية خاصة على iCloud" : "Private iCloud backup",
+                            title: store.appLanguage == .arabicEgyptian ? "نسخة iCloud الاحتياطية" : "iCloud backup",
+                            subtitle: store.appLanguage == .arabicEgyptian ? "نسخة snapshot يدوية خاصة، وليست مزامنة تلقائية" : "Manual private snapshot backup, not automatic device sync.",
                             icon: "icloud",
                             semanticColor: .backupPrivacy
                         )
@@ -783,7 +783,7 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         isConfirmingReset = true
                     } label: {
-                        Text(store.appLanguage == .arabicEgyptian ? "رجّع المحفظة لبيانات تجريبية" : "Reset Wallet to Sample Data")
+                        Text(store.appLanguage == .arabicEgyptian ? "استبدل المحفظة ببيانات تجريبية" : "Replace Wallet with Sample Data")
                     }
                 }
                 #endif
@@ -796,11 +796,11 @@ struct SettingsView: View {
             }
             #if DEBUG
             .confirmationDialog(
-                store.appLanguage == .arabicEgyptian ? "ترجع المحفظة لبيانات تجريبية؟" : "Reset wallet to sample data?",
+                store.appLanguage == .arabicEgyptian ? "استبدال المحفظة ببيانات تجريبية؟" : "Replace wallet with sample data?",
                 isPresented: $isConfirmingReset,
                 titleVisibility: .visible
             ) {
-                Button(store.appLanguage == .arabicEgyptian ? "إعادة ضبط المحفظة" : "Reset Wallet", role: .destructive) {
+                Button(store.appLanguage == .arabicEgyptian ? "استبدال المحفظة" : "Replace Wallet", role: .destructive) {
                     store.resetToSampleData()
                 }
 
@@ -868,13 +868,13 @@ struct ICloudSnapshotSyncView: View {
         List {
             Section(isAr ? "الحالة" : "Status") {
                 statusRow(
-                    title: "iCloud",
+                    title: isAr ? "حالة iCloud" : "iCloud backup status",
                     value: availabilityText(store.iCloudAvailability),
                     isError: isUnavailable(store.iCloudAvailability)
                 )
 
                 statusRow(
-                    title: isAr ? "آخر نسخة على iCloud" : "Last iCloud Backup",
+                    title: isAr ? "آخر نسخة احتياطية" : "Last backup saved",
                     value: formattedOptionalDate(
                         store.iCloudRemoteMetadata?.remoteUpdatedAt ?? store.lastKnownRemoteUpdateAt,
                         fallback: isAr ? "لا توجد نسخة بعد" : "No backup yet"
@@ -882,12 +882,12 @@ struct ICloudSnapshotSyncView: View {
                 )
 
                 statusRow(
-                    title: isAr ? "هذا الجهاز" : "This Device",
+                    title: isAr ? "بيانات هذا الجهاز" : "This device data",
                     value: formattedOptionalDate(store.localDataUpdatedAt, fallback: isAr ? "غير محدد" : "Unknown")
                 )
 
                 if let deviceName = store.iCloudRemoteMetadata?.deviceName, !deviceName.isEmpty {
-                    statusRow(title: isAr ? "نُسخ من جهاز" : "Backed Up From", value: deviceName)
+                    statusRow(title: isAr ? "آخر جهاز حفظ النسخة" : "Last backed up from", value: deviceName)
                 }
 
                 if let lastError = store.lastICloudSyncError, !lastError.isEmpty {
@@ -900,14 +900,14 @@ struct ICloudSnapshotSyncView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(isAr
-                        ? "يمكن لـ WalletBoard حفظ نسخة احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
-                        : "WalletBoard can save a private backup to your iCloud. Restoring from iCloud always requires confirmation.")
+                        ? "يمكن لـ WalletBoard حفظ نسخة snapshot احتياطية خاصة في iCloud الخاص بك. استعادة البيانات من iCloud تتطلب دائمًا تأكيدًا منك."
+                        : "WalletBoard can save a private snapshot backup to your iCloud. Restoring from iCloud always requires confirmation.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                     Text(isAr
-                        ? "المزامنة التلقائية بين iPhone وiPad مخطط لها، لكنها غير مفعّلة في هذا الإصدار."
-                        : "Automatic iPhone/iPad sync is planned, but not enabled in this version.")
+                        ? "هذه نسخة احتياطية يدوية، وليست مزامنة تلقائية بين الأجهزة."
+                        : "This is a manual iCloud snapshot backup, not automatic device sync.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
@@ -926,7 +926,7 @@ struct ICloudSnapshotSyncView: View {
                     Task { await viewICloudBackup() }
                 } label: {
                     Label(
-                        isWorking ? (isAr ? "جاري التحميل..." : "Loading...") : (isAr ? "عرض نسخة iCloud" : "View iCloud Backup"),
+                        isWorking ? (isAr ? "جاري التحميل..." : "Loading...") : (isAr ? "مراجعة نسخة iCloud" : "Review iCloud Backup"),
                         systemImage: "eye"
                     )
                 }
@@ -942,8 +942,8 @@ struct ICloudSnapshotSyncView: View {
                     .foregroundStyle(.secondary)
 
                     Text(isAr
-                        ? "اضغط «نسخ احتياطي الآن» لإنشاء أول نسخة احتياطية."
-                        : "Tap \"Back Up Now\" to create your first iCloud backup.")
+                        ? "اضغط «نسخ احتياطي الآن» لإنشاء أول snapshot احتياطي يدوي."
+                        : "Tap \"Back Up Now\" to create your first manual snapshot backup.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
@@ -954,14 +954,14 @@ struct ICloudSnapshotSyncView: View {
                     ?? cloudSnapshot.backupMetadata?.deviceName
                     ?? ""
 
-                Section(isAr ? "نسخة iCloud الاحتياطية" : "iCloud Backup") {
+                Section(isAr ? "نسخة iCloud الاحتياطية" : "iCloud backup") {
                     statusRow(
                         title: isAr ? "تاريخ النسخة" : "Backup Date",
                         value: formattedOptionalDate(cloudSnapshot.exportedAt, fallback: "-")
                     )
 
                     if !backupDevice.isEmpty {
-                        statusRow(title: isAr ? "نُسخ من جهاز" : "Backed Up From", value: backupDevice)
+                        statusRow(title: isAr ? "نُسخت من جهاز" : "Backed up from", value: backupDevice)
                     }
 
                     if let appVersion = cloudSnapshot.backupMetadata?.appVersion, !appVersion.isEmpty {
@@ -1006,7 +1006,7 @@ struct ICloudSnapshotSyncView: View {
                     Button(role: .destructive) {
                         isConfirmingRestore = true
                     } label: {
-                        Label(isAr ? "استعادة من iCloud" : "Restore from iCloud", systemImage: "icloud.and.arrow.down")
+                        Label(isAr ? "استعادة من نسخة iCloud" : "Restore from iCloud backup", systemImage: "icloud.and.arrow.down")
                     }
                     .disabled(isWorking)
 
@@ -1044,7 +1044,7 @@ struct ICloudSnapshotSyncView: View {
                 }
             }
         }
-        .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud Backup")
+        .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud backup")
         .confirmationDialog(
             isAr ? "نسخ احتياطي إلى iCloud؟" : "Back up to iCloud?",
             isPresented: $isConfirmingBackup,
@@ -1057,15 +1057,15 @@ struct ICloudSnapshotSyncView: View {
             Button(isAr ? "إلغاء" : "Cancel", role: .cancel) { }
         } message: {
             Text(isAr
-                ? "سيتم رفع بيانات هذا الجهاز إلى iCloud. النسخة الموجودة في iCloud ستُستبدل ببياناتك الحالية."
-                : "Your current data will be uploaded to iCloud. This overwrites the existing iCloud backup.")
+                ? "سيتم رفع snapshot من بيانات هذا الجهاز إلى iCloud. النسخة الموجودة في iCloud ستُستبدل ببياناتك الحالية."
+                : "A snapshot of this device data will be uploaded to iCloud. This overwrites the existing iCloud backup.")
         }
         .confirmationDialog(
-            isAr ? "استعادة البيانات من iCloud؟" : "Restore from iCloud?",
+            isAr ? "استعادة البيانات من نسخة iCloud؟" : "Restore from iCloud backup?",
             isPresented: $isConfirmingRestore,
             titleVisibility: .visible
         ) {
-            Button(isAr ? "استعادة من iCloud" : "Restore from iCloud", role: .destructive) {
+            Button(isAr ? "استعادة من نسخة iCloud" : "Restore from iCloud backup", role: .destructive) {
                 Task { await performRestore() }
             }
 
@@ -1115,7 +1115,7 @@ struct ICloudSnapshotSyncView: View {
             if await store.uploadBackupToICloud(force: true) {
                 cloudSnapshot = nil
                 noBackupFound = false
-                actionMessage = isAr ? "تم الحفظ الاحتياطي على iCloud بنجاح." : "Backed up to iCloud successfully."
+                actionMessage = isAr ? "تم حفظ snapshot احتياطي على iCloud بنجاح." : "iCloud snapshot backup saved successfully."
                 errorMessage = nil
             } else {
                 errorMessage = localizedICloudError(store.lastICloudSyncError ?? "")
@@ -1265,26 +1265,26 @@ struct InstaPayFeeSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(isAr ? "افتراضات الرسوم" : "Fee Assumptions") {
-                    TextField(isAr ? "نسبة الرسوم" : "Fee Percent", text: $percentText)
+                Section(isAr ? "قواعد الرسوم" : "Fee rules") {
+                    TextField(isAr ? "نسبة الرسوم" : "Fee percent", text: $percentText)
                         .keyboardType(.decimalPad)
 
-                    TextField(isAr ? "أدنى رسوم" : "Minimum Fee", text: $minimumFeeText)
+                    TextField(isAr ? "أدنى رسوم" : "Minimum fee", text: $minimumFeeText)
                         .keyboardType(.decimalPad)
 
-                    TextField(isAr ? "أقصى رسوم" : "Maximum Fee", text: $maximumFeeText)
+                    TextField(isAr ? "أقصى رسوم" : "Maximum fee", text: $maximumFeeText)
                         .keyboardType(.decimalPad)
                 }
 
                 Section {
                     Text(isAr
-                        ? "تُستخدم عند اختيار InstaPay طريقة دفع. يحفظ التطبيق رسوم البنك كمصروف منفصل."
-                        : "Used when payment method is InstaPay. The app saves the bank fee as a separate expense.")
+                        ? "تُستخدم فقط عند اختيار InstaPay طريقة دفع. وقتها يحفظ التطبيق رسوم البنك كمصروف منفصل."
+                        : "Used only when the payment method is InstaPay. The app then saves the bank fee as a separate expense.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section(isAr ? "مثال" : "Sample") {
+                Section(isAr ? "مثال" : "Example") {
                     HStack {
                         Text(isAr ? "تحويل 10,000 جنيه" : "10,000 EGP transfer")
                         Spacer()
@@ -1307,7 +1307,7 @@ struct InstaPayFeeSettingsView: View {
                     .disabled(!canSave)
                 }
             }
-            .navigationTitle(isAr ? "رسوم InstaPay" : "InstaPay Fees")
+            .navigationTitle(isAr ? "قواعد رسوم InstaPay" : "InstaPay fee rules")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
