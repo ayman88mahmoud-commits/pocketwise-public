@@ -19,4 +19,41 @@ enum WalletSyncRecordMappers {
             ]
         )
     }
+
+    static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),
+            updatedAt: event.updatedAt,
+            deletedAt: event.deletedAt,
+            isDeleted: event.isDeleted,
+            fields: [
+                "type": .string(event.type.rawValue),
+                "status": .string(event.status.rawValue),
+                "title": .string(event.title),
+                "amount": .double(event.amount),
+                "date": .date(event.date),
+                "accountName": event.accountName.map { .string($0) } ?? .null,
+                "destinationAccountName": event.destinationAccountName.map { .string($0) } ?? .null,
+                "paymentMethodName": event.paymentMethodName.map { .string($0) } ?? .null,
+                "walletEventName": event.walletEventName.map { .string($0) } ?? .null,
+                "categoryName": event.categoryName.map { .string($0) } ?? .null,
+                "subCategoryName": event.subCategoryName.map { .string($0) } ?? .null,
+                "incomeType": event.incomeType.map { .string($0.rawValue) } ?? .null,
+                "reimbursementCategoryName": event.reimbursementCategoryName.map { .string($0) } ?? .null,
+                "repeatRule": .string(event.repeatRule.rawValue),
+                "recurringEndKind": event.recurringEndKind.map { .string($0.rawValue) } ?? .null,
+                "recurringEndDate": event.recurringEndDate.map { .date($0) } ?? .null,
+                "recurringEndPaymentCount": event.recurringEndPaymentCount.map { .int($0) } ?? .null,
+                "recurringAmountMode": event.recurringAmountMode.map { .string($0.rawValue) } ?? .null,
+                "recurringEstimatedAmount": event.recurringEstimatedAmount.map { .double($0) } ?? .null,
+                "confidence": event.confidence.map { .string($0.rawValue) } ?? .null,
+                "sourceInstallmentPlanID": event.sourceInstallmentPlanID.map { .uuid($0) } ?? .null,
+                "sourceRecurringEventID": event.sourceRecurringEventID.map { .uuid($0) } ?? .null,
+                "recurringOccurrenceYear": event.recurringOccurrenceYear.map { .int($0) } ?? .null,
+                "recurringOccurrenceMonth": event.recurringOccurrenceMonth.map { .int($0) } ?? .null,
+                "note": event.note.map { .string($0) } ?? .null,
+                "createdAt": .date(event.createdAt)
+            ]
+        )
+    }
 }
