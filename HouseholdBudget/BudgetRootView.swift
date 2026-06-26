@@ -630,6 +630,18 @@ private struct BudgetGridView: View {
             .frame(width: 24)
             .allowsHitTesting(false)
         }
+        .overlay(alignment: .leading) {
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground).opacity(0.55),
+                    Color(.systemBackground).opacity(0)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 20)
+            .allowsHitTesting(false)
+        }
     }
 
     private var gridTable: some View {
