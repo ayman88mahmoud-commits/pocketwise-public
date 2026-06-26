@@ -1,0 +1,81 @@
+{
+  "fixtureName": "old-backup-restore-before-sync",
+  "purpose": "Future merge validation must detect when local data appears to be restored from an old manual backup and block mass overwrite of newer cloud records without user review.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "aaaaaaaa-1111-aaaa-1111-aaaaaaaaaaaa",
+        "name": "Test Cash",
+        "balance": 5000,
+        "updatedAt": "2026-01-15T08:00:00Z"
+      }
+    ],
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "aaaaaaaa-2222-aaaa-2222-aaaaaaaaaaaa",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Old Expense",
+        "amount": 100,
+        "date": "2026-01-15T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Old",
+        "updatedAt": "2026-01-15T09:30:00Z"
+      }
+    ],
+    "syncMetadata": {
+      "lastKnownSyncedAt": null,
+      "localDataOrigin": "manual-backup-restore",
+      "restoreTimestamp": "2026-06-22T07:00:00Z"
+    }
+  },
+  "cloudState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "aaaaaaaa-1111-aaaa-1111-aaaaaaaaaaaa",
+        "name": "Test Cash",
+        "balance": 7500,
+        "updatedAt": "2026-06-20T12:00:00Z"
+      }
+    ],
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "aaaaaaaa-3333-aaaa-3333-aaaaaaaaaaaa",
+        "type": "expense",
+        "status": "paid",
+        "title": "Test Newer Expense",
+        "amount": 250,
+        "date": "2026-06-20T10:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Recent",
+        "updatedAt": "2026-06-20T10:30:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "reason": "Local data has no prior sync state and was restored from a manual backup. Mass overwrite of newer cloud records is blocked pending explicit user review."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "old-backup-restore-before-sync",
+    "message": "Local data may be from an old backup restore. Sync blocked to protect newer cloud state.",
+    "localDataOrigin": "manual-backup-restore",
+    "staleSinceApprox": "2026-01-15T00:00:00Z",
+    "cloudNewestUpdatedAt": "2026-06-20T12:00:00Z",
+    "massOverwriteRisk": true
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not replace cloud-backed financial state from an old local snapshot automatically.",
+    "Do not upload stale local data to cloud.",
+    "Do not delete or overwrite cloud records without explicit user confirmation.",
+    "Require user review and optional local backup before first merge after a restore."
+  ]
+}

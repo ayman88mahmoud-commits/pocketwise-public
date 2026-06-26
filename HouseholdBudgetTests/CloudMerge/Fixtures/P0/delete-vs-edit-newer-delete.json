@@ -1,0 +1,56 @@
+{
+  "fixtureName": "delete-vs-edit-newer-delete",
+  "purpose": "Future merge validation must apply a newer cloud tombstone over an older local edit. The delete wins and the tombstone is retained to prevent re-download.",
+  "localState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "88888888-aaaa-8888-aaaa-888888888888",
+        "type": "expense",
+        "status": "unpaid",
+        "title": "Test Utility Bill",
+        "amount": 120,
+        "date": "2026-06-05T08:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Utilities",
+        "updatedAt": "2026-06-05T09:00:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "tombstones": [
+      {
+        "recordKind": "Tombstone",
+        "targetRecordKind": "FinancialEvent",
+        "targetID": "88888888-aaaa-8888-aaaa-888888888888",
+        "deletedAt": "2026-06-05T09:05:00Z",
+        "reason": "user-deleted"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "delete-wins",
+    "deletedRecordIDs": [
+      "88888888-aaaa-8888-aaaa-888888888888"
+    ],
+    "reason": "Cloud tombstone deletedAt 2026-06-05T09:05:00Z is newer than local edit updatedAt 2026-06-05T09:00:00Z."
+  },
+  "expectedReport": {
+    "severity": "info",
+    "code": "delete-vs-edit-newer-delete",
+    "message": "Newer cloud delete wins over older local edit. Tombstone retained.",
+    "recordIDs": [
+      "88888888-aaaa-8888-aaaa-888888888888"
+    ],
+    "tombstoneRetained": true
+  },
+  "shouldApplyLive": true,
+  "safetyNotes": [
+    "Do not reverse transactions.",
+    "Do not rebalance accounts automatically.",
+    "Do not hard-delete the tombstone record.",
+    "Retain tombstone to prevent re-download of the deleted record.",
+    "The deleted event was unpaid so no balance rollback is required."
+  ]
+}

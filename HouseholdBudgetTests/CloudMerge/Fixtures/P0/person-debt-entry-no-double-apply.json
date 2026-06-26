@@ -1,0 +1,74 @@
+{
+  "fixtureName": "person-debt-entry-no-double-apply",
+  "purpose": "Future merge validation must ensure a downloaded PersonDebtEntry is staged as record state only and does not call repayment posting functions or mutate account balances.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "77777777-aaaa-7777-aaaa-777777777777",
+        "name": "Test Cash",
+        "balance": 2000,
+        "updatedAt": "2026-06-21T08:00:00Z"
+      }
+    ],
+    "personDebts": [
+      {
+        "recordKind": "PersonDebt",
+        "id": "77777777-bbbb-7777-bbbb-777777777777",
+        "personName": "Test Debtor",
+        "direction": "owed-to-me",
+        "updatedAt": "2026-06-21T08:00:00Z"
+      }
+    ],
+    "personDebtEntries": [
+      {
+        "recordKind": "PersonDebtEntry",
+        "id": "77777777-cccc-7777-cccc-777777777777",
+        "debtID": "77777777-bbbb-7777-bbbb-777777777777",
+        "type": "repayment",
+        "amount": 300,
+        "date": "2026-06-21T09:00:00Z",
+        "accountName": "Test Cash",
+        "updatedAt": "2026-06-21T09:30:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "personDebtEntries": [
+      {
+        "recordKind": "PersonDebtEntry",
+        "id": "77777777-dddd-7777-dddd-777777777777",
+        "debtID": "77777777-bbbb-7777-bbbb-777777777777",
+        "type": "repayment",
+        "amount": 300,
+        "date": "2026-06-21T09:00:00Z",
+        "accountName": "Test Cash",
+        "updatedAt": "2026-06-21T09:35:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "77777777-dddd-7777-dddd-777777777777"
+    ],
+    "reason": "Cloud PersonDebtEntry has ambiguous identity with an existing local repayment on the same debt, amount, and date. Cannot confirm safe non-posting merge."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "person-debt-entry-no-double-apply",
+    "message": "Person debt entry requires non-posting merge. Duplicate or balance-impacting entry identity detected.",
+    "recordIDs": [
+      "77777777-dddd-7777-dddd-777777777777"
+    ],
+    "matchingLocalEntryID": "77777777-cccc-7777-cccc-777777777777",
+    "safeToApplyAsStateOnly": false
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call repayment posting functions.",
+    "Do not mutate account balances.",
+    "Do not change debt totals through user-action APIs.",
+    "Stage only; require identity resolution before merge."
+  ]
+}

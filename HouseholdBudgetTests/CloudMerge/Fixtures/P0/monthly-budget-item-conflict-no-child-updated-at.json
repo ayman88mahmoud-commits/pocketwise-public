@@ -1,0 +1,67 @@
+{
+  "fixtureName": "monthly-budget-item-conflict-no-child-updated-at",
+  "purpose": "Future merge validation must block or require review when a monthly budget item planned amount was edited differently on both devices and no reliable child-level updatedAt timestamp can resolve the conflict.",
+  "localState": {
+    "monthlyBudgets": [
+      {
+        "recordKind": "WalletMonthlyBudget",
+        "id": "99999999-aaaa-9999-aaaa-999999999999",
+        "year": 2026,
+        "month": 7,
+        "updatedAt": "2026-06-22T09:00:00Z",
+        "items": [
+          {
+            "categoryName": "Test Category",
+            "plannedAmount": 500
+          }
+        ]
+      }
+    ]
+  },
+  "cloudState": {
+    "monthlyBudgets": [
+      {
+        "recordKind": "WalletMonthlyBudget",
+        "id": "99999999-aaaa-9999-aaaa-999999999999",
+        "year": 2026,
+        "month": 7,
+        "updatedAt": "2026-06-22T09:05:00Z",
+        "items": [
+          {
+            "categoryName": "Test Category",
+            "plannedAmount": 750
+          }
+        ]
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "99999999-aaaa-9999-aaaa-999999999999"
+    ],
+    "reason": "Monthly budget item for Test Category was edited on both devices. No child-level updatedAt is available to resolve the conflict without risking silent plan corruption."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "monthly-budget-item-conflict-no-child-updated-at",
+    "message": "Monthly budget item conflict requires review. Both devices changed the planned amount and no reliable child timestamp can resolve it.",
+    "recordIDs": [
+      "99999999-aaaa-9999-aaaa-999999999999"
+    ],
+    "conflictedItems": [
+      {
+        "categoryName": "Test Category",
+        "localPlannedAmount": 500,
+        "cloudPlannedAmount": 750
+      }
+    ]
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not apply either version automatically.",
+    "Do not mutate account balances from budget changes.",
+    "Do not recalculate BudgetGridSnapshot during merge.",
+    "Require user review before applying a conflicted planned amount."
+  ]
+}

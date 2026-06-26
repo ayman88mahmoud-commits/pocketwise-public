@@ -1,0 +1,73 @@
+{
+  "fixtureName": "credit-card-payment-no-double-apply",
+  "purpose": "Future merge validation must ensure a downloaded CreditCardPayment is staged as record state only and does not call payment posting functions or mutate account balances.",
+  "localState": {
+    "accounts": [
+      {
+        "recordKind": "Account",
+        "id": "66666666-aaaa-6666-aaaa-666666666666",
+        "name": "Test Cash",
+        "balance": 3000,
+        "updatedAt": "2026-06-20T08:00:00Z"
+      }
+    ],
+    "creditCards": [
+      {
+        "recordKind": "CreditCard",
+        "id": "66666666-bbbb-6666-bbbb-666666666666",
+        "name": "Test Credit Card",
+        "currentBalance": 500,
+        "updatedAt": "2026-06-20T08:00:00Z"
+      }
+    ],
+    "creditCardPayments": [
+      {
+        "recordKind": "CreditCardPayment",
+        "id": "66666666-cccc-6666-cccc-666666666666",
+        "creditCardID": "66666666-bbbb-6666-bbbb-666666666666",
+        "sourceAccountName": "Test Cash",
+        "amount": 500,
+        "date": "2026-06-20T09:00:00Z",
+        "updatedAt": "2026-06-20T09:30:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "creditCardPayments": [
+      {
+        "recordKind": "CreditCardPayment",
+        "id": "66666666-dddd-6666-dddd-666666666666",
+        "creditCardID": "66666666-bbbb-6666-bbbb-666666666666",
+        "sourceAccountName": "Test Cash",
+        "amount": 500,
+        "date": "2026-06-20T09:00:00Z",
+        "updatedAt": "2026-06-20T09:35:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "blocked",
+    "blockedRecordIDs": [
+      "66666666-dddd-6666-dddd-666666666666"
+    ],
+    "reason": "Cloud CreditCardPayment has ambiguous identity with an existing local payment on the same card, account, amount, and date. Cannot confirm safe non-posting merge."
+  },
+  "expectedReport": {
+    "severity": "blocking",
+    "code": "credit-card-payment-no-double-apply",
+    "message": "Credit card payment requires non-posting merge. Duplicate or balance-impacting payment identity detected.",
+    "recordIDs": [
+      "66666666-dddd-6666-dddd-666666666666"
+    ],
+    "matchingLocalPaymentID": "66666666-cccc-6666-cccc-666666666666",
+    "safeToApplyAsStateOnly": false
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not call payment posting functions.",
+    "Do not decrease bank account balance again.",
+    "Do not decrease card balance again.",
+    "Do not call credit card payment APIs.",
+    "Stage only; require identity resolution before merge."
+  ]
+}

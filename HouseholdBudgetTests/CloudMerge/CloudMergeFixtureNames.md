@@ -1,5 +1,7 @@
 # Cloud Merge Fixture Names
 
+All 11 P0 fixture JSON files created as of Phase 0D-3.
+
 P0 fixtures required before live download/apply:
 
 - missing-account-reference

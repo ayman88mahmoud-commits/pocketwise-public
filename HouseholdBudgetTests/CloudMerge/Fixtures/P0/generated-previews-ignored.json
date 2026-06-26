@@ -1,0 +1,61 @@
+{
+  "fixtureName": "generated-previews-ignored",
+  "purpose": "Future merge validation must reject or skip generated recurring preview records. Previews are derived from source records and must not be synced as source-of-truth data.",
+  "localState": {
+    "recurringEvents": [
+      {
+        "recordKind": "RecurringEvent",
+        "id": "bbbbbbbb-1111-bbbb-1111-bbbbbbbbbbbb",
+        "title": "Test Recurring Rent",
+        "amount": 2500,
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Rent",
+        "updatedAt": "2026-05-01T08:00:00Z"
+      }
+    ]
+  },
+  "cloudState": {
+    "financialEvents": [
+      {
+        "recordKind": "FinancialEvent",
+        "id": "bbbbbbbb-2222-bbbb-2222-bbbbbbbbbbbb",
+        "type": "obligation",
+        "status": "unpaid",
+        "title": "Test Recurring Rent",
+        "amount": 2500,
+        "date": "2026-07-01T09:00:00Z",
+        "accountName": "Test Cash",
+        "categoryName": "Test Category",
+        "subCategoryName": "Test Rent",
+        "sourceRecurringEventID": "bbbbbbbb-1111-bbbb-1111-bbbbbbbbbbbb",
+        "recurringOccurrenceYear": 2026,
+        "recurringOccurrenceMonth": 7,
+        "isGeneratedPreview": true,
+        "updatedAt": "2026-06-25T07:00:00Z"
+      }
+    ]
+  },
+  "expectedStagedResult": {
+    "disposition": "skipped",
+    "skippedRecordIDs": [
+      "bbbbbbbb-2222-bbbb-2222-bbbbbbbbbbbb"
+    ],
+    "reason": "Record is flagged as a generated preview. Generated previews are derived records and must not be applied as persisted transactions."
+  },
+  "expectedReport": {
+    "severity": "info",
+    "code": "generated-previews-ignored",
+    "message": "Generated recurring preview ignored. Previews are derived records and must not sync as source-of-truth.",
+    "recordIDs": [
+      "bbbbbbbb-2222-bbbb-2222-bbbbbbbbbbbb"
+    ]
+  },
+  "shouldApplyLive": false,
+  "safetyNotes": [
+    "Do not create transactions from preview records.",
+    "Do not mark generated future items paid during sync.",
+    "Do not generate recurring occurrences during merge evaluation.",
+    "Do not call recurring mark-paid or posting functions.",
+    "Skip all records where isGeneratedPreview is true."
+  ]
+}
