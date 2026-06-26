@@ -20,6 +20,40 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dto(for category: Category) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .category, id: category.id),
+            updatedAt: category.updatedAt,
+            deletedAt: category.deletedAt,
+            isDeleted: category.isDeleted,
+            fields: [
+                "name": .string(category.name),
+                "subcategories": .stringArray(category.subcategories),
+                "isActive": .bool(category.isActive),
+                "inactiveSubcategoryNames": .stringArray(category.inactiveSubcategoryNames),
+                "createdAt": .date(category.createdAt)
+            ]
+        )
+    }
+
+    static func dto(for walletEvent: WalletEvent) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .walletEvent, id: walletEvent.id),
+            updatedAt: walletEvent.updatedAt,
+            deletedAt: walletEvent.deletedAt,
+            isDeleted: walletEvent.isDeleted,
+            fields: [
+                "name": .string(walletEvent.name),
+                "categoryName": .string(walletEvent.categoryName),
+                "subCategoryName": .string(walletEvent.subCategoryName),
+                "defaultAccountName": walletEvent.defaultAccountName.map { .string($0) } ?? .null,
+                "isFavorite": .bool(walletEvent.isFavorite),
+                "isActive": .bool(walletEvent.isActive),
+                "createdAt": .date(walletEvent.createdAt)
+            ]
+        )
+    }
+
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

@@ -98,6 +98,186 @@ final class WalletSyncRecordMapperTests: XCTestCase {
         )
     }
 
+    // MARK: - Category mapper tests
+
+    func testCategoryMapsToCategroyEntity() {
+        let category = makeCategory()
+
+        let dto = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertEqual(dto.entity, .category)
+    }
+
+    func testCategoryRecordNameIsStable() {
+        let category = makeCategory()
+
+        let dto = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertEqual(dto.recordName, "Category_55555555-5555-5555-5555-555555555555")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .category, id: category.id).recordName)
+    }
+
+    func testCategoryIDIsPreserved() {
+        let category = makeCategory()
+
+        let dto = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertEqual(dto.id, category.id)
+    }
+
+    func testCategoryImportantFieldsArePresent() {
+        let category = makeCategory()
+
+        let dto = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertEqual(dto.fields["name"], .string("Food"))
+        XCTAssertEqual(dto.fields["subcategories"], .stringArray(["Supermarket", "Restaurant"]))
+        XCTAssertEqual(dto.fields["isActive"], .bool(true))
+        XCTAssertEqual(dto.fields["inactiveSubcategoryNames"], .stringArray(["Fast Food"]))
+        XCTAssertEqual(dto.fields["createdAt"], .date(category.createdAt))
+    }
+
+    func testCategoryTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let category = makeCategory(isDeleted: true, deletedAt: deletedAt)
+
+        let dto = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, category.updatedAt)
+    }
+
+    func testCategoryMapperIsDeterministic() {
+        let category = makeCategory()
+
+        let first = WalletSyncRecordMappers.dto(for: category)
+        let second = WalletSyncRecordMappers.dto(for: category)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeCategory(
+        isDeleted: Bool = false,
+        deletedAt: Date? = nil
+    ) -> WalletBoard.Category {
+        WalletBoard.Category(
+            id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+            name: "Food",
+            subcategories: ["Supermarket", "Restaurant"],
+            isActive: true,
+            inactiveSubcategoryNames: ["Fast Food"],
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            isDeleted: isDeleted,
+            deletedAt: deletedAt
+        )
+    }
+
+    // MARK: - WalletEvent mapper tests
+
+    func testWalletEventMapsToWalletEventEntity() {
+        let walletEvent = makeWalletEvent()
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.entity, .walletEvent)
+    }
+
+    func testWalletEventRecordNameIsStable() {
+        let walletEvent = makeWalletEvent()
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.recordName, "WalletEvent_66666666-6666-6666-6666-666666666666")
+        XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .walletEvent, id: walletEvent.id).recordName)
+    }
+
+    func testWalletEventIDIsPreserved() {
+        let walletEvent = makeWalletEvent()
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.id, walletEvent.id)
+    }
+
+    func testWalletEventImportantFieldsArePresent() {
+        let walletEvent = makeWalletEvent()
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.fields["name"], .string("Grocery Run"))
+        XCTAssertEqual(dto.fields["categoryName"], .string("Food"))
+        XCTAssertEqual(dto.fields["subCategoryName"], .string("Supermarket"))
+        XCTAssertEqual(dto.fields["isFavorite"], .bool(true))
+        XCTAssertEqual(dto.fields["isActive"], .bool(true))
+        XCTAssertEqual(dto.fields["createdAt"], .date(walletEvent.createdAt))
+    }
+
+    func testWalletEventDefaultAccountLinkageIsPreserved() {
+        let walletEvent = makeWalletEvent(defaultAccountName: "Main Wallet")
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.fields["defaultAccountName"], .string("Main Wallet"))
+    }
+
+    func testWalletEventNilDefaultAccountMapsToNull() {
+        let walletEvent = makeWalletEvent(defaultAccountName: nil)
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(dto.fields["defaultAccountName"], .null)
+    }
+
+    func testWalletEventTombstoneMetadataIsPreserved() {
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        var walletEvent = makeWalletEvent()
+        walletEvent.isDeleted = true
+        walletEvent.deletedAt = deletedAt
+
+        let dto = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertTrue(dto.isDeleted)
+        XCTAssertEqual(dto.deletedAt, deletedAt)
+        XCTAssertEqual(dto.updatedAt, walletEvent.updatedAt)
+    }
+
+    func testWalletEventMapperIsDeterministic() {
+        let walletEvent = makeWalletEvent()
+
+        let first = WalletSyncRecordMappers.dto(for: walletEvent)
+        let second = WalletSyncRecordMappers.dto(for: walletEvent)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
+    }
+
+    private func makeWalletEvent(defaultAccountName: String? = nil) -> WalletEvent {
+        var walletEvent = WalletEvent(
+            name: "Grocery Run",
+            categoryName: "Food",
+            subCategoryName: "Supermarket",
+            defaultAccountName: defaultAccountName,
+            isFavorite: true
+        )
+        walletEvent.id = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
+        walletEvent.createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        walletEvent.updatedAt = Date(timeIntervalSince1970: 1_800_010_000)
+        return walletEvent
+    }
+
     // MARK: - FinancialEvent mapper tests
 
     func testFinancialEventMapsToFinancialEventEntity() {
