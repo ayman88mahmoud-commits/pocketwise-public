@@ -4993,42 +4993,6 @@ private struct MonthCommittedBreakdownSheet: View {
     }
 }
 
-private struct BudgetCellSelection: Identifiable {
-    let id = UUID()
-    let date: Date
-    let year: Int
-    let month: Int
-    let categoryName: String
-    let plannedAmount: Double
-    let paidActualAmount: Double
-    let knownUpcomingAmount: Double
-    let effectiveProjectedAmount: Double
-
-    var remainingAfterKnown: Double {
-        plannedAmount - paidActualAmount - knownUpcomingAmount
-    }
-}
-
-private enum BudgetGridApplyRoute: Identifiable {
-    case copyToFuture(selection: BudgetCellSelection, visibleMonths: [Date])
-    case categoryAcrossMonths(categoryName: String, anchorMonth: Date, visibleMonths: [Date])
-
-    var id: String {
-        switch self {
-        case let .copyToFuture(selection, _):
-            return "copy-\(selection.id.uuidString)"
-        case let .categoryAcrossMonths(categoryName, anchorMonth, _):
-            return "category-\(categoryName)-\(anchorMonth.timeIntervalSinceReferenceDate)"
-        }
-    }
-}
-
-private enum BudgetGridBulkActionType: String {
-    case useCommittedAsBudget
-    case applyToFutureMonths
-    case applyToSelectedMonths
-}
-
 private struct BudgetGridPreviousBudgetValue {
     let categoryName: String
     let date: Date
@@ -5080,42 +5044,6 @@ private struct BudgetGridUndoAction: Identifiable {
             BudgetPlanningWriter.restorePlannedValue(previousValue, store: store)
         }
     }
-}
-
-private struct BudgetMonthSelection: Identifiable {
-    let id = UUID()
-    let date: Date
-}
-
-private struct CategoryUpcomingSelection: Identifiable {
-    let id = UUID()
-    let monthDate: Date
-    let year: Int
-    let month: Int
-    let categoryName: String
-    let displayedAmount: Double
-}
-
-private enum BudgetCategoryAction: Hashable, Identifiable {
-    case planned(monthDate: Date, categoryName: String)
-    case transactions(categoryName: String, monthDate: Date)
-
-    var id: String {
-        switch self {
-        case let .planned(monthDate, categoryName):
-            return "planned-\(categoryName)-\(monthDate.timeIntervalSinceReferenceDate)"
-        case let .transactions(categoryName, monthDate):
-            return "transactions-\(categoryName)-\(monthDate.timeIntervalSinceReferenceDate)"
-        }
-    }
-}
-
-private struct BudgetCommittedMonthSelection: Identifiable {
-    let id = UUID()
-    let monthDate: Date
-    let year: Int
-    let month: Int
-    let displayedAmount: Double
 }
 
 private struct BudgetMonthProjection: Identifiable {
