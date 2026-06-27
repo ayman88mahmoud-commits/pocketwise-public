@@ -1127,6 +1127,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Limited Account Batch Fetch") {
+                Text("Developer only. Not included in release builds. Fetches up to 10 Account sync records by exact record name for verification only. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await verifyLimitedAccountBatchFetchForDebug() }
+                } label: {
+                    Label("Fetch Account Sync Batch", systemImage: "icloud.and.arrow.down")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Fetch Saved Account Sync Record") {
                 Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
                     .font(.footnote)
@@ -1378,6 +1392,56 @@ struct ICloudSnapshotSyncView: View {
         } catch {
             errorMessage = "[Debug] Account batch upload failed: \(error.localizedDescription)"
             actionMessage = nil
+        }
+    }
+
+    private func verifyLimitedAccountBatchFetchForDebug() async {
+        let accounts = Array(store.accounts.prefix(10))
+
+        guard !accounts.isEmpty else {
+            actionMessage = "[Debug] No Account sync records are available to fetch."
+            errorMessage = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let expectedRecordNames = accounts
+                .map(WalletSyncRecordMappers.dto(for:))
+                .map(\.recordName)
+
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            var fetchedRecordNames: [String] = []
+
+            for recordName in expectedRecordNames {
+                do {
+                    let fetchedRecord = try await boundary.fetchRecord(named: recordName)
+                    fetchedRecordNames.append(fetchedRecord.recordID.recordName)
+                } catch {
+                    errorMessage = "[Debug] Account batch fetch failed for record: \(recordName)"
+                    actionMessage = nil
+                    return
+                }
+            }
+
+            guard fetchedRecordNames.count == expectedRecordNames.count else {
+                errorMessage = "[Debug] Account batch fetch returned an unexpected fetched count. Expected: \(expectedRecordNames.count), fetched: \(fetchedRecordNames.count)."
+                actionMessage = nil
+                return
+            }
+
+            guard Set(fetchedRecordNames) == Set(expectedRecordNames) else {
+                errorMessage = "[Debug] Account batch fetch returned unexpected record names."
+                actionMessage = nil
+                return
+            }
+
+            actionMessage = "[Debug] Fetched \(fetchedRecordNames.count) Account sync records: \(fetchedRecordNames.sorted().joined(separator: ", "))"
+            errorMessage = nil
         }
     }
 
