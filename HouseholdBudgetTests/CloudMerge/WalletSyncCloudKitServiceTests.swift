@@ -243,8 +243,8 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
             ])
             XCTFail("Expected saveRecords to throw")
         } catch {
-            guard case .some(.cloudKitUnavailable) = error as? WalletSyncCloudKitError else {
-                XCTFail("Expected cloudKitUnavailable")
+            guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
                 return
             }
             XCTAssertEqual(provider.callCount, 0)
@@ -259,8 +259,8 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
             _ = try await boundary.fetchChangedRecords(since: nil)
             XCTFail("Expected fetchChangedRecords to throw")
         } catch {
-            guard case .some(.cloudKitUnavailable) = error as? WalletSyncCloudKitError else {
-                XCTFail("Expected cloudKitUnavailable")
+            guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
                 return
             }
             XCTAssertEqual(provider.callCount, 0)
@@ -371,6 +371,29 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
             XCTAssertEqual(WalletSyncCloudKitError.cloudKitUnavailable.localizedDescription, "CloudKit is unavailable.")
         } else {
             XCTFail("Expected cloudKitUnavailable")
+        }
+    }
+
+    func testRecordOperationsNotEnabledExistsAsDistinctCase() {
+        if case .recordOperationsNotEnabled = WalletSyncCloudKitError.recordOperationsNotEnabled {
+            XCTAssertEqual(
+                WalletSyncCloudKitError.recordOperationsNotEnabled.localizedDescription,
+                "Record operations are not enabled in this sync phase."
+            )
+        } else {
+            XCTFail("Expected recordOperationsNotEnabled")
+        }
+    }
+
+    func testRecordOperationsNotEnabledIsDifferentFromCloudKitUnavailable() {
+        let disabled = WalletSyncCloudKitError.recordOperationsNotEnabled
+        let unavailable = WalletSyncCloudKitError.cloudKitUnavailable
+
+        if case .cloudKitUnavailable = disabled {
+            XCTFail("recordOperationsNotEnabled must not match cloudKitUnavailable")
+        }
+        if case .recordOperationsNotEnabled = unavailable {
+            XCTFail("cloudKitUnavailable must not match recordOperationsNotEnabled")
         }
     }
 

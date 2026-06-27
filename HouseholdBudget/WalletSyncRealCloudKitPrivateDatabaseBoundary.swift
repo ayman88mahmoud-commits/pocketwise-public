@@ -2,7 +2,7 @@ import Foundation
 import CloudKit
 
 // Holds configuration for the private CloudKit database and delegates account status
-// to an injected provider. All record operations throw cloudKitUnavailable until
+// to an injected provider. All record operations throw recordOperationsNotEnabled until
 // a future phase explicitly enables them.
 final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDatabaseBoundary {
 
@@ -38,10 +38,10 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDat
     }
 
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
-        throw WalletSyncCloudKitError.cloudKitUnavailable
+        throw WalletSyncCloudKitError.recordOperationsNotEnabled
     }
 
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
-        throw WalletSyncCloudKitError.cloudKitUnavailable
+        throw WalletSyncCloudKitError.recordOperationsNotEnabled
     }
 }

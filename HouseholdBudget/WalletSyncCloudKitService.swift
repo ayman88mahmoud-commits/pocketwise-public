@@ -129,11 +129,11 @@ final class WalletSyncRealCloudKitAccountBoundary: WalletSyncCloudKitDatabaseBou
     }
 
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
-        throw WalletSyncCloudKitError.cloudKitUnavailable
+        throw WalletSyncCloudKitError.recordOperationsNotEnabled
     }
 
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
-        throw WalletSyncCloudKitError.cloudKitUnavailable
+        throw WalletSyncCloudKitError.recordOperationsNotEnabled
     }
 }
 
@@ -142,6 +142,7 @@ enum WalletSyncCloudKitError: LocalizedError {
     case invalidRecord(String)
     case wrongRecordType(String)
     case cloudKitUnavailable
+    case recordOperationsNotEnabled
     case accountNotAvailable
     case networkUnavailable
     case partialFailure(recordNames: [String], underlying: Error)
@@ -158,6 +159,8 @@ enum WalletSyncCloudKitError: LocalizedError {
             return "Unexpected CloudKit record type: \(recordType)."
         case .cloudKitUnavailable:
             return "CloudKit is unavailable."
+        case .recordOperationsNotEnabled:
+            return "Record operations are not enabled in this sync phase."
         case .accountNotAvailable:
             return "iCloud account is not available."
         case .networkUnavailable:

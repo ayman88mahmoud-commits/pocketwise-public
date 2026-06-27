@@ -51,7 +51,10 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
             _ = try await boundary.saveRecords([])
             XCTFail("saveRecords must throw before performing any record operation")
         } catch {
-            XCTAssertNotNil(error)
+            guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
+                return
+            }
         }
     }
 
@@ -68,7 +71,10 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
             _ = try await boundary.fetchChangedRecords(since: nil)
             XCTFail("fetchChangedRecords must throw before performing any record operation")
         } catch {
-            XCTAssertNotNil(error)
+            guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
+                return
+            }
         }
     }
 
