@@ -1043,6 +1043,44 @@ struct ICloudSnapshotSyncView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            #if DEBUG
+            Section("Debug — iCloud Status Check") {
+                Text("Developer only. Not included in release builds. No data is uploaded or synced.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { @MainActor in
+                        do {
+                            let checker = WalletSyncAccountAvailabilityChecker.liveDefault()
+                            let result = try await checker.checkAvailability()
+                            switch result {
+                            case .available:
+                                actionMessage = "[Debug] iCloud: Available — boundary is reachable."
+                            case .noAccount:
+                                actionMessage = "[Debug] iCloud: No Account — no Apple ID signed in."
+                            case .restricted:
+                                actionMessage = "[Debug] iCloud: Restricted — iCloud restricted on this device."
+                            case .couldNotDetermine:
+                                actionMessage = "[Debug] iCloud: Could Not Determine."
+                            case .temporarilyUnavailable:
+                                actionMessage = "[Debug] iCloud: Temporarily Unavailable."
+                            case .unknown:
+                                actionMessage = "[Debug] iCloud: Unknown status."
+                            }
+                            errorMessage = nil
+                        } catch {
+                            errorMessage = "[Debug] iCloud check failed: \(error.localizedDescription)"
+                            actionMessage = nil
+                        }
+                    }
+                } label: {
+                    Label("Check iCloud Account Status", systemImage: "icloud.and.arrow.up")
+                }
+                .tint(.orange)
+            }
+            #endif
         }
         .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud backup")
         .confirmationDialog(

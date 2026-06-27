@@ -92,44 +92,6 @@ struct DataBackupView: View {
                         .foregroundStyle(.red)
                 }
             }
-
-            #if DEBUG
-            Section("Debug — iCloud Status Check") {
-                Text("Developer only. Not included in release builds. No data is uploaded or synced.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { @MainActor in
-                        do {
-                            let checker = WalletSyncAccountAvailabilityChecker.liveDefault()
-                            let result = try await checker.checkAvailability()
-                            switch result {
-                            case .available:
-                                statusMessage = "[Debug] iCloud: Available — boundary is reachable."
-                            case .noAccount:
-                                statusMessage = "[Debug] iCloud: No Account — no Apple ID signed in."
-                            case .restricted:
-                                statusMessage = "[Debug] iCloud: Restricted — iCloud restricted on this device."
-                            case .couldNotDetermine:
-                                statusMessage = "[Debug] iCloud: Could Not Determine."
-                            case .temporarilyUnavailable:
-                                statusMessage = "[Debug] iCloud: Temporarily Unavailable."
-                            case .unknown:
-                                statusMessage = "[Debug] iCloud: Unknown status."
-                            }
-                            errorMessage = nil
-                        } catch {
-                            errorMessage = "[Debug] iCloud check failed: \(error.localizedDescription)"
-                            statusMessage = nil
-                        }
-                    }
-                } label: {
-                    Label("Check iCloud Account Status", systemImage: "icloud.and.arrow.up")
-                }
-                .tint(.orange)
-            }
-            #endif
         }
         .accessibilityIdentifier("screen.dataBackup")
         .navigationTitle(store.appLanguage == .arabicEgyptian ? "نسخة احتياطية يدوية" : "Manual Backup")
