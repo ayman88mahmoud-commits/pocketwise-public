@@ -1155,6 +1155,34 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Ensure Sync Zone") {
+                Text("Developer only. Not included in release builds. Creates the private WalletSyncZone if needed. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await ensureSyncZoneForDebug() }
+                } label: {
+                    Label("Ensure Sync Zone", systemImage: "square.stack.3d.up")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
+            Section("Debug — Changed Records Dry Run") {
+                Text("Developer only. Not included in release builds. Fetches private database changes with no saved token and does not apply them. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await fetchChangedRecordsDryRunForDebug() }
+                } label: {
+                    Label("Fetch Changed Records Dry Run", systemImage: "arrow.down.doc")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Fetch Saved Account Sync Record") {
                 Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
                     .font(.footnote)
@@ -1540,6 +1568,59 @@ struct ICloudSnapshotSyncView: View {
             .map { "\($0.key.rawValue): \($0.value)" }
 
         return counts.isEmpty ? "none" : counts.joined(separator: ", ")
+    }
+
+    private func fetchChangedRecordsDryRunForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let result = try await boundary.fetchChangedRecords(since: nil)
+            actionMessage = debugChangedRecordsSummaryMessage(result)
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Changed records dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func ensureSyncZoneForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            try await boundary.ensureSyncZone()
+            actionMessage = "[Debug] Ensured private sync zone: \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName)"
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Ensure sync zone failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func debugChangedRecordsSummaryMessage(_ result: WalletSyncCloudKitFetchResult) -> String {
+        let sampleRecordNames = Array(result.records.map(\.recordID.recordName).prefix(10))
+        let changedSamples = sampleRecordNames.isEmpty ? "none" : sampleRecordNames.joined(separator: ", ")
+        let deletedSamples = Array(result.deletedRecordNames.prefix(10))
+        let deletedSampleText = deletedSamples.isEmpty ? "none" : deletedSamples.joined(separator: ", ")
+        let tokenReturned = result.changeTokenData == nil ? "no" : "yes"
+        let moreComing = result.moreComing ? "yes" : "no"
+
+        return [
+            "[Debug] Changed records dry run",
+            "Changed records: \(result.records.count)",
+            "Deleted records: \(result.deletedRecordNames.count)",
+            "Token returned: \(tokenReturned)",
+            "More coming: \(moreComing)",
+            "Sample changed record names: \(changedSamples)",
+            "Sample deleted record names: \(deletedSampleText)"
+        ].joined(separator: "\n")
     }
 
     private func fetchSavedAccountSyncRecordForDebug() async {

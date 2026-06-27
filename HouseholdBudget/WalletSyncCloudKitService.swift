@@ -16,11 +16,20 @@ struct WalletSyncCloudKitConfiguration: Equatable {
 
 struct WalletSyncCloudKitFetchResult {
     var records: [CKRecord]
+    var deletedRecordNames: [String]
     var changeTokenData: Data?
+    var moreComing: Bool
 
-    nonisolated init(records: [CKRecord], changeTokenData: Data? = nil) {
+    nonisolated init(
+        records: [CKRecord],
+        deletedRecordNames: [String] = [],
+        changeTokenData: Data? = nil,
+        moreComing: Bool = false
+    ) {
         self.records = records
+        self.deletedRecordNames = deletedRecordNames
         self.changeTokenData = changeTokenData
+        self.moreComing = moreComing
     }
 }
 
