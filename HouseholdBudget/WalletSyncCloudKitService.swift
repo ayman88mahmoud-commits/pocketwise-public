@@ -5,7 +5,7 @@ struct WalletSyncCloudKitConfiguration: Equatable {
     var containerIdentifier: String?
     var databaseScope: CKDatabase.Scope
 
-    init(
+    nonisolated init(
         containerIdentifier: String? = nil,
         databaseScope: CKDatabase.Scope = .private
     ) {
@@ -14,7 +14,24 @@ struct WalletSyncCloudKitConfiguration: Equatable {
     }
 }
 
-protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {}
+struct WalletSyncCloudKitFetchResult {
+    var records: [CKRecord]
+    var changeTokenData: Data?
+
+    nonisolated init(records: [CKRecord], changeTokenData: Data? = nil) {
+        self.records = records
+        self.changeTokenData = changeTokenData
+    }
+}
+
+protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {
+    func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord]
+    func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult
+}
+
+enum WalletSyncCloudKitServiceError: Error, Equatable {
+    case missingDatabaseBoundary
+}
 
 @MainActor
 final class WalletSyncCloudKitService {
@@ -35,5 +52,21 @@ final class WalletSyncCloudKitService {
 
     func decodeDownloadedRecords(_ records: [CKRecord]) throws -> [WalletSyncRecordDTO] {
         try records.map(WalletSyncCKRecordAdapter.dto(from:))
+    }
+
+    func uploadPreparedRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
+        guard let databaseBoundary else {
+            throw WalletSyncCloudKitServiceError.missingDatabaseBoundary
+        }
+
+        return try await databaseBoundary.saveRecords(records)
+    }
+
+    func fetchRecordChanges(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
+        guard let databaseBoundary else {
+            throw WalletSyncCloudKitServiceError.missingDatabaseBoundary
+        }
+
+        return try await databaseBoundary.fetchChangedRecords(since: changeToken)
     }
 }
