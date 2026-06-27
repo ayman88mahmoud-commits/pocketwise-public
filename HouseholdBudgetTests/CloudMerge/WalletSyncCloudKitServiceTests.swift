@@ -110,6 +110,59 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         XCTAssertEqual(availability, .available)
     }
 
+    func testCloudKitAccountStatusAvailableMapsToAvailable() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .available)
+
+        XCTAssertEqual(availability, .available)
+    }
+
+    func testCloudKitAccountStatusNoAccountMapsToNoAccount() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .noAccount)
+
+        XCTAssertEqual(availability, .noAccount)
+    }
+
+    func testCloudKitAccountStatusRestrictedMapsToRestricted() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .restricted)
+
+        XCTAssertEqual(availability, .restricted)
+    }
+
+    func testCloudKitAccountStatusCouldNotDetermineMapsToCouldNotDetermine() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .couldNotDetermine)
+
+        XCTAssertEqual(availability, .couldNotDetermine)
+    }
+
+    func testCloudKitAccountStatusTemporarilyUnavailableMapsToTemporarilyUnavailable() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .temporarilyUnavailable)
+
+        XCTAssertEqual(availability, .temporarilyUnavailable)
+    }
+
+    func testCloudKitAccountStatusMapperDoesNotRequireWalletStore() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .available)
+
+        XCTAssertEqual(availability, .available)
+    }
+
+    func testCloudKitAccountStatusMapperDoesNotRequireWalletICloudSyncService() {
+        let availability = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .noAccount)
+
+        XCTAssertEqual(availability, .noAccount)
+    }
+
+    func testCloudKitAccountStatusMapperDoesNotTouchFakeBoundary() {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+
+        _ = WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: .available)
+
+        XCTAssertFalse(boundary.wasTouched)
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 0)
+        XCTAssertEqual(boundary.saveCallCount, 0)
+        XCTAssertEqual(boundary.fetchCallCount, 0)
+    }
+
     func testMissingDatabaseBoundaryErrorCanBeDescribedSafely() {
         let error = WalletSyncCloudKitError.missingDatabaseBoundary
 

@@ -47,6 +47,23 @@ enum WalletSyncCloudKitAccountAvailability: String, Codable, CaseIterable, Hasha
     case couldNotDetermine
     case temporarilyUnavailable
     case unknown
+
+    init(cloudKitAccountStatus status: CKAccountStatus) {
+        switch status {
+        case .available:
+            self = .available
+        case .noAccount:
+            self = .noAccount
+        case .restricted:
+            self = .restricted
+        case .couldNotDetermine:
+            self = .couldNotDetermine
+        case .temporarilyUnavailable:
+            self = .temporarilyUnavailable
+        @unknown default:
+            self = .unknown
+        }
+    }
 }
 
 protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {
