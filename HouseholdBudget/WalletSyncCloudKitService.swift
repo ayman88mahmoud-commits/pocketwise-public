@@ -24,6 +24,22 @@ struct WalletSyncCloudKitFetchResult {
     }
 }
 
+struct WalletSyncCloudKitUploadResult {
+    var savedRecords: [CKRecord]
+    var failedRecordNames: [String]
+    var underlyingErrorsByRecordName: [String: Error]
+
+    nonisolated init(
+        savedRecords: [CKRecord],
+        failedRecordNames: [String] = [],
+        underlyingErrorsByRecordName: [String: Error] = [:]
+    ) {
+        self.savedRecords = savedRecords
+        self.failedRecordNames = failedRecordNames
+        self.underlyingErrorsByRecordName = underlyingErrorsByRecordName
+    }
+}
+
 protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord]
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult
@@ -91,6 +107,11 @@ final class WalletSyncCloudKitService {
         }
 
         return try await databaseBoundary.saveRecords(records)
+    }
+
+    func uploadPreparedRecordsWithResult(_ records: [CKRecord]) async throws -> WalletSyncCloudKitUploadResult {
+        let savedRecords = try await uploadPreparedRecords(records)
+        return WalletSyncCloudKitUploadResult(savedRecords: savedRecords)
     }
 
     func fetchRecordChanges(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {

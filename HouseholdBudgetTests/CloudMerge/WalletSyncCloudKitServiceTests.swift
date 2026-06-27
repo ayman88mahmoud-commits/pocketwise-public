@@ -274,6 +274,104 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         }
     }
 
+    func testUploadResultIncludesSavedRecords() async throws {
+        let savedRecord = makeRecord(named: "Saved_11111111-1111-1111-1111-111111111111")
+        let boundary = FakeDatabaseBoundary(recordsToSaveReturn: [savedRecord])
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let result = try await service.uploadPreparedRecordsWithResult([
+            makeRecord(named: "Input_22222222-2222-2222-2222-222222222222")
+        ])
+
+        XCTAssertEqual(result.savedRecords.count, 1)
+        XCTAssertEqual(result.savedRecords.first?.recordID.recordName, "Saved_11111111-1111-1111-1111-111111111111")
+        XCTAssertTrue(result.failedRecordNames.isEmpty)
+        XCTAssertTrue(result.underlyingErrorsByRecordName.isEmpty)
+    }
+
+    func testUploadResultPreservesSavedRecordNames() async throws {
+        let savedRecords = [
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111"),
+            makeRecord(named: "Category_22222222-2222-2222-2222-222222222222")
+        ]
+        let boundary = FakeDatabaseBoundary(recordsToSaveReturn: savedRecords)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let result = try await service.uploadPreparedRecordsWithResult([
+            makeRecord(named: "Input_33333333-3333-3333-3333-333333333333")
+        ])
+
+        XCTAssertEqual(
+            result.savedRecords.map(\.recordID.recordName),
+            [
+                "Account_11111111-1111-1111-1111-111111111111",
+                "Category_22222222-2222-2222-2222-222222222222"
+            ]
+        )
+    }
+
+    func testUploadResultCanRepresentFailedRecordNames() {
+        let result = WalletSyncCloudKitUploadResult(
+            savedRecords: [],
+            failedRecordNames: ["Account_11111111-1111-1111-1111-111111111111"]
+        )
+
+        XCTAssertEqual(result.failedRecordNames, ["Account_11111111-1111-1111-1111-111111111111"])
+        XCTAssertTrue(result.savedRecords.isEmpty)
+    }
+
+    func testUploadResultCanRepresentPerRecordUnderlyingErrors() {
+        let result = WalletSyncCloudKitUploadResult(
+            savedRecords: [],
+            failedRecordNames: ["Account_11111111-1111-1111-1111-111111111111"],
+            underlyingErrorsByRecordName: [
+                "Account_11111111-1111-1111-1111-111111111111": TestUnderlyingError.sample
+            ]
+        )
+
+        XCTAssertEqual(
+            result.underlyingErrorsByRecordName["Account_11111111-1111-1111-1111-111111111111"] as? TestUnderlyingError,
+            .sample
+        )
+    }
+
+    func testUploadPreparedRecordsWithResultCallsOnlyFakeBoundary() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.uploadPreparedRecordsWithResult([
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+        ])
+
+        XCTAssertTrue(boundary.wasTouched)
+        XCTAssertEqual(boundary.saveCallCount, 1)
+        XCTAssertEqual(boundary.fetchCallCount, 0)
+    }
+
+    func testUploadPreparedRecordsWithResultDoesNotConstructCloudKitContainerOrDatabase() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.uploadPreparedRecordsWithResult([])
+
+        XCTAssertEqual(boundary.saveCallCount, 1)
+        XCTAssertTrue(boundary.savedRecordNames.isEmpty)
+    }
+
+    func testUploadPreparedRecordsWithResultPropagatesFakeBoundaryErrors() async {
+        let boundary = FakeDatabaseBoundary(saveError: FakeBoundaryError.saveFailed)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        do {
+            _ = try await service.uploadPreparedRecordsWithResult([
+                makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+            ])
+            XCTFail("Expected uploadPreparedRecordsWithResult to throw")
+        } catch {
+            XCTAssertEqual(error as? FakeBoundaryError, .saveFailed)
+        }
+    }
+
     func testUploadPreparedRecordsThrowsSyncErrorWhenBoundaryIsMissing() async {
         let service = WalletSyncCloudKitService()
 
@@ -390,6 +488,24 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         _ = try await service.fetchRecordChanges(since: nil)
 
         XCTAssertEqual(boundary.fetchCallCount, 1)
+    }
+
+    func testUploadResultMethodDoesNotRequireWalletStore() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let result = try await service.uploadPreparedRecordsWithResult([])
+
+        XCTAssertTrue(result.savedRecords.isEmpty)
+    }
+
+    func testUploadResultMethodDoesNotRequireWalletICloudSyncService() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let result = try await service.uploadPreparedRecordsWithResult([])
+
+        XCTAssertTrue(result.failedRecordNames.isEmpty)
     }
 
     private func makeDTO(
