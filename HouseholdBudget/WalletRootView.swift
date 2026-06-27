@@ -1080,6 +1080,20 @@ struct ICloudSnapshotSyncView: View {
                 }
                 .tint(.orange)
             }
+
+            Section("Debug — One Account Sync Save") {
+                Text("Developer only. Not included in release builds. Saves exactly one Account sync record when tapped. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await saveOneAccountSyncRecordForDebug() }
+                } label: {
+                    Label("Save One Account Sync Record", systemImage: "icloud.and.arrow.up")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
             #endif
         }
         .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud backup")
@@ -1202,6 +1216,33 @@ struct ICloudSnapshotSyncView: View {
             errorMessage = nil
         }
     }
+
+    #if DEBUG
+    private func saveOneAccountSyncRecordForDebug() async {
+        guard let account = store.accounts.first else {
+            actionMessage = "[Debug] No account record is available to save."
+            errorMessage = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let dto = WalletSyncRecordMappers.dto(for: account)
+            let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            _ = try await boundary.saveRecords([record])
+            actionMessage = "[Debug] Saved one Account sync record: \(dto.recordName)"
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] One Account sync save failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+    #endif
 
     private func runICloudAction(_ action: @escaping () async throws -> Void) async {
         isWorking = true
