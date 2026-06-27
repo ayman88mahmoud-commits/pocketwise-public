@@ -1085,6 +1085,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Dry-Run Upload Summary") {
+                Text("Developer only. Not included in release builds. Builds a local sync upload summary without contacting CloudKit.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    runDryRunUploadSummaryForDebug()
+                } label: {
+                    Label("Show Dry-Run Upload Summary", systemImage: "list.bullet.clipboard")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — One Account Sync Save") {
                 Text("Developer only. Not included in release builds. Saves exactly one Account sync record when tapped. This is not full sync.")
                     .font(.footnote)
@@ -1236,6 +1250,37 @@ struct ICloudSnapshotSyncView: View {
     }
 
     #if DEBUG
+    private func runDryRunUploadSummaryForDebug() {
+        let summary = WalletSyncDryRunUploadPlanner().plan(from: store)
+        actionMessage = debugDryRunSummaryMessage(summary)
+        errorMessage = nil
+    }
+
+    private func debugDryRunSummaryMessage(_ summary: WalletSyncDryRunUploadSummary) -> String {
+        var lines: [String] = [
+            "[Debug] Dry-run upload summary",
+            "DTOs: \(summary.totalDTOCount)",
+            "CKRecords: \(summary.totalRecordCount)",
+            "Record type: \(summary.recordType)"
+        ]
+
+        let entityCounts = summary.countsByEntity
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue): \($0.value)" }
+
+        lines.append("Entity counts: \(entityCounts.isEmpty ? "none" : entityCounts.joined(separator: ", "))")
+
+        let skipped = summary.skippedEntities
+            .map(\.rawValue)
+            .sorted()
+
+        lines.append("Skipped: \(skipped.isEmpty ? "none" : skipped.joined(separator: ", "))")
+        lines.append("Warnings: \(summary.warnings.isEmpty ? "none" : summary.warnings.joined(separator: " | "))")
+        lines.append("Sample record names: \(summary.sampleRecordNames.isEmpty ? "none" : summary.sampleRecordNames.joined(separator: ", "))")
+
+        return lines.joined(separator: "\n")
+    }
+
     private func saveOneAccountSyncRecordForDebug() async {
         guard let account = store.accounts.first else {
             actionMessage = "[Debug] No account record is available to save."
