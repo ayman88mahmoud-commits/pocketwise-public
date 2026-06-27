@@ -5,9 +5,13 @@ protocol WalletSyncPrivateDatabaseRecordSaving {
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord]
 }
 
+protocol WalletSyncPrivateDatabaseRecordFetching {
+    func fetchRecord(named recordName: String) async throws -> CKRecord
+}
+
 // Resolves the private CloudKit database from the container at call time and
-// batches records through a CKModifyRecordsOperation. Returns empty immediately
-// for an empty input to avoid creating any CloudKit operation.
+// returns CloudKit's per-record save results in the same order as the input.
+// Empty input returns immediately to avoid touching CloudKit.
 struct WalletSyncCKPrivateDatabaseRecordSaver: WalletSyncPrivateDatabaseRecordSaving {
     private let containerIdentifier: String?
 
@@ -19,23 +23,48 @@ struct WalletSyncCKPrivateDatabaseRecordSaver: WalletSyncPrivateDatabaseRecordSa
         if records.isEmpty { return [] }
         let container = containerIdentifier.map(CKContainer.init(identifier:)) ?? CKContainer.default()
         let database = container.privateCloudDatabase
+
+        let result = try await database.modifyRecords(
+            saving: records,
+            deleting: [],
+            savePolicy: .changedKeys,
+            atomically: true
+        )
+
+        return try records.map { record in
+            guard let saveResult = result.saveResults[record.recordID] else {
+                throw WalletSyncCloudKitError.invalidRecord(record.recordID.recordName)
+            }
+
+            return try saveResult.get()
+        }
+    }
+}
+
+// Resolves the private CloudKit database at call time and fetches one specific
+// record ID. It does not query, fetch changes, or persist any token state.
+struct WalletSyncCKPrivateDatabaseRecordFetcher: WalletSyncPrivateDatabaseRecordFetching {
+    private let containerIdentifier: String?
+
+    init(containerIdentifier: String? = nil) {
+        self.containerIdentifier = containerIdentifier
+    }
+
+    func fetchRecord(named recordName: String) async throws -> CKRecord {
+        let container = containerIdentifier.map(CKContainer.init(identifier:)) ?? CKContainer.default()
+        let database = container.privateCloudDatabase
+        let recordID = CKRecord.ID(recordName: recordName)
+
         return try await withCheckedThrowingContinuation { continuation in
-            var savedRecords: [CKRecord] = []
-            let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
-            operation.perRecordSaveBlock = { _, result in
-                if case .success(let record) = result {
-                    savedRecords.append(record)
-                }
-            }
-            operation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    continuation.resume(returning: savedRecords)
-                case .failure(let error):
+            database.fetch(withRecordID: recordID) { record, error in
+                if let error {
                     continuation.resume(throwing: error)
+                } else if let record {
+                    continuation.resume(returning: record)
+                } else {
+                    continuation.resume(throwing: WalletSyncCloudKitError.invalidRecord(recordName))
                 }
             }
-            database.add(operation)
         }
     }
 }
@@ -49,15 +78,18 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDat
     private let configuration: WalletSyncCloudKitConfiguration
     private let accountStatusProvider: WalletSyncCloudKitAccountStatusProviding
     private let recordSaver: WalletSyncPrivateDatabaseRecordSaving
+    private let recordFetcher: WalletSyncPrivateDatabaseRecordFetching
 
     init(
         configuration: WalletSyncCloudKitConfiguration,
         accountStatusProvider: WalletSyncCloudKitAccountStatusProviding,
-        recordSaver: WalletSyncPrivateDatabaseRecordSaving
+        recordSaver: WalletSyncPrivateDatabaseRecordSaving,
+        recordFetcher: WalletSyncPrivateDatabaseRecordFetching
     ) {
         self.configuration = configuration
         self.accountStatusProvider = accountStatusProvider
         self.recordSaver = recordSaver
+        self.recordFetcher = recordFetcher
     }
 
     convenience init(
@@ -69,6 +101,9 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDat
                 containerIdentifier: configuration.containerIdentifier
             ),
             recordSaver: WalletSyncCKPrivateDatabaseRecordSaver(
+                containerIdentifier: configuration.containerIdentifier
+            ),
+            recordFetcher: WalletSyncCKPrivateDatabaseRecordFetcher(
                 containerIdentifier: configuration.containerIdentifier
             )
         )
@@ -88,6 +123,16 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDat
 
         do {
             return try await recordSaver.saveRecords(records)
+        } catch {
+            throw WalletSyncCloudKitError.unknown(underlying: error)
+        }
+    }
+
+    func fetchRecord(named recordName: String) async throws -> CKRecord {
+        do {
+            return try await recordFetcher.fetchRecord(named: recordName)
+        } catch let error as WalletSyncCloudKitError {
+            throw error
         } catch {
             throw WalletSyncCloudKitError.unknown(underlying: error)
         }

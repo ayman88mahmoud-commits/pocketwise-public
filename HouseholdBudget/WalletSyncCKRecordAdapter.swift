@@ -92,7 +92,8 @@ enum WalletSyncCKRecordAdapter {
         )
     }
 
-    // Returns nil for .null so that assigning it to a CKRecord field leaves the field absent.
+    // Returns nil for values CloudKit should not store so the value field and
+    // field type marker remain absent.
     private static func ckValue(for fieldValue: WalletSyncFieldValue) -> CKRecordValueProtocol? {
         switch fieldValue {
         case .string(let s):         return s
@@ -101,7 +102,7 @@ enum WalletSyncCKRecordAdapter {
         case .bool(let b):           return NSNumber(value: b)
         case .date(let date):        return date
         case .uuid(let uuid):        return uuid.uuidString.lowercased()
-        case .stringArray(let arr):  return arr as NSArray
+        case .stringArray(let arr):  return arr.isEmpty ? nil : arr as NSArray
         case .null:                  return nil
         }
     }

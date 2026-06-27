@@ -154,6 +154,43 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         XCTAssertEqual(record["field_aliases"] as? [String], arr)
     }
 
+    func testEmptyStringArrayFieldIsAbsentFromRecord() {
+        let dto = makeDTO(fields: ["aliases": .stringArray([])])
+
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+
+        XCTAssertNil(record["field_aliases"])
+    }
+
+    func testEmptyStringArrayFieldTypeMarkerIsAbsentFromRecord() {
+        let dto = makeDTO(fields: ["aliases": .stringArray([])])
+
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+
+        XCTAssertNil(record["fieldType_aliases"])
+    }
+
+    func testEmptyStringArrayDoesNotAffectOtherFieldTypes() {
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let dto = makeDTO(fields: [
+            "aliases": .stringArray([]),
+            "name": .string("Cash"),
+            "balance": .double(10),
+            "year": .int(2026),
+            "isActive": .bool(true),
+            "createdAt": .date(createdAt)
+        ])
+
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+
+        XCTAssertNil(record["field_aliases"])
+        XCTAssertEqual(record["field_name"] as? String, "Cash")
+        XCTAssertEqual(record["field_balance"] as? Double, 10)
+        XCTAssertEqual(record["field_year"] as? Int, 2026)
+        XCTAssertEqual(record["field_isActive"] as? Bool, true)
+        XCTAssertEqual(record["field_createdAt"] as? Date, createdAt)
+    }
+
     func testNullFieldIsAbsentFromRecord() {
         let dto = makeDTO(fields: ["note": .null])
 
@@ -293,6 +330,14 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         let decoded = try roundTrip(dto)
 
         XCTAssertEqual(decoded.fields["aliases"], .stringArray(aliases))
+    }
+
+    func testRoundTripOmitsEmptyStringArrayField() throws {
+        let dto = makeDTO(fields: ["aliases": .stringArray([])])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertNil(decoded.fields["aliases"])
     }
 
     func testNullFieldsRemainAbsentAfterRoundTrip() throws {

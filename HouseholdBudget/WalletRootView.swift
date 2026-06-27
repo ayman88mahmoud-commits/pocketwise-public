@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudKit
 
 struct WalletRootView: View {
 
@@ -861,6 +862,9 @@ struct ICloudSnapshotSyncView: View {
     @State private var isWorking = false
     @State private var isConfirmingBackup = false
     @State private var isConfirmingRestore = false
+    #if DEBUG
+    @State private var debugLastSavedAccountSyncRecordName: String?
+    #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
 
@@ -1094,6 +1098,20 @@ struct ICloudSnapshotSyncView: View {
                 .disabled(isWorking)
                 .tint(.orange)
             }
+
+            Section("Debug — Fetch Saved Account Sync Record") {
+                Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await fetchSavedAccountSyncRecordForDebug() }
+                } label: {
+                    Label("Fetch Saved Account Sync Record", systemImage: "icloud.and.arrow.down")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
             #endif
         }
         .navigationTitle(isAr ? "نسخة iCloud الاحتياطية" : "iCloud backup")
@@ -1222,6 +1240,48 @@ struct ICloudSnapshotSyncView: View {
         guard let account = store.accounts.first else {
             actionMessage = "[Debug] No account record is available to save."
             errorMessage = nil
+            debugLastSavedAccountSyncRecordName = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+        debugLastSavedAccountSyncRecordName = nil
+
+        do {
+            let dto = WalletSyncRecordMappers.dto(for: account)
+            let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let savedRecords = try await boundary.saveRecords([record])
+
+            guard savedRecords.count == 1, let savedRecordName = savedRecords.first?.recordID.recordName else {
+                errorMessage = "[Debug] Account sync save returned an unexpected result."
+                actionMessage = nil
+                return
+            }
+
+            guard savedRecordName == record.recordID.recordName else {
+                errorMessage = "[Debug] Account sync save returned an unexpected record name."
+                actionMessage = nil
+                return
+            }
+
+            debugLastSavedAccountSyncRecordName = savedRecordName
+            actionMessage = "[Debug] Saved one Account sync record: \(savedRecordName)"
+            errorMessage = nil
+        } catch {
+            debugLastSavedAccountSyncRecordName = nil
+            errorMessage = "[Debug] One Account sync save failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func fetchSavedAccountSyncRecordForDebug() async {
+        guard let recordName = debugLastSavedAccountSyncRecordName else {
+            actionMessage = "[Debug] Save one Account sync record first in this screen session."
+            errorMessage = nil
             return
         }
 
@@ -1231,14 +1291,20 @@ struct ICloudSnapshotSyncView: View {
         errorMessage = nil
 
         do {
-            let dto = WalletSyncRecordMappers.dto(for: account)
-            let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
             let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
-            _ = try await boundary.saveRecords([record])
-            actionMessage = "[Debug] Saved one Account sync record: \(dto.recordName)"
+            let fetchedRecord = try await boundary.fetchRecord(named: recordName)
+            let fetchedRecordName = fetchedRecord.recordID.recordName
+
+            guard fetchedRecordName == recordName else {
+                errorMessage = "[Debug] Account sync fetch returned an unexpected record name."
+                actionMessage = nil
+                return
+            }
+
+            actionMessage = "[Debug] Fetched Account sync record: \(fetchedRecordName)"
             errorMessage = nil
         } catch {
-            errorMessage = "[Debug] One Account sync save failed: \(error.localizedDescription)"
+            errorMessage = "[Debug] Account sync fetch failed: \(error.localizedDescription)"
             actionMessage = nil
         }
     }

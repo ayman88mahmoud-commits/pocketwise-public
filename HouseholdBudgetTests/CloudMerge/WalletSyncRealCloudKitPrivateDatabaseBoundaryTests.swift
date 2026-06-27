@@ -122,13 +122,19 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
         let accountProvider = FakePrivateBoundaryProvider()
         accountProvider.stubbedStatus = .available
         let saver = FakeRecordSaver()
-        let boundary = makeBoundary(accountStatusProvider: accountProvider, recordSaver: saver)
+        let fetcher = FakeRecordFetcher()
+        let boundary = makeBoundary(
+            accountStatusProvider: accountProvider,
+            recordSaver: saver,
+            recordFetcher: fetcher
+        )
 
         let result = try await boundary.accountAvailability()
 
         XCTAssertEqual(result, .available)
         XCTAssertEqual(accountProvider.accountStatusCallCount, 1)
         XCTAssertEqual(saver.saveCallCount, 0)
+        XCTAssertEqual(fetcher.fetchCallCount, 0)
     }
 
     func testSaveRecordsDoesNotCallAccountStatusProvider() async throws {
@@ -147,22 +153,89 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
     func testFetchChangedRecordsDoesNotCallAccountStatusProviderOrSaver() async {
         let accountProvider = FakePrivateBoundaryProvider()
         let saver = FakeRecordSaver()
-        let boundary = makeBoundary(accountStatusProvider: accountProvider, recordSaver: saver)
+        let fetcher = FakeRecordFetcher()
+        let boundary = makeBoundary(
+            accountStatusProvider: accountProvider,
+            recordSaver: saver,
+            recordFetcher: fetcher
+        )
 
         _ = try? await boundary.fetchChangedRecords(since: nil)
 
         XCTAssertEqual(accountProvider.accountStatusCallCount, 0)
         XCTAssertEqual(saver.saveCallCount, 0)
+        XCTAssertEqual(fetcher.fetchCallCount, 0)
+    }
+
+    func testFetchRecordDelegatesToInjectedFetcherOnce() async throws {
+        let fetcher = FakeRecordFetcher()
+        let boundary = makeBoundary(recordFetcher: fetcher)
+
+        _ = try await boundary.fetchRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+
+        XCTAssertEqual(fetcher.fetchCallCount, 1)
+    }
+
+    func testFetchRecordPassesExactRecordNameToInjectedFetcher() async throws {
+        let fetcher = FakeRecordFetcher()
+        let boundary = makeBoundary(recordFetcher: fetcher)
+
+        _ = try await boundary.fetchRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+
+        XCTAssertEqual(fetcher.receivedRecordNames, [
+            "Account_11111111-1111-1111-1111-111111111111"
+        ])
+    }
+
+    func testFetchRecordReturnsRecordFromInjectedFetcher() async throws {
+        let expectedRecord = makeRecord(named: "Account_22222222-2222-2222-2222-222222222222")
+        let fetcher = FakeRecordFetcher(recordToReturn: expectedRecord)
+        let boundary = makeBoundary(recordFetcher: fetcher)
+
+        let record = try await boundary.fetchRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+
+        XCTAssertEqual(record.recordID.recordName, "Account_22222222-2222-2222-2222-222222222222")
+    }
+
+    func testFetchRecordWrapsFetcherErrorsSafely() async {
+        let fetcher = FakeRecordFetcher(error: TestUnderlyingError.sample)
+        let boundary = makeBoundary(recordFetcher: fetcher)
+
+        do {
+            _ = try await boundary.fetchRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+            XCTFail("Expected fetchRecord to throw")
+        } catch {
+            guard case .some(.unknown(let underlying)) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected unknown sync error")
+                return
+            }
+            XCTAssertEqual(underlying as? TestUnderlyingError, .sample)
+        }
+    }
+
+    func testSaveRecordsDoesNotCallRecordFetcher() async throws {
+        let saver = FakeRecordSaver()
+        let fetcher = FakeRecordFetcher()
+        let boundary = makeBoundary(recordSaver: saver, recordFetcher: fetcher)
+
+        _ = try await boundary.saveRecords([
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+        ])
+
+        XCTAssertEqual(saver.saveCallCount, 1)
+        XCTAssertEqual(fetcher.fetchCallCount, 0)
     }
 
     private func makeBoundary(
         accountStatusProvider: FakePrivateBoundaryProvider = FakePrivateBoundaryProvider(),
-        recordSaver: FakeRecordSaver = FakeRecordSaver()
+        recordSaver: FakeRecordSaver = FakeRecordSaver(),
+        recordFetcher: FakeRecordFetcher = FakeRecordFetcher()
     ) -> WalletSyncRealCloudKitPrivateDatabaseBoundary {
         WalletSyncRealCloudKitPrivateDatabaseBoundary(
             configuration: WalletSyncCloudKitConfiguration(),
             accountStatusProvider: accountStatusProvider,
-            recordSaver: recordSaver
+            recordSaver: recordSaver,
+            recordFetcher: recordFetcher
         )
     }
 
@@ -203,6 +276,32 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
             }
 
             return recordsToReturn ?? records
+        }
+    }
+
+    private final class FakeRecordFetcher: WalletSyncPrivateDatabaseRecordFetching {
+        var fetchCallCount = 0
+        var receivedRecordNames: [String] = []
+        var recordToReturn: CKRecord?
+        var error: Error?
+
+        init(recordToReturn: CKRecord? = nil, error: Error? = nil) {
+            self.recordToReturn = recordToReturn
+            self.error = error
+        }
+
+        func fetchRecord(named recordName: String) async throws -> CKRecord {
+            fetchCallCount += 1
+            receivedRecordNames.append(recordName)
+
+            if let error {
+                throw error
+            }
+
+            return recordToReturn ?? CKRecord(
+                recordType: WalletSyncCKRecordAdapter.recordType,
+                recordID: CKRecord.ID(recordName: recordName)
+            )
         }
     }
 
