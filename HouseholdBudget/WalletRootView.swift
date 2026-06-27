@@ -1141,6 +1141,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Master Data Round Trip") {
+                Text("Developer only. Not included in release builds. Saves and fetches up to 50 Account, Category, and WalletEvent sync records only. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await verifyMasterDataRoundTripForDebug() }
+                } label: {
+                    Label("Verify Master Data Round Trip", systemImage: "arrow.triangle.2.circlepath.icloud")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Fetch Saved Account Sync Record") {
                 Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
                     .font(.footnote)
@@ -1443,6 +1457,89 @@ struct ICloudSnapshotSyncView: View {
             actionMessage = "[Debug] Fetched \(fetchedRecordNames.count) Account sync records: \(fetchedRecordNames.sorted().joined(separator: ", "))"
             errorMessage = nil
         }
+    }
+
+    private func verifyMasterDataRoundTripForDebug() async {
+        let allDTOs = [
+            store.accounts.map(WalletSyncRecordMappers.dto(for:)),
+            store.categories.map(WalletSyncRecordMappers.dto(for:)),
+            store.walletEvents.map(WalletSyncRecordMappers.dto(for:))
+        ].flatMap { $0 }
+
+        let dtos = Array(allDTOs.prefix(50))
+
+        guard !dtos.isEmpty else {
+            actionMessage = "[Debug] No master-data sync records are available for round-trip verification."
+            errorMessage = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let records = dtos.map(WalletSyncCKRecordAdapter.ckRecord(from:))
+            let expectedRecordNames = dtos.map(\.recordName)
+            let entityCounts = debugEntityCountsMessage(for: dtos)
+
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let savedRecords = try await boundary.saveRecords(records)
+            let savedRecordNames = savedRecords.map(\.recordID.recordName)
+
+            guard savedRecordNames.count == expectedRecordNames.count else {
+                errorMessage = "[Debug] Master data round trip returned an unexpected saved count. Expected: \(expectedRecordNames.count), saved: \(savedRecordNames.count)."
+                actionMessage = nil
+                return
+            }
+
+            guard Set(savedRecordNames) == Set(expectedRecordNames) else {
+                errorMessage = "[Debug] Master data round trip returned unexpected saved record names."
+                actionMessage = nil
+                return
+            }
+
+            var fetchedRecordNames: [String] = []
+            for recordName in savedRecordNames {
+                do {
+                    let fetchedRecord = try await boundary.fetchRecord(named: recordName)
+                    fetchedRecordNames.append(fetchedRecord.recordID.recordName)
+                } catch {
+                    errorMessage = "[Debug] Master data round trip fetch failed for record: \(recordName)"
+                    actionMessage = nil
+                    return
+                }
+            }
+
+            guard fetchedRecordNames.count == savedRecordNames.count else {
+                errorMessage = "[Debug] Master data round trip returned an unexpected fetched count. Saved: \(savedRecordNames.count), fetched: \(fetchedRecordNames.count)."
+                actionMessage = nil
+                return
+            }
+
+            guard Set(fetchedRecordNames) == Set(savedRecordNames) else {
+                errorMessage = "[Debug] Master data round trip returned unexpected fetched record names."
+                actionMessage = nil
+                return
+            }
+
+            let sortedRecordNames = fetchedRecordNames.sorted().joined(separator: ", ")
+            actionMessage = "[Debug] Master data round trip succeeded for \(fetchedRecordNames.count) records. Counts: \(entityCounts). Records: \(sortedRecordNames)"
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Master data round trip failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func debugEntityCountsMessage(for dtos: [WalletSyncRecordDTO]) -> String {
+        let counts = Dictionary(grouping: dtos, by: \.entity)
+            .mapValues(\.count)
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue): \($0.value)" }
+
+        return counts.isEmpty ? "none" : counts.joined(separator: ", ")
     }
 
     private func fetchSavedAccountSyncRecordForDebug() async {
