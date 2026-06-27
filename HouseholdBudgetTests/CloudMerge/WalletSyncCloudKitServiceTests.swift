@@ -25,6 +25,91 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         XCTAssertEqual(service.configuration.databaseScope, .private)
     }
 
+    func testCheckAccountAvailabilityCallsFakeBoundaryOnce() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 1)
+    }
+
+    func testCheckAccountAvailabilityReturnsAvailableFromFakeBoundary() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
+    func testCheckAccountAvailabilityReturnsNoAccountFromFakeBoundary() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .noAccount)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .noAccount)
+    }
+
+    func testCheckAccountAvailabilityReturnsRestrictedFromFakeBoundary() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .restricted)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .restricted)
+    }
+
+    func testCheckAccountAvailabilityReturnsCouldNotDetermineFromFakeBoundary() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .couldNotDetermine)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .couldNotDetermine)
+    }
+
+    func testCheckAccountAvailabilityPropagatesFakeBoundaryErrors() async {
+        let boundary = FakeDatabaseBoundary(accountAvailabilityError: FakeBoundaryError.accountFailed)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        do {
+            _ = try await service.checkAccountAvailability()
+            XCTFail("Expected checkAccountAvailability to throw")
+        } catch {
+            XCTAssertEqual(error as? FakeBoundaryError, .accountFailed)
+        }
+    }
+
+    func testCheckAccountAvailabilityDoesNotCallSaveOrFetch() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(boundary.saveCallCount, 0)
+        XCTAssertEqual(boundary.fetchCallCount, 0)
+    }
+
+    func testCheckAccountAvailabilityDoesNotRequireWalletStore() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
+    func testCheckAccountAvailabilityDoesNotRequireWalletICloudSyncService() async throws {
+        let boundary = FakeDatabaseBoundary(accountAvailability: .available)
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        let availability = try await service.checkAccountAvailability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
     func testMissingDatabaseBoundaryErrorCanBeDescribedSafely() {
         let error = WalletSyncCloudKitError.missingDatabaseBoundary
 
@@ -457,6 +542,7 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
 
         XCTAssertEqual(boundary.saveCallCount, 0)
         XCTAssertEqual(boundary.fetchCallCount, 0)
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 0)
         XCTAssertFalse(boundary.wasTouched)
     }
 
@@ -469,6 +555,7 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
 
         XCTAssertEqual(boundary.saveCallCount, 0)
         XCTAssertEqual(boundary.fetchCallCount, 0)
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 0)
         XCTAssertFalse(boundary.wasTouched)
     }
 
@@ -508,6 +595,26 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         XCTAssertTrue(result.failedRecordNames.isEmpty)
     }
 
+    func testUploadPreparedRecordsDoesNotCallAccountStatus() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.uploadPreparedRecords([])
+
+        XCTAssertEqual(boundary.saveCallCount, 1)
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 0)
+    }
+
+    func testFetchRecordChangesDoesNotCallAccountStatus() async throws {
+        let boundary = FakeDatabaseBoundary()
+        let service = WalletSyncCloudKitService(databaseBoundary: boundary)
+
+        _ = try await service.fetchRecordChanges(since: nil)
+
+        XCTAssertEqual(boundary.fetchCallCount, 1)
+        XCTAssertEqual(boundary.accountAvailabilityCallCount, 0)
+    }
+
     private func makeDTO(
         fields: [String: WalletSyncFieldValue] = [:]
     ) -> WalletSyncRecordDTO {
@@ -529,27 +636,45 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
     }
 
     private final class FakeDatabaseBoundary: WalletSyncCloudKitDatabaseBoundary {
+        var accountAvailabilityCallCount = 0
         var saveCallCount = 0
         var fetchCallCount = 0
         var savedRecordNames: [String] = []
         var receivedChangeTokenData: Data?
         var wasTouched = false
 
+        var accountAvailabilityResult: WalletSyncCloudKitAccountAvailability
         var recordsToSaveReturn: [CKRecord]?
         var fetchResult: WalletSyncCloudKitFetchResult
+        var accountAvailabilityError: Error?
         var saveError: Error?
         var fetchError: Error?
 
         init(
+            accountAvailability: WalletSyncCloudKitAccountAvailability = .unknown,
             recordsToSaveReturn: [CKRecord]? = nil,
             fetchResult: WalletSyncCloudKitFetchResult? = nil,
+            accountAvailabilityError: Error? = nil,
             saveError: Error? = nil,
             fetchError: Error? = nil
         ) {
+            self.accountAvailabilityResult = accountAvailability
             self.recordsToSaveReturn = recordsToSaveReturn
             self.fetchResult = fetchResult ?? WalletSyncCloudKitFetchResult(records: [])
+            self.accountAvailabilityError = accountAvailabilityError
             self.saveError = saveError
             self.fetchError = fetchError
+        }
+
+        func accountAvailability() async throws -> WalletSyncCloudKitAccountAvailability {
+            wasTouched = true
+            accountAvailabilityCallCount += 1
+
+            if let accountAvailabilityError {
+                throw accountAvailabilityError
+            }
+
+            return accountAvailabilityResult
         }
 
         func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
@@ -578,6 +703,7 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
     }
 
     private enum FakeBoundaryError: Error, Equatable {
+        case accountFailed
         case saveFailed
         case fetchFailed
     }

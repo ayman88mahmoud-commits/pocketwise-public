@@ -40,7 +40,17 @@ struct WalletSyncCloudKitUploadResult {
     }
 }
 
+enum WalletSyncCloudKitAccountAvailability: String, Codable, CaseIterable, Hashable {
+    case available
+    case noAccount
+    case restricted
+    case couldNotDetermine
+    case temporarilyUnavailable
+    case unknown
+}
+
 protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {
+    func accountAvailability() async throws -> WalletSyncCloudKitAccountAvailability
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord]
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult
 }
@@ -112,6 +122,14 @@ final class WalletSyncCloudKitService {
     func uploadPreparedRecordsWithResult(_ records: [CKRecord]) async throws -> WalletSyncCloudKitUploadResult {
         let savedRecords = try await uploadPreparedRecords(records)
         return WalletSyncCloudKitUploadResult(savedRecords: savedRecords)
+    }
+
+    func checkAccountAvailability() async throws -> WalletSyncCloudKitAccountAvailability {
+        guard let databaseBoundary else {
+            throw WalletSyncCloudKitError.missingDatabaseBoundary
+        }
+
+        return try await databaseBoundary.accountAvailability()
     }
 
     func fetchRecordChanges(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
