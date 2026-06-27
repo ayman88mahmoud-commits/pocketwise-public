@@ -25,6 +25,95 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         XCTAssertEqual(service.configuration.databaseScope, .private)
     }
 
+    func testMissingDatabaseBoundaryErrorCanBeDescribedSafely() {
+        let error = WalletSyncCloudKitError.missingDatabaseBoundary
+
+        if case .missingDatabaseBoundary = error {
+            XCTAssertEqual(error.localizedDescription, "Cloud sync database boundary is not configured.")
+        } else {
+            XCTFail("Expected missingDatabaseBoundary")
+        }
+    }
+
+    func testInvalidRecordErrorCarriesMessage() {
+        let error = WalletSyncCloudKitError.invalidRecord("Missing required sync metadata.")
+
+        if case .invalidRecord(let message) = error {
+            XCTAssertEqual(message, "Missing required sync metadata.")
+            XCTAssertEqual(error.localizedDescription, "Missing required sync metadata.")
+        } else {
+            XCTFail("Expected invalidRecord")
+        }
+    }
+
+    func testWrongRecordTypeErrorCarriesRecordType() {
+        let error = WalletSyncCloudKitError.wrongRecordType("OtherRecord")
+
+        if case .wrongRecordType(let recordType) = error {
+            XCTAssertEqual(recordType, "OtherRecord")
+            XCTAssertEqual(error.localizedDescription, "Unexpected CloudKit record type: OtherRecord.")
+        } else {
+            XCTFail("Expected wrongRecordType")
+        }
+    }
+
+    func testPartialFailurePreservesRecordNamesAndUnderlyingError() {
+        let error = WalletSyncCloudKitError.partialFailure(
+            recordNames: ["Account_1", "FinancialEvent_2"],
+            underlying: TestUnderlyingError.sample
+        )
+
+        if case .partialFailure(let recordNames, let underlying) = error {
+            XCTAssertEqual(recordNames, ["Account_1", "FinancialEvent_2"])
+            XCTAssertEqual(underlying as? TestUnderlyingError, .sample)
+            XCTAssertEqual(error.localizedDescription, "Cloud sync failed for 2 record(s).")
+        } else {
+            XCTFail("Expected partialFailure")
+        }
+    }
+
+    func testUnknownPreservesUnderlyingError() {
+        let error = WalletSyncCloudKitError.unknown(underlying: TestUnderlyingError.sample)
+
+        if case .unknown(let underlying) = error {
+            XCTAssertEqual(underlying as? TestUnderlyingError, .sample)
+        } else {
+            XCTFail("Expected unknown")
+        }
+    }
+
+    func testAccountNotAvailableExistsAsDistinctCase() {
+        if case .accountNotAvailable = WalletSyncCloudKitError.accountNotAvailable {
+            XCTAssertEqual(WalletSyncCloudKitError.accountNotAvailable.localizedDescription, "iCloud account is not available.")
+        } else {
+            XCTFail("Expected accountNotAvailable")
+        }
+    }
+
+    func testNetworkUnavailableExistsAsDistinctCase() {
+        if case .networkUnavailable = WalletSyncCloudKitError.networkUnavailable {
+            XCTAssertEqual(WalletSyncCloudKitError.networkUnavailable.localizedDescription, "Network is unavailable.")
+        } else {
+            XCTFail("Expected networkUnavailable")
+        }
+    }
+
+    func testPermissionFailureExistsAsDistinctCase() {
+        if case .permissionFailure = WalletSyncCloudKitError.permissionFailure {
+            XCTAssertEqual(WalletSyncCloudKitError.permissionFailure.localizedDescription, "CloudKit permission was denied.")
+        } else {
+            XCTFail("Expected permissionFailure")
+        }
+    }
+
+    func testCloudKitUnavailableExistsAsDistinctCase() {
+        if case .cloudKitUnavailable = WalletSyncCloudKitError.cloudKitUnavailable {
+            XCTAssertEqual(WalletSyncCloudKitError.cloudKitUnavailable.localizedDescription, "CloudKit is unavailable.")
+        } else {
+            XCTFail("Expected cloudKitUnavailable")
+        }
+    }
+
     func testPrepareRecordsForUploadConvertsDTOsUsingAdapter() {
         let dto = makeDTO(fields: ["name": .string("Test Cash")])
         let service = WalletSyncCloudKitService()
@@ -185,6 +274,21 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         }
     }
 
+    func testUploadPreparedRecordsThrowsSyncErrorWhenBoundaryIsMissing() async {
+        let service = WalletSyncCloudKitService()
+
+        do {
+            _ = try await service.uploadPreparedRecords([])
+            XCTFail("Expected uploadPreparedRecords to throw")
+        } catch {
+            if case .some(.missingDatabaseBoundary) = error as? WalletSyncCloudKitError {
+                XCTAssertEqual(error.localizedDescription, "Cloud sync database boundary is not configured.")
+            } else {
+                XCTFail("Expected missingDatabaseBoundary")
+            }
+        }
+    }
+
     func testFetchRecordChangesCallsFakeBoundaryOnce() async throws {
         let boundary = FakeDatabaseBoundary()
         let service = WalletSyncCloudKitService(databaseBoundary: boundary)
@@ -229,6 +333,21 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
             XCTFail("Expected fetchRecordChanges to throw")
         } catch {
             XCTAssertEqual(error as? FakeBoundaryError, .fetchFailed)
+        }
+    }
+
+    func testFetchRecordChangesThrowsSyncErrorWhenBoundaryIsMissing() async {
+        let service = WalletSyncCloudKitService()
+
+        do {
+            _ = try await service.fetchRecordChanges(since: nil)
+            XCTFail("Expected fetchRecordChanges to throw")
+        } catch {
+            if case .some(.missingDatabaseBoundary) = error as? WalletSyncCloudKitError {
+                XCTAssertEqual(error.localizedDescription, "Cloud sync database boundary is not configured.")
+            } else {
+                XCTFail("Expected missingDatabaseBoundary")
+            }
         }
     }
 
@@ -345,5 +464,9 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
     private enum FakeBoundaryError: Error, Equatable {
         case saveFailed
         case fetchFailed
+    }
+
+    private enum TestUnderlyingError: Error, Equatable {
+        case sample
     }
 }
