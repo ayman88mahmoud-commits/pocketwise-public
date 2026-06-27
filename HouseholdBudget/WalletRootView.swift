@@ -1113,6 +1113,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Limited Account Batch Upload") {
+                Text("Developer only. Not included in release builds. Uploads up to 10 Account sync records when tapped. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await uploadLimitedAccountBatchForDebug() }
+                } label: {
+                    Label("Upload Account Sync Batch", systemImage: "icloud.and.arrow.up")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Fetch Saved Account Sync Record") {
                 Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
                     .font(.footnote)
@@ -1319,6 +1333,50 @@ struct ICloudSnapshotSyncView: View {
         } catch {
             debugLastSavedAccountSyncRecordName = nil
             errorMessage = "[Debug] One Account sync save failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func uploadLimitedAccountBatchForDebug() async {
+        let accounts = Array(store.accounts.prefix(10))
+
+        guard !accounts.isEmpty else {
+            actionMessage = "[Debug] No Account sync records are available to upload."
+            errorMessage = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let records = accounts
+                .map(WalletSyncRecordMappers.dto(for:))
+                .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+
+            let submittedRecordNames = records.map(\.recordID.recordName)
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let savedRecords = try await boundary.saveRecords(records)
+            let savedRecordNames = savedRecords.map(\.recordID.recordName)
+
+            guard savedRecordNames.count == submittedRecordNames.count else {
+                errorMessage = "[Debug] Account batch upload returned an unexpected saved count. Submitted: \(submittedRecordNames.count), saved: \(savedRecordNames.count)."
+                actionMessage = nil
+                return
+            }
+
+            guard Set(savedRecordNames) == Set(submittedRecordNames) else {
+                errorMessage = "[Debug] Account batch upload returned unexpected record names."
+                actionMessage = nil
+                return
+            }
+
+            actionMessage = "[Debug] Uploaded \(savedRecordNames.count) Account sync records: \(savedRecordNames.sorted().joined(separator: ", "))"
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Account batch upload failed: \(error.localizedDescription)"
             actionMessage = nil
         }
     }
