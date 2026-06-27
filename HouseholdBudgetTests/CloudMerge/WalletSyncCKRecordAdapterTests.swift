@@ -99,6 +99,7 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
 
         XCTAssertEqual(record["field_name"] as? String, "Groceries")
+        XCTAssertEqual(record["fieldType_name"] as? String, "string")
     }
 
     func testDoubleFieldMapsCorrectly() {
@@ -141,6 +142,7 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
 
         XCTAssertEqual(record["field_debtID"] as? String, "22222222-2222-2222-2222-222222222222")
+        XCTAssertEqual(record["fieldType_debtID"] as? String, "uuid")
     }
 
     func testStringArrayFieldMapsCorrectly() {
@@ -158,6 +160,7 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
 
         XCTAssertNil(record["field_note"])
+        XCTAssertNil(record["fieldType_note"])
     }
 
     // MARK: - Field key collision prevention
@@ -171,6 +174,162 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
 
         XCTAssertEqual(record["entity"] as? String, "Account")
         XCTAssertEqual(record["field_entity"] as? String, "should-not-collide")
+    }
+
+    // MARK: - Reverse conversion
+
+    func testWrongRecordTypeThrows() {
+        let record = CKRecord(recordType: "WrongRecordType", recordID: CKRecord.ID(recordName: "bad"))
+
+        XCTAssertThrowsError(try WalletSyncCKRecordAdapter.dto(from: record)) { error in
+            XCTAssertEqual(error as? WalletSyncCKRecordAdapter.AdapterError, .invalidRecordType("WrongRecordType"))
+        }
+    }
+
+    func testRoundTripPreservesRecordName() throws {
+        let dto = makeDTO()
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.recordName, dto.recordName)
+    }
+
+    func testRoundTripPreservesEntity() throws {
+        let dto = makeDTO()
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.entity, dto.entity)
+    }
+
+    func testRoundTripPreservesID() throws {
+        let dto = makeDTO()
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.id, dto.id)
+    }
+
+    func testRoundTripPreservesMetadata() throws {
+        let updatedAt = Date(timeIntervalSince1970: 1_800_010_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
+        let dto = makeDTO(updatedAt: updatedAt, deletedAt: deletedAt, isDeleted: true)
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.updatedAt, updatedAt)
+        XCTAssertEqual(decoded.deletedAt, deletedAt)
+        XCTAssertTrue(decoded.isDeleted)
+    }
+
+    func testRoundTripPreservesStringField() throws {
+        let dto = makeDTO(fields: ["name": .string("Groceries")])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["name"], .string("Groceries"))
+    }
+
+    func testRoundTripPreservesDoubleField() throws {
+        let dto = makeDTO(fields: ["amount": .double(99.50)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["amount"], .double(99.50))
+    }
+
+    func testRoundTripPreservesIntField() throws {
+        let dto = makeDTO(fields: ["year": .int(2025)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["year"], .int(2025))
+    }
+
+    func testRoundTripPreservesBoolField() throws {
+        let dto = makeDTO(fields: ["isActive": .bool(true)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["isActive"], .bool(true))
+    }
+
+    func testRoundTripPreservesDateField() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let dto = makeDTO(fields: ["createdAt": .date(date)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["createdAt"], .date(date))
+    }
+
+    func testRoundTripPreservesUUIDFieldAsUUIDNotString() throws {
+        let uuid = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let dto = makeDTO(fields: ["debtID": .uuid(uuid)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["debtID"], .uuid(uuid))
+        XCTAssertNotEqual(decoded.fields["debtID"], .string(uuid.uuidString.lowercased()))
+    }
+
+    func testRoundTripPreservesStringArrayField() throws {
+        let aliases = ["Food", "Transport"]
+        let dto = makeDTO(fields: ["aliases": .stringArray(aliases)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["aliases"], .stringArray(aliases))
+    }
+
+    func testNullFieldsRemainAbsentAfterRoundTrip() throws {
+        let dto = makeDTO(fields: ["note": .null])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertNil(decoded.fields["note"])
+    }
+
+    func testRoundTripPreservesCustomFieldWithoutMetadataCollision() throws {
+        let dto = makeDTO(fields: ["entity": .string("custom-entity")])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.entity, .account)
+        XCTAssertEqual(decoded.fields["entity"], .string("custom-entity"))
+    }
+
+    func testUnknownNonPrefixedKeysAreIgnored() throws {
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: makeDTO(fields: ["name": .string("Cash")]))
+        record["unknown"] = "ignored"
+
+        let decoded = try WalletSyncCKRecordAdapter.dto(from: record)
+
+        XCTAssertNil(decoded.fields["unknown"])
+        XCTAssertEqual(decoded.fields["name"], .string("Cash"))
+    }
+
+    func testReverseConversionIsDeterministic() throws {
+        let dto = makeDTO(
+            updatedAt: Date(timeIntervalSince1970: 1_800_010_000),
+            fields: [
+                "name": .string("Cash"),
+                "balance": .double(500.0),
+                "isActive": .bool(true)
+            ]
+        )
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+
+        let first = try WalletSyncCKRecordAdapter.dto(from: record)
+        let second = try WalletSyncCKRecordAdapter.dto(from: record)
+
+        XCTAssertEqual(first.recordName, second.recordName)
+        XCTAssertEqual(first.entity, second.entity)
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(first.updatedAt, second.updatedAt)
+        XCTAssertEqual(first.deletedAt, second.deletedAt)
+        XCTAssertEqual(first.isDeleted, second.isDeleted)
+        XCTAssertEqual(first.fields, second.fields)
     }
 
     // MARK: - Determinism
@@ -217,5 +376,9 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
             isDeleted: isDeleted,
             fields: fields
         )
+    }
+
+    private func roundTrip(_ dto: WalletSyncRecordDTO) throws -> WalletSyncRecordDTO {
+        try WalletSyncCKRecordAdapter.dto(from: WalletSyncCKRecordAdapter.ckRecord(from: dto))
     }
 }
