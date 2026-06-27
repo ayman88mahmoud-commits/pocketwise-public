@@ -72,6 +72,71 @@ protocol WalletSyncCloudKitDatabaseBoundary: AnyObject {
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult
 }
 
+protocol WalletSyncCloudKitAccountStatusProviding {
+    func accountStatus() async throws -> CKAccountStatus
+}
+
+struct WalletSyncCKContainerAccountStatusProvider: WalletSyncCloudKitAccountStatusProviding {
+    private let container: CKContainer
+
+    init(containerIdentifier: String? = nil) {
+        if let containerIdentifier {
+            self.container = CKContainer(identifier: containerIdentifier)
+        } else {
+            self.container = CKContainer.default()
+        }
+    }
+
+    init(container: CKContainer) {
+        self.container = container
+    }
+
+    func accountStatus() async throws -> CKAccountStatus {
+        try await withCheckedThrowingContinuation { continuation in
+            container.accountStatus { status, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: status)
+                }
+            }
+        }
+    }
+}
+
+final class WalletSyncRealCloudKitAccountBoundary: WalletSyncCloudKitDatabaseBoundary {
+    private let accountStatusProvider: WalletSyncCloudKitAccountStatusProviding
+
+    init(accountStatusProvider: WalletSyncCloudKitAccountStatusProviding) {
+        self.accountStatusProvider = accountStatusProvider
+    }
+
+    convenience init(containerIdentifier: String? = nil) {
+        self.init(
+            accountStatusProvider: WalletSyncCKContainerAccountStatusProvider(
+                containerIdentifier: containerIdentifier
+            )
+        )
+    }
+
+    func accountAvailability() async throws -> WalletSyncCloudKitAccountAvailability {
+        do {
+            let status = try await accountStatusProvider.accountStatus()
+            return WalletSyncCloudKitAccountAvailability(cloudKitAccountStatus: status)
+        } catch {
+            throw WalletSyncCloudKitError.unknown(underlying: error)
+        }
+    }
+
+    func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
+        throw WalletSyncCloudKitError.cloudKitUnavailable
+    }
+
+    func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
+        throw WalletSyncCloudKitError.cloudKitUnavailable
+    }
+}
+
 enum WalletSyncCloudKitError: LocalizedError {
     case missingDatabaseBoundary
     case invalidRecord(String)

@@ -163,6 +163,128 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         XCTAssertEqual(boundary.fetchCallCount, 0)
     }
 
+    func testRealAccountBoundaryInitializesWithoutWalletStoreOrUI() {
+        let provider = FakeAccountStatusProvider(status: .available)
+
+        _ = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        XCTAssertEqual(provider.callCount, 0)
+    }
+
+    func testRealAccountBoundaryMapsAvailableFromFakeProvider() async throws {
+        let provider = FakeAccountStatusProvider(status: .available)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .available)
+        XCTAssertEqual(provider.callCount, 1)
+    }
+
+    func testRealAccountBoundaryMapsNoAccountFromFakeProvider() async throws {
+        let provider = FakeAccountStatusProvider(status: .noAccount)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .noAccount)
+    }
+
+    func testRealAccountBoundaryMapsRestrictedFromFakeProvider() async throws {
+        let provider = FakeAccountStatusProvider(status: .restricted)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .restricted)
+    }
+
+    func testRealAccountBoundaryMapsCouldNotDetermineFromFakeProvider() async throws {
+        let provider = FakeAccountStatusProvider(status: .couldNotDetermine)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .couldNotDetermine)
+    }
+
+    func testRealAccountBoundaryMapsTemporarilyUnavailableFromFakeProvider() async throws {
+        let provider = FakeAccountStatusProvider(status: .temporarilyUnavailable)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .temporarilyUnavailable)
+    }
+
+    func testRealAccountBoundaryWrapsProviderErrors() async {
+        let provider = FakeAccountStatusProvider(error: TestUnderlyingError.sample)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        do {
+            _ = try await boundary.accountAvailability()
+            XCTFail("Expected accountAvailability to throw")
+        } catch {
+            guard case .some(.unknown(let underlying)) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected unknown sync error")
+                return
+            }
+            XCTAssertEqual(underlying as? TestUnderlyingError, .sample)
+        }
+    }
+
+    func testRealAccountBoundarySaveRecordsThrowsWithoutCloudKitRecordOperation() async {
+        let provider = FakeAccountStatusProvider(status: .available)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        do {
+            _ = try await boundary.saveRecords([
+                makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+            ])
+            XCTFail("Expected saveRecords to throw")
+        } catch {
+            guard case .some(.cloudKitUnavailable) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected cloudKitUnavailable")
+                return
+            }
+            XCTAssertEqual(provider.callCount, 0)
+        }
+    }
+
+    func testRealAccountBoundaryFetchChangesThrowsWithoutCloudKitRecordOperation() async {
+        let provider = FakeAccountStatusProvider(status: .available)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        do {
+            _ = try await boundary.fetchChangedRecords(since: nil)
+            XCTFail("Expected fetchChangedRecords to throw")
+        } catch {
+            guard case .some(.cloudKitUnavailable) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected cloudKitUnavailable")
+                return
+            }
+            XCTAssertEqual(provider.callCount, 0)
+        }
+    }
+
+    func testRealAccountBoundaryDoesNotRequireWalletStore() async throws {
+        let provider = FakeAccountStatusProvider(status: .available)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
+    func testRealAccountBoundaryDoesNotRequireWalletICloudSyncService() async throws {
+        let provider = FakeAccountStatusProvider(status: .available)
+        let boundary = WalletSyncRealCloudKitAccountBoundary(accountStatusProvider: provider)
+
+        let availability = try await boundary.accountAvailability()
+
+        XCTAssertEqual(availability, .available)
+    }
+
     func testMissingDatabaseBoundaryErrorCanBeDescribedSafely() {
         let error = WalletSyncCloudKitError.missingDatabaseBoundary
 
@@ -759,6 +881,27 @@ final class WalletSyncCloudKitServiceTests: XCTestCase {
         case accountFailed
         case saveFailed
         case fetchFailed
+    }
+
+    private final class FakeAccountStatusProvider: WalletSyncCloudKitAccountStatusProviding {
+        var status: CKAccountStatus
+        var error: Error?
+        var callCount = 0
+
+        init(status: CKAccountStatus = .available, error: Error? = nil) {
+            self.status = status
+            self.error = error
+        }
+
+        func accountStatus() async throws -> CKAccountStatus {
+            callCount += 1
+
+            if let error {
+                throw error
+            }
+
+            return status
+        }
     }
 
     private enum TestUnderlyingError: Error, Equatable {
