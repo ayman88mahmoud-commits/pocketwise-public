@@ -4,216 +4,174 @@ import CloudKit
 
 final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
 
-    // MARK: - Test 1: Initializes without WalletStore
+    func testBoundaryInitializesWithoutWalletStoreOrUI() {
+        let boundary = makeBoundary()
 
-    func testBoundaryInitializesWithoutWalletStore() {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
         XCTAssertNotNil(boundary)
     }
-
-    // MARK: - Test 2: Initializes without UI (non-UI test target)
-
-    func testBoundaryInitializesInNonUITestTarget() {
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
-        XCTAssertNotNil(boundary)
-    }
-
-    // MARK: - Test 3: Does not require WalletICloudSyncService
 
     func testBoundaryDoesNotRequireWalletICloudSyncService() {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-        let mirror = Mirror(reflecting: boundary)
-        let propertyNames = mirror.children.compactMap { $0.label }
-        XCTAssertFalse(
-            propertyNames.contains(where: { $0.lowercased().contains("icloud") }),
-            "Boundary must not hold a WalletICloudSyncService reference"
+        let boundary = makeBoundary()
+        let propertyNames = Mirror(reflecting: boundary).children.compactMap { $0.label }
+
+        XCTAssertFalse(propertyNames.contains { $0.lowercased().contains("icloudsyncservice") })
+    }
+
+    func testBoundaryHasNoWalletStoreReference() {
+        let boundary = makeBoundary()
+        let propertyNames = Mirror(reflecting: boundary).children.compactMap { $0.label }
+
+        XCTAssertFalse(propertyNames.contains { $0.lowercased().contains("walletstore") })
+    }
+
+    func testBoundaryHasNoBackupReference() {
+        let boundary = makeBoundary()
+        let propertyNames = Mirror(reflecting: boundary).children.compactMap { $0.label }
+
+        XCTAssertFalse(propertyNames.contains { $0.lowercased().contains("backup") })
+    }
+
+    func testSaveRecordsDelegatesToInjectedSaverOnce() async throws {
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(recordSaver: saver)
+        let records = [
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+        ]
+
+        _ = try await boundary.saveRecords(records)
+
+        XCTAssertEqual(saver.saveCallCount, 1)
+    }
+
+    func testSaveRecordsPassesExactRecordsToInjectedSaver() async throws {
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(recordSaver: saver)
+        let records = [
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111"),
+            makeRecord(named: "FinancialEvent_22222222-2222-2222-2222-222222222222")
+        ]
+
+        _ = try await boundary.saveRecords(records)
+
+        XCTAssertEqual(
+            saver.receivedRecordNames,
+            [
+                "Account_11111111-1111-1111-1111-111111111111",
+                "FinancialEvent_22222222-2222-2222-2222-222222222222"
+            ]
         )
     }
 
-    // MARK: - Test 4: saveRecords throws immediately
+    func testSaveRecordsReturnsRecordsFromInjectedSaver() async throws {
+        let savedRecord = makeRecord(named: "Saved_33333333-3333-3333-3333-333333333333")
+        let saver = FakeRecordSaver(recordsToReturn: [savedRecord])
+        let boundary = makeBoundary(recordSaver: saver)
 
-    func testSaveRecordsThrowsImmediately() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
+        let savedRecords = try await boundary.saveRecords([
+            makeRecord(named: "Input_11111111-1111-1111-1111-111111111111")
+        ])
+
+        XCTAssertEqual(savedRecords.map(\.recordID.recordName), [
+            "Saved_33333333-3333-3333-3333-333333333333"
+        ])
+    }
+
+    func testSaveRecordsWrapsSaverErrorsSafely() async {
+        let saver = FakeRecordSaver(error: TestUnderlyingError.sample)
+        let boundary = makeBoundary(recordSaver: saver)
 
         do {
-            _ = try await boundary.saveRecords([])
-            XCTFail("saveRecords must throw before performing any record operation")
+            _ = try await boundary.saveRecords([
+                makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+            ])
+            XCTFail("Expected saveRecords to throw")
         } catch {
-            guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
-                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
+            guard case .some(.unknown(let underlying)) = error as? WalletSyncCloudKitError else {
+                XCTFail("Expected unknown sync error")
                 return
             }
+            XCTAssertEqual(underlying as? TestUnderlyingError, .sample)
         }
     }
 
-    // MARK: - Test 5: fetchChangedRecords throws immediately
+    func testSaveRecordsWithEmptyArrayReturnsEmptyWithoutTouchingSaver() async throws {
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(recordSaver: saver)
 
-    func testFetchChangedRecordsThrowsImmediately() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
+        let savedRecords = try await boundary.saveRecords([])
+
+        XCTAssertTrue(savedRecords.isEmpty)
+        XCTAssertEqual(saver.saveCallCount, 0)
+    }
+
+    func testFetchChangedRecordsRemainsDisabled() async {
+        let boundary = makeBoundary()
 
         do {
             _ = try await boundary.fetchChangedRecords(since: nil)
-            XCTFail("fetchChangedRecords must throw before performing any record operation")
+            XCTFail("Expected fetchChangedRecords to throw")
         } catch {
             guard case .some(.recordOperationsNotEnabled) = error as? WalletSyncCloudKitError else {
-                XCTFail("Expected recordOperationsNotEnabled, got \(error)")
+                XCTFail("Expected recordOperationsNotEnabled")
                 return
             }
         }
     }
 
-    // MARK: - Test 6: saveRecords does not call the provider
+    func testAccountAvailabilityDelegatesOnlyToAccountProvider() async throws {
+        let accountProvider = FakePrivateBoundaryProvider()
+        accountProvider.stubbedStatus = .available
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(accountStatusProvider: accountProvider, recordSaver: saver)
 
-    func testSaveRecordsDoesNotCallProvider() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
+        let result = try await boundary.accountAvailability()
 
-        _ = try? await boundary.saveRecords([])
-
-        XCTAssertEqual(
-            provider.accountStatusCallCount, 0,
-            "saveRecords must not contact the account status provider"
-        )
+        XCTAssertEqual(result, .available)
+        XCTAssertEqual(accountProvider.accountStatusCallCount, 1)
+        XCTAssertEqual(saver.saveCallCount, 0)
     }
 
-    // MARK: - Test 7: fetchChangedRecords does not call the provider
+    func testSaveRecordsDoesNotCallAccountStatusProvider() async throws {
+        let accountProvider = FakePrivateBoundaryProvider()
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(accountStatusProvider: accountProvider, recordSaver: saver)
 
-    func testFetchChangedRecordsDoesNotCallProvider() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
+        _ = try await boundary.saveRecords([
+            makeRecord(named: "Account_11111111-1111-1111-1111-111111111111")
+        ])
+
+        XCTAssertEqual(accountProvider.accountStatusCallCount, 0)
+        XCTAssertEqual(saver.saveCallCount, 1)
+    }
+
+    func testFetchChangedRecordsDoesNotCallAccountStatusProviderOrSaver() async {
+        let accountProvider = FakePrivateBoundaryProvider()
+        let saver = FakeRecordSaver()
+        let boundary = makeBoundary(accountStatusProvider: accountProvider, recordSaver: saver)
 
         _ = try? await boundary.fetchChangedRecords(since: nil)
 
-        XCTAssertEqual(
-            provider.accountStatusCallCount, 0,
-            "fetchChangedRecords must not contact the account status provider"
-        )
+        XCTAssertEqual(accountProvider.accountStatusCallCount, 0)
+        XCTAssertEqual(saver.saveCallCount, 0)
     }
 
-    // MARK: - Test 8: accountAvailability delegates to provider only
-
-    func testAccountAvailabilityDelegatesToProviderAndDoesNotTouchRecordOperations() async {
-        let provider = FakePrivateBoundaryProvider()
-        provider.stubbedStatus = .available
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
+    private func makeBoundary(
+        accountStatusProvider: FakePrivateBoundaryProvider = FakePrivateBoundaryProvider(),
+        recordSaver: FakeRecordSaver = FakeRecordSaver()
+    ) -> WalletSyncRealCloudKitPrivateDatabaseBoundary {
+        WalletSyncRealCloudKitPrivateDatabaseBoundary(
             configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-
-        let result = try? await boundary.accountAvailability()
-
-        XCTAssertEqual(result, .available)
-        XCTAssertEqual(
-            provider.accountStatusCallCount, 1,
-            "accountAvailability must delegate to the provider exactly once"
+            accountStatusProvider: accountStatusProvider,
+            recordSaver: recordSaver
         )
     }
 
-    func testAccountAvailabilityWithNoAccountStatusReturnsExpectedCase() async {
-        let provider = FakePrivateBoundaryProvider()
-        provider.stubbedStatus = .noAccount
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-
-        let result = try? await boundary.accountAvailability()
-
-        XCTAssertEqual(result, .noAccount)
-        XCTAssertEqual(provider.accountStatusCallCount, 1)
-    }
-
-    // MARK: - Test 9: No CKDatabase record operation is called
-
-    func testSaveThrowsWithoutCallingAnyDatabaseOperation() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-
-        var caughtError: Error?
-        do {
-            _ = try await boundary.saveRecords([])
-        } catch {
-            caughtError = error
-        }
-
-        XCTAssertNotNil(caughtError)
-        XCTAssertEqual(
-            provider.accountStatusCallCount, 0,
-            "save must throw before any database or provider operation occurs"
+    private func makeRecord(named recordName: String) -> CKRecord {
+        CKRecord(
+            recordType: WalletSyncCKRecordAdapter.recordType,
+            recordID: CKRecord.ID(recordName: recordName)
         )
     }
-
-    // MARK: - Test 10: No WalletStore mutation
-
-    func testBoundaryHasNoWalletStoreReference() {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-        let mirror = Mirror(reflecting: boundary)
-        let propertyNames = mirror.children.compactMap { $0.label }
-        XCTAssertFalse(
-            propertyNames.contains(where: { $0.lowercased().contains("store") }),
-            "Boundary must not hold a WalletStore reference"
-        )
-    }
-
-    // MARK: - Test 11: No backup/import/export behavior touched
-
-    func testBoundaryHasNoBackupReference() {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-        let mirror = Mirror(reflecting: boundary)
-        let propertyNames = mirror.children.compactMap { $0.label }
-        XCTAssertFalse(
-            propertyNames.contains(where: { $0.lowercased().contains("backup") }),
-            "Boundary must not hold any backup-related reference"
-        )
-    }
-
-    // MARK: - Test 12: No UI dependency
-
-    func testBoundaryRunsInNonUITestTargetWithoutCrashing() async {
-        let provider = FakePrivateBoundaryProvider()
-        let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary(
-            configuration: WalletSyncCloudKitConfiguration(),
-            accountStatusProvider: provider
-        )
-        // Runs in the non-UI test target. No SwiftUI or UIKit types referenced.
-        _ = try? await boundary.saveRecords([])
-        XCTAssertTrue(true)
-    }
-
-    // MARK: - Fake provider
 
     private final class FakePrivateBoundaryProvider: WalletSyncCloudKitAccountStatusProviding {
         var accountStatusCallCount = 0
@@ -223,5 +181,32 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
             accountStatusCallCount += 1
             return stubbedStatus
         }
+    }
+
+    private final class FakeRecordSaver: WalletSyncPrivateDatabaseRecordSaving {
+        var saveCallCount = 0
+        var receivedRecordNames: [String] = []
+        var recordsToReturn: [CKRecord]?
+        var error: Error?
+
+        init(recordsToReturn: [CKRecord]? = nil, error: Error? = nil) {
+            self.recordsToReturn = recordsToReturn
+            self.error = error
+        }
+
+        func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
+            saveCallCount += 1
+            receivedRecordNames = records.map(\.recordID.recordName)
+
+            if let error {
+                throw error
+            }
+
+            return recordsToReturn ?? records
+        }
+    }
+
+    private enum TestUnderlyingError: Error, Equatable {
+        case sample
     }
 }
