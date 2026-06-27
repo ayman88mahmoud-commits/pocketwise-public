@@ -3,11 +3,22 @@ import CloudKit
 
 enum WalletSyncCKRecordAdapter {
 
+    // MARK: - CKRecord contract
+
     static let recordType = "WalletSyncRecord"
 
-    // All DTO field keys are prefixed to ensure they never collide with the metadata keys below.
+    // Custom DTO field values and their type markers use separate prefixes so they cannot
+    // collide with reserved metadata keys or with each other.
     static let fieldKeyPrefix = "field_"
     static let fieldTypeKeyPrefix = "fieldType_"
+
+    private enum MetadataKey {
+        static let entity    = "entity"
+        static let id        = "id"
+        static let updatedAt = "updatedAt"
+        static let deletedAt = "deletedAt"
+        static let isDeleted = "isDeleted"
+    }
 
     enum AdapterError: Error, Equatable {
         case invalidRecordType(String)
@@ -16,14 +27,6 @@ enum WalletSyncCKRecordAdapter {
         case invalidID(String)
         case missingFieldType(String)
         case invalidFieldValue(String)
-    }
-
-    private enum MetadataKey {
-        static let entity    = "entity"
-        static let id        = "id"
-        static let updatedAt = "updatedAt"
-        static let deletedAt = "deletedAt"
-        static let isDeleted = "isDeleted"
     }
 
     static func ckRecord(from dto: WalletSyncRecordDTO) -> CKRecord {

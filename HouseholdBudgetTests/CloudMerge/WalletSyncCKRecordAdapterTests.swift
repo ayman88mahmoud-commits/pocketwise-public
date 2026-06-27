@@ -273,6 +273,19 @@ final class WalletSyncCKRecordAdapterTests: XCTestCase {
         XCTAssertNotEqual(decoded.fields["debtID"], .string(uuid.uuidString.lowercased()))
     }
 
+    func testRoundTripPreservesUUIDLookingStringAsString() throws {
+        let uuidLookingString = "33333333-3333-3333-3333-333333333333"
+        let dto = makeDTO(fields: ["externalReference": .string(uuidLookingString)])
+
+        let decoded = try roundTrip(dto)
+
+        XCTAssertEqual(decoded.fields["externalReference"], .string(uuidLookingString))
+        XCTAssertNotEqual(
+            decoded.fields["externalReference"],
+            .uuid(UUID(uuidString: uuidLookingString)!)
+        )
+    }
+
     func testRoundTripPreservesStringArrayField() throws {
         let aliases = ["Food", "Transport"]
         let dto = makeDTO(fields: ["aliases": .stringArray(aliases)])
