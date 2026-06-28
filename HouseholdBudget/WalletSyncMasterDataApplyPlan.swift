@@ -49,6 +49,8 @@ enum WalletSyncMasterDataApplyAction: Equatable {
 
 enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case nonMasterDataEntity
+    case unsafeFinancialApply
+    case directApplyNotValidated
     case monthlyBudgetItemNoParent
     case householdSettingsNoModel
     case unsupportedEntity
@@ -296,6 +298,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             blockReason = .monthlyBudgetItemNoParent
         } else if entity == .householdSettings {
             blockReason = .householdSettingsNoModel
+        } else if isFinancialSideEffectSensitive(entity) {
+            blockReason = .unsafeFinancialApply
+        } else if isFullDataEntityPendingDirectApplyValidation(entity) {
+            blockReason = .directApplyNotValidated
         } else {
             blockReason = .nonMasterDataEntity
         }
@@ -306,6 +312,32 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             id: id,
             action: .blocked(reason: blockReason)
         )
+    }
+
+    private func isFinancialSideEffectSensitive(_ entity: WalletSyncRecordEntity?) -> Bool {
+        switch entity {
+        case .financialEvent,
+             .personDebtEntry,
+             .creditCardPurchase,
+             .creditCardPayment,
+             .installmentPlan:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isFullDataEntityPendingDirectApplyValidation(_ entity: WalletSyncRecordEntity?) -> Bool {
+        switch entity {
+        case .monthlyBudget,
+             .personDebt,
+             .creditCard,
+             .historicalMonthlySummary,
+             .merchantMemory:
+            return true
+        default:
+            return false
+        }
     }
 
     private func identityFromRecordName(_ recordName: String) -> WalletSyncRecordIdentity? {

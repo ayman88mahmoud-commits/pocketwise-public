@@ -910,6 +910,7 @@ struct ICloudSnapshotSyncView: View {
     @State private var debugAdvancedSyncToolsExpanded = false
     @State private var debugWalletSyncZoneState = "not checked"
     @State private var debugLastMasterDataPipelineSummary: WalletSyncMasterDataManualPipelineSummary?
+    @State private var debugLastFullDataValidationSummary: WalletSyncFullDataRecordValidationPipelineSummary?
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1145,6 +1146,11 @@ struct ICloudSnapshotSyncView: View {
                 )
 
                 statusRow(
+                    title: "Last full-data validation",
+                    value: debugLastFullDataValidationText()
+                )
+
+                statusRow(
                     title: "Financial data touched",
                     value: "no"
                 )
@@ -1167,6 +1173,14 @@ struct ICloudSnapshotSyncView: View {
                     Task { await runMasterDataManualSyncPipelineForDebug() }
                 } label: {
                     Label("Run Master Data Manual Sync Pipeline", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                Button {
+                    Task { await runFullDataRecordSyncValidationForDebug() }
+                } label: {
+                    Label("Run Full Data Record Sync Validation", systemImage: "checkmark.shield")
                 }
                 .disabled(isWorking)
                 .tint(.orange)
@@ -1952,6 +1966,36 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
+    private func runFullDataRecordSyncValidationForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let pipeline = WalletSyncFullDataRecordValidationPipeline(
+                zoneEnsurer: boundary,
+                recordSaver: boundary,
+                changedRecordFetcher: boundary,
+                tokenStore: WalletSyncStateStore(),
+                source: store,
+                localState: store,
+                inboxParser: WalletSyncInboxParser(),
+                applier: WalletSyncMasterDataApplier(store: store)
+            )
+            let summary = try await pipeline.run()
+
+            debugLastFullDataValidationSummary = summary
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugFullDataRecordSyncValidationSummaryMessage(summary)
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Full data record sync validation failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
     private func fetchChangedRecordsWithSavedTokenForDebug() async {
         let stateStore = WalletSyncStateStore()
 
@@ -2163,6 +2207,43 @@ struct ICloudSnapshotSyncView: View {
         ].joined(separator: "\n")
     }
 
+    private func debugFullDataRecordSyncValidationSummaryMessage(_ summary: WalletSyncFullDataRecordValidationPipelineSummary) -> String {
+        let zoneEnsured = summary.zoneEnsured ? "yes" : "no"
+        let usedSavedToken = summary.usedSavedToken ? "yes" : "no"
+        let tokenReturned = summary.tokenReturned ? "yes" : "no"
+        let tokenSaved = summary.tokenSaved ? "yes" : "no"
+        let moreComing = summary.moreComing ? "yes" : "no"
+
+        return [
+            "[Debug] Full data record sync validation",
+            "Zone ensured: \(zoneEnsured)",
+            "Uploaded: \(summary.uploadedCount)",
+            "Uploaded by entity: \(debugEntityCountsText(summary.uploadedCountsByEntity))",
+            "Excluded entities: \(debugEntityListText(summary.excludedEntities))",
+            "Upload cap: \(summary.uploadCap)",
+            "Upload capped count: \(summary.uploadCappedCount)",
+            "Used saved token: \(usedSavedToken)",
+            "Changed records: \(summary.changedRecordCount)",
+            "Deleted records: \(summary.deletedRecordCount)",
+            "Skipped local echo: \(summary.skippedLocalEchoCount)",
+            "Parsed valid: \(summary.parsedValidCount)",
+            "Blocked: \(summary.blockedCount)",
+            "Failed: \(summary.failedCount)",
+            "Planned creates: \(summary.plannedCreateCount)",
+            "Planned updates: \(summary.plannedUpdateCount)",
+            "Planned disabled: \(summary.plannedDisableCount)",
+            "Applied created: \(summary.appliedCreatedCount)",
+            "Applied updated: \(summary.appliedUpdatedCount)",
+            "Applied disabled: \(summary.appliedDisabledCount)",
+            "Applied blocked: \(summary.appliedBlockedCount)",
+            "Applied failed: \(summary.appliedFailedCount)",
+            "Token returned: \(tokenReturned)",
+            "Token saved: \(tokenSaved)",
+            "More coming: \(moreComing)",
+            "Financial data touched: no"
+        ].joined(separator: "\n")
+    }
+
     private func runAutoMasterDataSyncCoordinatorForDebug() async {
         if debugMasterDataCoordinator == nil {
             let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
@@ -2217,6 +2298,23 @@ struct ICloudSnapshotSyncView: View {
     private func debugLastPipelineSummaryText() -> String {
         guard let summary = debugLastMasterDataPipelineSummary else { return "none" }
         return "uploaded \(summary.uploadedCount), changed \(summary.changedRecordCount), applied \(summary.appliedCreatedCount + summary.appliedUpdatedCount + summary.appliedDisabledCount)"
+    }
+
+    private func debugLastFullDataValidationText() -> String {
+        guard let summary = debugLastFullDataValidationSummary else { return "none" }
+        return "uploaded \(summary.uploadedCount), changed \(summary.changedRecordCount), blocked \(summary.blockedCount)"
+    }
+
+    private func debugEntityCountsText(_ counts: [WalletSyncRecordEntity: Int]) -> String {
+        let parts = counts
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.key.rawValue): \($0.value)" }
+        return parts.isEmpty ? "none" : parts.joined(separator: ", ")
+    }
+
+    private func debugEntityListText(_ entities: [WalletSyncRecordEntity]) -> String {
+        let parts = entities.map(\.rawValue).sorted()
+        return parts.isEmpty ? "none" : parts.joined(separator: ", ")
     }
 
     private func debugCoordinatorDidRunText(_ result: WalletSyncMasterDataCoordinatorResult) -> String {
