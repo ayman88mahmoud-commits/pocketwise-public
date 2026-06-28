@@ -1,6 +1,38 @@
 import Foundation
 import CloudKit
 
+#if DEBUG
+enum WalletSyncDebugSyntheticMasterDataChangeFactory {
+    static let debugCategoryID = UUID(uuidString: "dddddddd-dddd-dddd-dddd-dddddddddddd")!
+    static let debugCategoryName = "DEBUG_SYNC_TEST_CATEGORY"
+    static let debugSubcategoryName = "DEBUG_SYNC_TEST_SUBCATEGORY"
+
+    static var debugCategoryRecordName: String {
+        WalletSyncRecordEntity.category.recordName(for: debugCategoryID)
+    }
+
+    static func debugCategoryDTO(updatedAt: Date = Date()) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            recordName: debugCategoryRecordName,
+            entity: .category,
+            id: debugCategoryID,
+            updatedAt: updatedAt,
+            fields: [
+                "name": .string(debugCategoryName),
+                "subcategories": .stringArray([debugSubcategoryName]),
+                "isActive": .bool(false),
+                "inactiveSubcategoryNames": .stringArray([]),
+                "createdAt": .date(updatedAt)
+            ]
+        )
+    }
+
+    static func debugCategoryRecord(updatedAt: Date = Date()) -> CKRecord {
+        WalletSyncCKRecordAdapter.ckRecord(from: debugCategoryDTO(updatedAt: updatedAt))
+    }
+}
+#endif
+
 enum WalletSyncMasterDataApplyAction: Equatable {
     case createAccount(Account)
     case updateAccount(Account)

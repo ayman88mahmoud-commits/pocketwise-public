@@ -1206,6 +1206,14 @@ struct ICloudSnapshotSyncView: View {
                     .foregroundStyle(.orange)
 
                 Button {
+                    Task { await createDebugCategorySyncChangeForDebug() }
+                } label: {
+                    Label("Create Debug Category Sync Change", systemImage: "tag")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                Button {
                     Task { await runMasterDataApplyPlanDryRunForDebug() }
                 } label: {
                     Label("Run Master Data Apply Plan Dry Run", systemImage: "checklist")
@@ -1777,6 +1785,34 @@ struct ICloudSnapshotSyncView: View {
         } catch {
             debugLastMasterDataApplyPlan = nil
             errorMessage = "[Debug] Master data apply plan dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func createDebugCategorySyncChangeForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        let record = WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        let recordName = record.recordID.recordName
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let savedRecords = try await boundary.saveRecords([record])
+            let savedRecordNames = savedRecords.map(\.recordID.recordName)
+
+            guard savedRecordNames == [recordName] else {
+                errorMessage = "[Debug] Debug Category sync change returned an unexpected record name."
+                actionMessage = nil
+                return
+            }
+
+            actionMessage = "[Debug] Created debug Category sync change: \(recordName)"
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Create debug Category sync change failed: \(error.localizedDescription)"
             actionMessage = nil
         }
     }

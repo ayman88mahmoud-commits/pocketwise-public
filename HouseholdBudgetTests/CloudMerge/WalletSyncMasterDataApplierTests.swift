@@ -75,6 +75,32 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertTrue(store.categories.contains { $0.name == "Updated" })
     }
 
+    func testApplierAppliesSyntheticCategoryWithoutMutatingAccountsOrWalletEvents() throws {
+        let dto = try WalletSyncCKRecordAdapter.dto(
+            from: WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        )
+        let category = Category(
+            id: dto.id,
+            name: WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryName,
+            subcategories: [WalletSyncDebugSyntheticMasterDataChangeFactory.debugSubcategoryName],
+            isActive: false
+        )
+        let account = makeAccount()
+        let walletEvent = makeWalletEvent()
+        let store = FakeApplyingStore(accounts: [account], walletEvents: [walletEvent])
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createCategory(category), entity: .category, id: category.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.accounts, [account])
+        XCTAssertEqual(store.walletEvents, [walletEvent])
+        XCTAssertEqual(store.categories.first?.name, WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryName)
+        XCTAssertEqual(store.categories.first?.isActive, false)
+    }
+
     func testApplierSoftDisablesCategory() {
         let id = UUID()
         let store = FakeApplyingStore(categories: [makeCategory(id: id)])

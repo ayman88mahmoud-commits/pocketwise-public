@@ -4,6 +4,51 @@ import CloudKit
 
 final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
 
+    func testSyntheticDebugCategoryRecordNameIsStable() throws {
+        let first = WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        let second = WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+
+        XCTAssertEqual(first.recordID.recordName, second.recordID.recordName)
+        XCTAssertEqual(first.recordID.recordName, WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecordName)
+    }
+
+    func testSyntheticDebugCategoryIsCategoryOnly() throws {
+        let dto = try WalletSyncCKRecordAdapter.dto(
+            from: WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        )
+
+        XCTAssertEqual(dto.entity, .category)
+        XCTAssertEqual(dto.id, WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryID)
+    }
+
+    func testSyntheticDebugCategoryContainsNoFinancialOrAccountFields() throws {
+        let dto = try WalletSyncCKRecordAdapter.dto(
+            from: WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        )
+        let forbiddenFields = [
+            "balance",
+            "amount",
+            "accountName",
+            "defaultAccountName",
+            "transactionID",
+            "financialEventID",
+            "cardID"
+        ]
+
+        for field in forbiddenFields {
+            XCTAssertNil(dto.fields[field])
+        }
+    }
+
+    func testSyntheticDebugCategoryIsInactive() throws {
+        let dto = try WalletSyncCKRecordAdapter.dto(
+            from: WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()
+        )
+
+        XCTAssertEqual(dto.fields["name"], .string(WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryName))
+        XCTAssertEqual(dto.fields["isActive"], .bool(false))
+    }
+
     func testMasterDataApplyPlanIncludesAccountCategoryAndWalletEventOnly() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         let records = [
@@ -88,6 +133,30 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.plannedCreateCount, 1)
         XCTAssertEqual(plan.plannedUpdateCount, 1)
         XCTAssertEqual(plan.plannedDisableCount, 1)
+    }
+
+    func testPlanDetectsSyntheticCategoryCreateWhenLocalIDDoesNotExist() {
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 1)
+    }
+
+    func testPlanDetectsSyntheticCategoryUpdateWhenLocalIDExists() {
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(categoryIDs: [WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryID])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryRecord()],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedUpdateCount, 1)
     }
 
     func testWalletEventCreateUpdateDeleteBehaviorIsPlannedSafely() {
