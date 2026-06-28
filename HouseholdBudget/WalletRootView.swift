@@ -4,10 +4,12 @@ import CloudKit
 struct WalletRootView: View {
 
     @EnvironmentObject private var store: WalletStore
+    @Environment(\.scenePhase) private var scenePhase
     @Binding private var pendingBankSMSImportDrafts: [BankSMSImportDraft]
     @State private var activeBankSMSImportDraft: BankSMSImportDraft?
     @State private var isAddExpenseSheetActive = false
     @State private var pausedBankSMSImportIdentities: Set<String> = []
+    @State private var autoSyncLifecycleTrigger: WalletSyncMasterDataAutoSyncLifecycleTrigger? = nil
 
     init(pendingBankSMSImportDrafts: Binding<[BankSMSImportDraft]> = .constant([])) {
         _pendingBankSMSImportDrafts = pendingBankSMSImportDrafts
@@ -114,6 +116,9 @@ struct WalletRootView: View {
                     }
             }
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            Task { await handleAutoSyncGateForScenePhase(newPhase) }
+        }
     }
 
     private var layoutDirection: LayoutDirection {
@@ -176,6 +181,35 @@ struct WalletRootView: View {
         )
         activeBankSMSImportDraft = nil
         isAddExpenseSheetActive = false
+    }
+
+    private func handleAutoSyncGateForScenePhase(_ phase: ScenePhase) async {
+        if autoSyncLifecycleTrigger == nil {
+            autoSyncLifecycleTrigger = WalletSyncMasterDataAutoSyncLifecycleTrigger(
+                gate: WalletSyncMasterDataAutoSyncGate(),
+                status: .shared
+            ) {
+                let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+                let pipeline = WalletSyncMasterDataManualPipeline(
+                    zoneEnsurer: boundary,
+                    recordSaver: boundary,
+                    changedRecordFetcher: boundary,
+                    tokenStore: WalletSyncStateStore(),
+                    source: store,
+                    localState: store,
+                    inboxParser: WalletSyncInboxParser(),
+                    applier: WalletSyncMasterDataApplier(store: store),
+                    uploadCap: WalletSyncMasterDataManualPipeline.defaultUploadCap,
+                    sampleLimit: WalletSyncMasterDataManualPipeline.defaultSampleLimit
+                )
+                return WalletSyncMasterDataCoordinator(
+                    pipeline: pipeline,
+                    availabilityChecker: WalletSyncBoundaryAvailabilityChecker(boundary: boundary)
+                )
+            }
+        }
+
+        await autoSyncLifecycleTrigger?.handleScenePhase(phase)
     }
 }
 
@@ -871,6 +905,8 @@ struct ICloudSnapshotSyncView: View {
     @State private var debugMasterDataCoordinator: WalletSyncMasterDataCoordinator? = nil
     @State private var debugCoordinatorResult: WalletSyncMasterDataCoordinatorResult? = nil
     @State private var debugAutoMasterSyncEnabled = false
+    @State private var debugAutoSyncGateEnabled = WalletSyncMasterDataAutoSyncGate().isEnabled
+    @StateObject private var debugAutoSyncLifecycleStatus = WalletSyncMasterDataAutoSyncLifecycleStatus.shared
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1335,6 +1371,47 @@ struct ICloudSnapshotSyncView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active, debugAutoMasterSyncEnabled else { return }
                 Task { await runAutoMasterDataSyncCoordinatorForDebug() }
+            }
+
+            Section("Debug — Master Data Auto Sync Gate") {
+                Text("Developer only. Master data only. No transactions, balances, budgets, credit cards, debts, recurring data, or financial events. Default off.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Toggle("Enable Production-Safe Master Data Auto Sync Gate", isOn: $debugAutoSyncGateEnabled)
+                    .tint(.orange)
+                    .onChange(of: debugAutoSyncGateEnabled) { _, newValue in
+                        let gate = WalletSyncMasterDataAutoSyncGate()
+                        if newValue { gate.enable() } else { gate.disable() }
+                    }
+
+                statusRow(
+                    title: "Auto sync gate",
+                    value: debugAutoSyncGateEnabled ? "enabled yes" : "enabled no"
+                )
+
+                statusRow(
+                    title: "Last lifecycle trigger attempted",
+                    value: debugAutoSyncLifecycleStatus.lastLifecycleTriggerAttempted ? "yes" : "no"
+                )
+
+                if let result = debugAutoSyncLifecycleStatus.lastCoordinatorResult {
+                    statusRow(
+                        title: "Last coordinator result",
+                        value: result.didRun ? "ran" : "skipped"
+                    )
+
+                    if let reason = result.skipReason {
+                        statusRow(
+                            title: "Skipped reason",
+                            value: debugSafeAutoSyncGateSkipReasonText(reason),
+                            isError: true
+                        )
+                    }
+                }
+            }
+            .onAppear {
+                debugAutoSyncGateEnabled = WalletSyncMasterDataAutoSyncGate().isEnabled
             }
             #endif
         }
@@ -2176,6 +2253,16 @@ struct ICloudSnapshotSyncView: View {
             ].joined(separator: "\n")
         case .skipped(let reason):
             return "[Debug] Auto master data sync coordinator — skipped: \(reason.shortDescription)"
+        }
+    }
+
+    private func debugSafeAutoSyncGateSkipReasonText(_ reason: WalletSyncMasterDataCoordinatorSkipReason) -> String {
+        switch reason {
+        case .rateLimited: return "rateLimited"
+        case .alreadyRunning: return "alreadyRunning"
+        case .iCloudUnavailable: return "iCloudUnavailable"
+        case .disabled: return "disabled"
+        case .error: return "error"
         }
     }
 
