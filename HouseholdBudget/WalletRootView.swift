@@ -854,6 +854,7 @@ struct SettingsView: View {
 struct ICloudSnapshotSyncView: View {
 
     @EnvironmentObject private var store: WalletStore
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var cloudSnapshot: WalletDataSnapshot?
     @State private var noBackupFound = false
@@ -867,6 +868,9 @@ struct ICloudSnapshotSyncView: View {
     @State private var debugLastReturnedChangeTokenData: Data?
     @State private var debugSavedChangeTokenExists = WalletSyncStateStore().hasWalletSyncZoneChangeToken()
     @State private var debugLastMasterDataApplyPlan: WalletSyncMasterDataApplyPlanSummary?
+    @State private var debugMasterDataCoordinator: WalletSyncMasterDataCoordinator? = nil
+    @State private var debugCoordinatorResult: WalletSyncMasterDataCoordinatorResult? = nil
+    @State private var debugAutoMasterSyncEnabled = false
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1303,6 +1307,34 @@ struct ICloudSnapshotSyncView: View {
                 }
                 .disabled(isWorking)
                 .tint(.orange)
+            }
+
+            Section("Debug — Auto Master Data Sync Coordinator") {
+                Text("Developer only. Master data only. No transactions, balances, budgets, credit cards, debts, recurring data, or financial events.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Toggle("Enable Auto Foreground Sync (Debug)", isOn: $debugAutoMasterSyncEnabled)
+                    .tint(.orange)
+
+                Button {
+                    Task { await runAutoMasterDataSyncCoordinatorForDebug() }
+                } label: {
+                    Label("Run Auto Master Data Sync Coordinator Once", systemImage: "arrow.triangle.2.circlepath.doc")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                if let result = debugCoordinatorResult {
+                    let statusColor: Color = result.didRun ? .secondary : .orange
+                    Text(debugCoordinatorDidRunText(result))
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active, debugAutoMasterSyncEnabled else { return }
+                Task { await runAutoMasterDataSyncCoordinatorForDebug() }
             }
             #endif
         }
@@ -2078,6 +2110,73 @@ struct ICloudSnapshotSyncView: View {
             "More coming: \(moreComing)",
             "Sample record names: \(sampleText)"
         ].joined(separator: "\n")
+    }
+
+    private func runAutoMasterDataSyncCoordinatorForDebug() async {
+        if debugMasterDataCoordinator == nil {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let pipeline = WalletSyncMasterDataManualPipeline(
+                zoneEnsurer: boundary,
+                recordSaver: boundary,
+                changedRecordFetcher: boundary,
+                tokenStore: WalletSyncStateStore(),
+                source: store,
+                localState: store,
+                inboxParser: WalletSyncInboxParser(),
+                applier: WalletSyncMasterDataApplier(store: store),
+                uploadCap: WalletSyncMasterDataManualPipeline.defaultUploadCap,
+                sampleLimit: WalletSyncMasterDataManualPipeline.defaultSampleLimit
+            )
+            debugMasterDataCoordinator = WalletSyncMasterDataCoordinator(
+                pipeline: pipeline,
+                availabilityChecker: WalletSyncBoundaryAvailabilityChecker(boundary: boundary),
+                minimumInterval: WalletSyncMasterDataCoordinator.debugMinimumInterval
+            )
+        }
+
+        guard let coordinator = debugMasterDataCoordinator else { return }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        let result = await coordinator.runIfAllowed()
+        debugCoordinatorResult = result
+        refreshSavedChangeTokenStatusForDebug()
+        actionMessage = debugCoordinatorResultMessage(result)
+        errorMessage = nil
+    }
+
+    private func debugCoordinatorDidRunText(_ result: WalletSyncMasterDataCoordinatorResult) -> String {
+        result.didRun ? "Last: ran" : "Last: skipped (\(result.skipReason?.shortDescription ?? "unknown"))"
+    }
+
+    private func debugCoordinatorResultMessage(_ result: WalletSyncMasterDataCoordinatorResult) -> String {
+        switch result {
+        case .ran(let summary):
+            let zoneEnsured = summary.zoneEnsured ? "yes" : "no"
+            let tokenReturned = summary.tokenReturned ? "yes" : "no"
+            let tokenSaved = summary.tokenSaved ? "yes" : "no"
+            let moreComing = summary.moreComing ? "yes" : "no"
+            return [
+                "[Debug] Auto master data sync coordinator — ran",
+                "Zone ensured: \(zoneEnsured)",
+                "Uploaded: \(summary.uploadedCount)",
+                "Changed: \(summary.changedRecordCount)",
+                "Skipped echo: \(summary.skippedLocalEchoCount)",
+                "Parsed valid: \(summary.parsedValidCount)",
+                "Planned creates: \(summary.plannedCreateCount)",
+                "Planned updates: \(summary.plannedUpdateCount)",
+                "Applied created: \(summary.appliedCreatedCount)",
+                "Applied updated: \(summary.appliedUpdatedCount)",
+                "Token returned: \(tokenReturned)",
+                "Token saved: \(tokenSaved)",
+                "More coming: \(moreComing)"
+            ].joined(separator: "\n")
+        case .skipped(let reason):
+            return "[Debug] Auto master data sync coordinator — skipped: \(reason.shortDescription)"
+        }
     }
 
     private func fetchSavedAccountSyncRecordForDebug() async {
