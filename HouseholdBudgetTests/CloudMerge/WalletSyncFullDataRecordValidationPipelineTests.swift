@@ -136,7 +136,8 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         let store = FakeFullDataStore(
             accounts: [makeAccount()],
             categories: [makeCategory()],
-            walletEvents: [makeWalletEvent()]
+            walletEvents: [makeWalletEvent()],
+            merchantMemories: [makeMerchantMemory()]
         )
         let records = [
             WalletSyncRecordMappers.dto(for: makeAccount()),
@@ -148,8 +149,120 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
             .makePlan(changedRecords: records, deletedRecordNames: [])
 
-        XCTAssertEqual(plan.plannedUpdateCount, 3)
-        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertEqual(plan.plannedUpdateCount, 4)
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 0)
+    }
+
+    func testMerchantMemoryCreateAndUpdateApplyIsSafe() async throws {
+        let existing = makeMerchantMemory(id: deterministicID(index: 200), usageCount: 1)
+        let updated = makeMerchantMemory(id: existing.id, usageCount: 2)
+        let created = makeMerchantMemory(id: deterministicID(index: 201), usageCount: 3)
+        let records = [updated, created]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(merchantMemories: [existing])
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: WalletSyncMasterDataApplier(store: store))
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.merchantMemories.count, 2)
+        XCTAssertEqual(store.merchantMemories.first { $0.id == existing.id }?.usageCount, 2)
+        XCTAssertEqual(store.financialEventMutationCount, 0)
+    }
+
+    func testHistoricalMonthlySummaryCreateAndUpdateApplyIsSafe() async throws {
+        let existing = makeHistoricalMonthlySummaryEntry(id: deterministicID(index: 210), amount: 10)
+        let updated = makeHistoricalMonthlySummaryEntry(id: existing.id, amount: 20)
+        let created = makeHistoricalMonthlySummaryEntry(id: deterministicID(index: 211), amount: 30)
+        let records = [updated, created]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(historicalMonthlySummaries: [existing])
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: WalletSyncMasterDataApplier(store: store))
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.historicalMonthlySummaries.count, 2)
+        XCTAssertEqual(store.historicalMonthlySummaries.first { $0.id == existing.id }?.amount, 20)
+        XCTAssertEqual(store.balanceRecalculationCount, 0)
+    }
+
+    func testPersonDebtCreateAndUpdateApplyIsSafeWithoutDebtEntryApply() async throws {
+        let existing = makePersonDebt(id: deterministicID(index: 220), originalAmount: 10)
+        let updated = makePersonDebt(id: existing.id, originalAmount: 20)
+        let created = makePersonDebt(id: deterministicID(index: 221), originalAmount: 30)
+        let records = [updated, created]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(personDebts: [existing])
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: WalletSyncMasterDataApplier(store: store))
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.personDebts.count, 2)
+        XCTAssertEqual(store.personDebts.first { $0.id == existing.id }?.originalAmount, 20)
+        XCTAssertEqual(store.personDebtEntryMutationCount, 0)
+    }
+
+    func testCreditCardCreateAndUpdateApplyIsSafeWithoutPaymentApply() async throws {
+        let existing = makeCreditCard(id: deterministicID(index: 230), creditLimit: 1000)
+        let updated = makeCreditCard(id: existing.id, creditLimit: 2000)
+        let created = makeCreditCard(id: deterministicID(index: 231), creditLimit: 3000)
+        let records = [updated, created]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(creditCards: [existing])
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: WalletSyncMasterDataApplier(store: store))
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.creditCards.count, 2)
+        XCTAssertEqual(store.creditCards.first { $0.id == existing.id }?.creditLimit, 2000)
+        XCTAssertEqual(store.creditCardPaymentMutationCount, 0)
+        XCTAssertEqual(store.balanceRecalculationCount, 0)
+    }
+
+    func testInstallmentPlanCreateAndUpdateApplyIsSafeWithoutGeneratedEvents() async throws {
+        let existing = makeInstallmentPlan(id: deterministicID(index: 240), totalAmount: 100)
+        let updated = makeInstallmentPlan(id: existing.id, totalAmount: 200)
+        let created = makeInstallmentPlan(id: deterministicID(index: 241), totalAmount: 300)
+        let records = [updated, created]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(installmentPlans: [existing])
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: WalletSyncMasterDataApplier(store: store))
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.installmentPlans.count, 2)
+        XCTAssertEqual(store.installmentPlans.first { $0.id == existing.id }?.totalAmount, 200)
+        XCTAssertEqual(store.financialEventMutationCount, 0)
     }
 
     func testFullDataValidationDoesNotCallFinancialPostingOrRecalculateBalances() async throws {
@@ -270,6 +383,23 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
             if case .blocked(let reason) = $0.action { return reason == .householdSettingsNoModel }
             return false
         })
+    }
+
+    func testFinancialPaymentPurchaseDebtEntryAndMonthlyBudgetRemainBlocked() {
+        let records = [
+            WalletSyncRecordMappers.dto(for: makeFinancialEvent()),
+            WalletSyncRecordMappers.dto(for: makeCreditCardPayment()),
+            WalletSyncRecordMappers.dto(for: makeCreditCardPurchase()),
+            WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
+            WalletSyncRecordMappers.dto(for: makeMonthlyBudget())
+        ].map(WalletSyncCKRecordAdapter.ckRecord(from:))
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
+            .makePlan(changedRecords: records, deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 5)
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedUpdateCount, 0)
     }
 
     func testLaterBatchFailureIsReportedByThrowingWithoutFetchOrTokenSave() async throws {
@@ -544,6 +674,11 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     func containsAccount(id: UUID) -> Bool { accounts.contains { $0.id == id } }
     func containsCategory(id: UUID) -> Bool { categories.contains { $0.id == id } }
     func containsWalletEvent(id: UUID) -> Bool { walletEvents.contains { $0.id == id } }
+    func containsMerchantMemory(id: UUID) -> Bool { merchantMemories.contains { $0.id == id } }
+    func containsHistoricalMonthlySummary(id: UUID) -> Bool { historicalMonthlySummaries.contains { $0.id == id } }
+    func containsPersonDebt(id: UUID) -> Bool { personDebts.contains { $0.id == id } }
+    func containsCreditCard(id: UUID) -> Bool { creditCards.contains { $0.id == id } }
+    func containsInstallmentPlan(id: UUID) -> Bool { installmentPlans.contains { $0.id == id } }
 }
 
 private func makeAccount(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, balance: Double = 0) -> Account {
@@ -599,8 +734,13 @@ private func makeMonthlyBudgetItem() -> WalletMonthlyBudgetItem {
     WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
 }
 
-private func makePersonDebt() -> PersonDebt {
-    PersonDebt(personName: "Person", kind: .owedToMe, originalAmount: 300)
+private func makePersonDebt(
+    id: UUID = UUID(),
+    originalAmount: Double = 300
+) -> PersonDebt {
+    var debt = PersonDebt(personName: "Person", kind: .owedToMe, originalAmount: originalAmount)
+    debt.id = id
+    return debt
 }
 
 private func makePersonDebtEntry() -> PersonDebtEntry {
@@ -613,12 +753,16 @@ private func makePersonDebtEntry() -> PersonDebtEntry {
     )
 }
 
-private func makeCreditCard() -> CreditCard {
+private func makeCreditCard(
+    id: UUID = UUID(),
+    creditLimit: Double = 10_000
+) -> CreditCard {
     CreditCard(
+        id: id,
         name: "Visa",
         bankName: "Bank",
         cardNetwork: .visa,
-        creditLimit: 10_000,
+        creditLimit: creditLimit,
         statementClosingDay: 25,
         paymentDueDay: 10
     )
@@ -652,10 +796,14 @@ private func makeCreditCardPayment() -> CreditCardPayment {
     )
 }
 
-private func makeInstallmentPlan() -> InstallmentPlan {
+private func makeInstallmentPlan(
+    id: UUID = UUID(),
+    totalAmount: Double = 1_200
+) -> InstallmentPlan {
     InstallmentPlan(
+        id: id,
         purchaseName: "Phone",
-        totalAmount: 1_200,
+        totalAmount: totalAmount,
         installmentCount: 12,
         firstDueDate: Date(timeIntervalSince1970: 1_800_000_000),
         categoryName: "Electronics",
@@ -663,22 +811,31 @@ private func makeInstallmentPlan() -> InstallmentPlan {
     )
 }
 
-private func makeHistoricalMonthlySummaryEntry() -> HistoricalMonthlySummaryEntry {
+private func makeHistoricalMonthlySummaryEntry(
+    id: UUID = UUID(),
+    amount: Double = 300
+) -> HistoricalMonthlySummaryEntry {
     HistoricalMonthlySummaryEntry(
+        id: id,
         year: 2025,
         month: 12,
         categoryName: "Food",
         subCategoryName: "Groceries",
-        amount: 300
+        amount: amount
     )
 }
 
-private func makeMerchantMemory() -> MerchantMemory {
-    MerchantMemory(
+private func makeMerchantMemory(
+    id: UUID = UUID(),
+    usageCount: Int = 1
+) -> MerchantMemory {
+    var memory = MerchantMemory(
         merchantName: "Merchant",
         defaultCategoryName: "Food",
         defaultSubCategoryName: "Groceries",
         defaultAccountName: nil,
-        usageCount: 1
+        usageCount: usageCount
     )
+    memory.id = id
+    return memory
 }

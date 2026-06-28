@@ -4,6 +4,19 @@ protocol WalletSyncMergePlanLocalStateReading {
     func containsAccount(id: UUID) -> Bool
     func containsCategory(id: UUID) -> Bool
     func containsWalletEvent(id: UUID) -> Bool
+    func containsMerchantMemory(id: UUID) -> Bool
+    func containsHistoricalMonthlySummary(id: UUID) -> Bool
+    func containsPersonDebt(id: UUID) -> Bool
+    func containsCreditCard(id: UUID) -> Bool
+    func containsInstallmentPlan(id: UUID) -> Bool
+}
+
+extension WalletSyncMergePlanLocalStateReading {
+    func containsMerchantMemory(id: UUID) -> Bool { false }
+    func containsHistoricalMonthlySummary(id: UUID) -> Bool { false }
+    func containsPersonDebt(id: UUID) -> Bool { false }
+    func containsCreditCard(id: UUID) -> Bool { false }
+    func containsInstallmentPlan(id: UUID) -> Bool { false }
 }
 
 extension WalletStore: WalletSyncMergePlanLocalStateReading {
@@ -17,6 +30,26 @@ extension WalletStore: WalletSyncMergePlanLocalStateReading {
 
     func containsWalletEvent(id: UUID) -> Bool {
         walletEvents.contains { $0.id == id }
+    }
+
+    func containsMerchantMemory(id: UUID) -> Bool {
+        merchantMemories.contains { $0.id == id }
+    }
+
+    func containsHistoricalMonthlySummary(id: UUID) -> Bool {
+        historicalMonthlySummaries.contains { $0.id == id }
+    }
+
+    func containsPersonDebt(id: UUID) -> Bool {
+        personDebts.contains { $0.id == id }
+    }
+
+    func containsCreditCard(id: UUID) -> Bool {
+        creditCards.contains { $0.id == id }
+    }
+
+    func containsInstallmentPlan(id: UUID) -> Bool {
+        installmentPlans.contains { $0.id == id }
     }
 }
 
@@ -100,6 +133,16 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsCategory(id: id))
         case .walletEvent:
             return planMasterDataItem(item, exists: localState.containsWalletEvent(id: id))
+        case .merchantMemory:
+            return planMasterDataItem(item, exists: localState.containsMerchantMemory(id: id))
+        case .historicalMonthlySummary:
+            return planMasterDataItem(item, exists: localState.containsHistoricalMonthlySummary(id: id))
+        case .personDebt:
+            return planMasterDataItem(item, exists: localState.containsPersonDebt(id: id))
+        case .creditCard:
+            return planMasterDataItem(item, exists: localState.containsCreditCard(id: id))
+        case .installmentPlan:
+            return planMasterDataItem(item, exists: localState.containsInstallmentPlan(id: id))
         case .monthlyBudgetItem:
             return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
         case .householdSettings:

@@ -43,6 +43,16 @@ enum WalletSyncMasterDataApplyAction: Equatable {
     case createWalletEvent(WalletEvent)
     case updateWalletEvent(WalletEvent)
     case deleteWalletEventSoftOrDisableOnly(id: UUID)
+    case createMerchantMemory(MerchantMemory)
+    case updateMerchantMemory(MerchantMemory)
+    case createHistoricalMonthlySummary(HistoricalMonthlySummaryEntry)
+    case updateHistoricalMonthlySummary(HistoricalMonthlySummaryEntry)
+    case createPersonDebt(PersonDebt)
+    case updatePersonDebt(PersonDebt)
+    case createCreditCard(CreditCard)
+    case updateCreditCard(CreditCard)
+    case createInstallmentPlan(InstallmentPlan)
+    case updateInstallmentPlan(InstallmentPlan)
     case blocked(reason: WalletSyncMasterDataApplyBlockReason)
     case failed
 }
@@ -73,6 +83,11 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .createAccount = $0.action { return true }
             if case .createCategory = $0.action { return true }
             if case .createWalletEvent = $0.action { return true }
+            if case .createMerchantMemory = $0.action { return true }
+            if case .createHistoricalMonthlySummary = $0.action { return true }
+            if case .createPersonDebt = $0.action { return true }
+            if case .createCreditCard = $0.action { return true }
+            if case .createInstallmentPlan = $0.action { return true }
             return false
         }.count
     }
@@ -82,6 +97,11 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .updateAccount = $0.action { return true }
             if case .updateCategory = $0.action { return true }
             if case .updateWalletEvent = $0.action { return true }
+            if case .updateMerchantMemory = $0.action { return true }
+            if case .updateHistoricalMonthlySummary = $0.action { return true }
+            if case .updatePersonDebt = $0.action { return true }
+            if case .updateCreditCard = $0.action { return true }
+            if case .updateInstallmentPlan = $0.action { return true }
             return false
         }.count
     }
@@ -216,6 +236,56 @@ struct WalletSyncMasterDataApplyPlanBuilder {
                 id: dto.id,
                 action: localState.containsWalletEvent(id: dto.id) ? .updateWalletEvent(walletEvent) : .createWalletEvent(walletEvent)
             )
+        case .merchantMemory:
+            guard let memory = merchantMemory(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .merchantMemory,
+                id: dto.id,
+                action: localState.containsMerchantMemory(id: dto.id) ? .updateMerchantMemory(memory) : .createMerchantMemory(memory)
+            )
+        case .historicalMonthlySummary:
+            guard let entry = historicalMonthlySummary(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .historicalMonthlySummary,
+                id: dto.id,
+                action: localState.containsHistoricalMonthlySummary(id: dto.id) ? .updateHistoricalMonthlySummary(entry) : .createHistoricalMonthlySummary(entry)
+            )
+        case .personDebt:
+            guard let debt = personDebt(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .personDebt,
+                id: dto.id,
+                action: localState.containsPersonDebt(id: dto.id) ? .updatePersonDebt(debt) : .createPersonDebt(debt)
+            )
+        case .creditCard:
+            guard let card = creditCard(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .creditCard,
+                id: dto.id,
+                action: localState.containsCreditCard(id: dto.id) ? .updateCreditCard(card) : .createCreditCard(card)
+            )
+        case .installmentPlan:
+            guard let plan = installmentPlan(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .installmentPlan,
+                id: dto.id,
+                action: localState.containsInstallmentPlan(id: dto.id) ? .updateInstallmentPlan(plan) : .createInstallmentPlan(plan)
+            )
         default:
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id)
         }
@@ -285,6 +355,146 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         return walletEvent
     }
 
+    private func merchantMemory(from dto: WalletSyncRecordDTO) -> MerchantMemory? {
+        guard let merchantName = stringField("merchantName", in: dto),
+              let defaultCategoryName = stringField("defaultCategoryName", in: dto),
+              let defaultSubCategoryName = stringField("defaultSubCategoryName", in: dto),
+              let defaultTypeRawValue = stringField("defaultType", in: dto),
+              let defaultType = FinancialEventType(rawValue: defaultTypeRawValue) else {
+            return nil
+        }
+
+        var memory = MerchantMemory(
+            merchantName: merchantName,
+            defaultCategoryName: defaultCategoryName,
+            defaultSubCategoryName: defaultSubCategoryName,
+            defaultAccountName: nullableStringField("defaultAccountName", in: dto),
+            usageCount: intField("usageCount", in: dto) ?? 0
+        )
+        memory.id = dto.id
+        memory.aliases = stringArrayField("aliases", in: dto) ?? []
+        memory.defaultType = defaultType
+        memory.lastUsedAt = nullableDateField("lastUsedAt", in: dto)
+        memory.isActive = boolField("isActive", in: dto) ?? true
+        memory.createdAt = dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date()
+        memory.updatedAt = dto.updatedAt ?? Date()
+        memory.isDeleted = false
+        memory.deletedAt = nil
+        return memory
+    }
+
+    private func historicalMonthlySummary(from dto: WalletSyncRecordDTO) -> HistoricalMonthlySummaryEntry? {
+        guard let year = intField("year", in: dto),
+              let month = intField("month", in: dto),
+              let categoryName = stringField("categoryName", in: dto),
+              let subCategoryName = stringField("subCategoryName", in: dto),
+              let amount = doubleField("amount", in: dto) else {
+            return nil
+        }
+
+        return HistoricalMonthlySummaryEntry(
+            id: dto.id,
+            year: year,
+            month: month,
+            categoryName: categoryName,
+            subCategoryName: subCategoryName,
+            amount: amount,
+            note: nullableStringField("note", in: dto),
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
+    private func personDebt(from dto: WalletSyncRecordDTO) -> PersonDebt? {
+        guard let personName = stringField("personName", in: dto),
+              let kindRawValue = stringField("kind", in: dto),
+              let kind = PersonDebtKind(rawValue: kindRawValue),
+              let originalAmount = doubleField("originalAmount", in: dto) else {
+            return nil
+        }
+
+        var debt = PersonDebt(
+            personName: personName,
+            kind: kind,
+            originalAmount: originalAmount
+        )
+        debt.id = dto.id
+        debt.note = nullableStringField("note", in: dto)
+        debt.createdAt = dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date()
+        debt.updatedAt = dto.updatedAt ?? Date()
+        debt.dueDate = nullableDateField("dueDate", in: dto)
+        debt.isArchived = boolField("isArchived", in: dto) ?? false
+        debt.isDeleted = false
+        debt.deletedAt = nil
+        return debt
+    }
+
+    private func creditCard(from dto: WalletSyncRecordDTO) -> CreditCard? {
+        guard let name = stringField("name", in: dto),
+              let bankName = stringField("bankName", in: dto),
+              let cardNetworkRawValue = stringField("cardNetwork", in: dto),
+              let cardNetwork = CreditCardNetwork(rawValue: cardNetworkRawValue),
+              let creditLimit = doubleField("creditLimit", in: dto),
+              let openingOutstandingBalance = doubleField("openingOutstandingBalance", in: dto),
+              let statementClosingDay = intField("statementClosingDay", in: dto),
+              let paymentDueDay = intField("paymentDueDay", in: dto) else {
+            return nil
+        }
+
+        return CreditCard(
+            id: dto.id,
+            name: name,
+            bankName: bankName,
+            lastFourDigits: nullableStringField("lastFourDigits", in: dto),
+            cardNetwork: cardNetwork,
+            appearanceColor: providerAppearanceColorField("appearanceColor", in: dto),
+            creditLimit: creditLimit,
+            openingOutstandingBalance: openingOutstandingBalance,
+            openingOutstandingDate: nullableDateField("openingOutstandingDate", in: dto),
+            statementClosingDay: statementClosingDay,
+            paymentDueDay: paymentDueDay,
+            defaultPaymentAccountName: nullableStringField("defaultPaymentAccountName", in: dto),
+            isActive: boolField("isActive", in: dto) ?? true,
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            note: nullableStringField("note", in: dto),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
+    private func installmentPlan(from dto: WalletSyncRecordDTO) -> InstallmentPlan? {
+        guard let purchaseName = stringField("purchaseName", in: dto),
+              let totalAmount = doubleField("totalAmount", in: dto),
+              let installmentCount = intField("installmentCount", in: dto),
+              let firstDueDate = dateField("firstDueDate", in: dto),
+              let categoryName = stringField("categoryName", in: dto),
+              let subCategoryName = stringField("subCategoryName", in: dto),
+              let paymentMethodName = stringField("paymentMethodName", in: dto) else {
+            return nil
+        }
+
+        return InstallmentPlan(
+            id: dto.id,
+            purchaseName: purchaseName,
+            totalAmount: totalAmount,
+            installmentCount: installmentCount,
+            firstDueDate: firstDueDate,
+            accountName: nullableStringField("accountName", in: dto),
+            categoryName: categoryName,
+            subCategoryName: subCategoryName,
+            paymentMethodName: paymentMethodName,
+            linkedCreditCardID: nullableUUIDField("linkedCreditCardID", in: dto),
+            note: nullableStringField("note", in: dto),
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
     private func blockedItem(
         recordName: String,
         entity: WalletSyncRecordEntity?,
@@ -319,8 +529,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         case .financialEvent,
              .personDebtEntry,
              .creditCardPurchase,
-             .creditCardPayment,
-             .installmentPlan:
+             .creditCardPayment:
             return true
         default:
             return false
@@ -329,11 +538,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func isFullDataEntityPendingDirectApplyValidation(_ entity: WalletSyncRecordEntity?) -> Bool {
         switch entity {
-        case .monthlyBudget,
-             .personDebt,
-             .creditCard,
-             .historicalMonthlySummary,
-             .merchantMemory:
+        case .monthlyBudget:
             return true
         default:
             return false
@@ -376,6 +581,38 @@ struct WalletSyncMasterDataApplyPlanBuilder {
     private func dateField(_ name: String, in dto: WalletSyncRecordDTO) -> Date? {
         guard case .some(.date(let value)) = dto.fields[name] else { return nil }
         return value
+    }
+
+    private func nullableDateField(_ name: String, in dto: WalletSyncRecordDTO) -> Date? {
+        switch dto.fields[name] {
+        case .date(let value):
+            return value
+        case .null:
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func doubleField(_ name: String, in dto: WalletSyncRecordDTO) -> Double? {
+        guard case .some(.double(let value)) = dto.fields[name] else { return nil }
+        return value
+    }
+
+    private func intField(_ name: String, in dto: WalletSyncRecordDTO) -> Int? {
+        guard case .some(.int(let value)) = dto.fields[name] else { return nil }
+        return value
+    }
+
+    private func nullableUUIDField(_ name: String, in dto: WalletSyncRecordDTO) -> UUID? {
+        switch dto.fields[name] {
+        case .uuid(let value):
+            return value
+        case .null:
+            return nil
+        default:
+            return nil
+        }
     }
 
     private func stringArrayField(_ name: String, in dto: WalletSyncRecordDTO) -> [String]? {

@@ -474,6 +474,11 @@ final class WalletSyncMasterDataManualPipelineTests: XCTestCase {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
         var walletEvents: [WalletEvent]
+        var merchantMemories: [MerchantMemory] = []
+        var historicalMonthlySummaries: [HistoricalMonthlySummaryEntry] = []
+        var personDebts: [PersonDebt] = []
+        var creditCards: [CreditCard] = []
+        var installmentPlans: [InstallmentPlan] = []
 
         var financialEventMutationCount = 0
         var budgetMutationCount = 0

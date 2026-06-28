@@ -227,6 +227,11 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         var accounts: [Account]
         var categories: [Category]
         var walletEvents: [WalletEvent]
+        var merchantMemories: [MerchantMemory] = []
+        var historicalMonthlySummaries: [HistoricalMonthlySummaryEntry] = []
+        var personDebts: [PersonDebt] = []
+        var creditCards: [CreditCard] = []
+        var installmentPlans: [InstallmentPlan] = []
 
         var financialEventMutationCount = 0
         var creditCardMutationCount = 0

@@ -4,6 +4,11 @@ protocol WalletSyncMasterDataApplyingStore: AnyObject {
     var accounts: [Account] { get set }
     var categories: [Category] { get set }
     var walletEvents: [WalletEvent] { get set }
+    var merchantMemories: [MerchantMemory] { get set }
+    var historicalMonthlySummaries: [HistoricalMonthlySummaryEntry] { get set }
+    var personDebts: [PersonDebt] { get set }
+    var creditCards: [CreditCard] { get set }
+    var installmentPlans: [InstallmentPlan] { get set }
 }
 
 extension WalletStore: WalletSyncMasterDataApplyingStore {}
@@ -48,6 +53,26 @@ struct WalletSyncMasterDataApplier {
                 applyUpdateWalletEvent(walletEvent, result: &result)
             case .deleteWalletEventSoftOrDisableOnly(let id):
                 applyDisableWalletEvent(id: id, result: &result)
+            case .createMerchantMemory(let memory):
+                applyCreateMerchantMemory(memory, result: &result)
+            case .updateMerchantMemory(let memory):
+                applyUpdateMerchantMemory(memory, result: &result)
+            case .createHistoricalMonthlySummary(let entry):
+                applyCreateHistoricalMonthlySummary(entry, result: &result)
+            case .updateHistoricalMonthlySummary(let entry):
+                applyUpdateHistoricalMonthlySummary(entry, result: &result)
+            case .createPersonDebt(let debt):
+                applyCreatePersonDebt(debt, result: &result)
+            case .updatePersonDebt(let debt):
+                applyUpdatePersonDebt(debt, result: &result)
+            case .createCreditCard(let card):
+                applyCreateCreditCard(card, result: &result)
+            case .updateCreditCard(let card):
+                applyUpdateCreditCard(card, result: &result)
+            case .createInstallmentPlan(let plan):
+                applyCreateInstallmentPlan(plan, result: &result)
+            case .updateInstallmentPlan(let plan):
+                applyUpdateInstallmentPlan(plan, result: &result)
             case .blocked:
                 result.blockedCount += 1
             case .failed:
@@ -179,5 +204,105 @@ struct WalletSyncMasterDataApplier {
         store.walletEvents[index].isDeleted = true
         store.walletEvents[index].deletedAt = store.walletEvents[index].deletedAt ?? Date()
         result.disabledCount += 1
+    }
+
+    private func applyCreateMerchantMemory(_ memory: MerchantMemory, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.merchantMemories.contains(where: { $0.id == memory.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.merchantMemories.append(memory)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateMerchantMemory(_ remote: MerchantMemory, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.merchantMemories.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.merchantMemories[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateHistoricalMonthlySummary(_ entry: HistoricalMonthlySummaryEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.historicalMonthlySummaries.contains(where: { $0.id == entry.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.historicalMonthlySummaries.append(entry)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateHistoricalMonthlySummary(_ remote: HistoricalMonthlySummaryEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.historicalMonthlySummaries.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.historicalMonthlySummaries[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreatePersonDebt(_ debt: PersonDebt, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.personDebts.contains(where: { $0.id == debt.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.personDebts.append(debt)
+        result.createdCount += 1
+    }
+
+    private func applyUpdatePersonDebt(_ remote: PersonDebt, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.personDebts.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.personDebts[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateCreditCard(_ card: CreditCard, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.creditCards.contains(where: { $0.id == card.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCards.append(card)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateCreditCard(_ remote: CreditCard, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.creditCards.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCards[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateInstallmentPlan(_ plan: InstallmentPlan, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.installmentPlans.contains(where: { $0.id == plan.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.installmentPlans.append(plan)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateInstallmentPlan(_ remote: InstallmentPlan, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.installmentPlans.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.installmentPlans[index] = remote
+        result.updatedCount += 1
     }
 }
