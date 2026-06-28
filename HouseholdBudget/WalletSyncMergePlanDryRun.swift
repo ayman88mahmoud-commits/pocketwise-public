@@ -2,6 +2,7 @@ import Foundation
 
 protocol WalletSyncMergePlanLocalStateReading {
     func containsAccount(id: UUID) -> Bool
+    func accountUpdatedAt(id: UUID) -> Date?
     func containsCategory(id: UUID) -> Bool
     func containsWalletEvent(id: UUID) -> Bool
     func containsMerchantMemory(id: UUID) -> Bool
@@ -24,6 +25,7 @@ protocol WalletSyncMergePlanLocalStateReading {
 }
 
 extension WalletSyncMergePlanLocalStateReading {
+    func accountUpdatedAt(id: UUID) -> Date? { nil }
     func containsMerchantMemory(id: UUID) -> Bool { false }
     func containsHistoricalMonthlySummary(id: UUID) -> Bool { false }
     func containsPersonDebt(id: UUID) -> Bool { false }
@@ -46,6 +48,10 @@ extension WalletSyncMergePlanLocalStateReading {
 extension WalletStore: WalletSyncMergePlanLocalStateReading {
     func containsAccount(id: UUID) -> Bool {
         accounts.contains { $0.id == id }
+    }
+
+    func accountUpdatedAt(id: UUID) -> Date? {
+        accounts.first { $0.id == id }?.updatedAt
     }
 
     func containsCategory(id: UUID) -> Bool {

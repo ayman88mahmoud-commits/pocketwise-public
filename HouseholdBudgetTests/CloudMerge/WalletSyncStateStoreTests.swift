@@ -3,6 +3,10 @@ import XCTest
 
 final class WalletSyncStateStoreTests: XCTestCase {
 
+    func testRecordLevelSyncZoneNameUsesCleanV2Zone() {
+        XCTAssertEqual(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName, "WalletSyncZoneV2")
+    }
+
     func testInitialStateHasNoToken() {
         let keyValueStore = FakeKeyValueStore()
         let store = WalletSyncStateStore(keyValueStore: keyValueStore)
@@ -71,6 +75,11 @@ final class WalletSyncStateStoreTests: XCTestCase {
             Set(keyValueStore.touchedKeys),
             [WalletSyncStateStore.walletSyncZoneChangeTokenKey]
         )
+    }
+
+    func testTokenKeyUsesCurrentZoneNameAndDoesNotReuseLegacyZoneKey() {
+        XCTAssertTrue(WalletSyncStateStore.walletSyncZoneChangeTokenKey.contains(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName))
+        XCTAssertNotEqual(WalletSyncStateStore.walletSyncZoneChangeTokenKey, "WalletSyncState.WalletSyncZone.changeTokenData")
     }
 
     func testStoreDoesNotReferenceWalletStoreOrICloudSyncService() {

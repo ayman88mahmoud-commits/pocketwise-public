@@ -145,9 +145,9 @@ struct WalletSyncMasterDataApplier {
             return
         }
 
-        let existingBalance = store.accounts[index].balance
         store.accounts[index].name = remote.name
         store.accounts[index].type = remote.type
+        store.accounts[index].balance = remote.balance
         store.accounts[index].isActive = remote.isActive
         store.accounts[index].recognitionAliases = remote.recognitionAliases
         store.accounts[index].recognitionCardEndings = remote.recognitionCardEndings
@@ -156,7 +156,6 @@ struct WalletSyncMasterDataApplier {
         store.accounts[index].updatedAt = remote.updatedAt
         store.accounts[index].isDeleted = remote.isDeleted
         store.accounts[index].deletedAt = remote.deletedAt
-        store.accounts[index].balance = existingBalance
         result.updatedCount += 1
     }
 

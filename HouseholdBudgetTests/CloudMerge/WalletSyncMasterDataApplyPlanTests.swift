@@ -121,10 +121,14 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
     func testAccountCreateAndUpdatePlansAreProducedByIDExistence() {
         let existingID = UUID()
         let newID = UUID()
-        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState(accountIDs: [existingID]))
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(accountUpdatedAtByID: [existingID: localUpdatedAt])
+        )
 
         let plan = planner.makePlan(
-            changedRecords: [record(for: accountDTO(id: newID)), record(for: accountDTO(id: existingID))],
+            changedRecords: [record(for: accountDTO(id: newID)), record(for: accountDTO(id: existingID, updatedAt: remoteUpdatedAt))],
             deletedRecordNames: []
         )
 
@@ -156,7 +160,7 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.plannedDisableCount, 1)
     }
 
-    func testPlanDetectsSyntheticCategoryCreateWhenLocalIDDoesNotExist() {
+    func testPlanBlocksSyntheticCategoryCreateSoDebugCategoryIsNotUserData() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
 
         let plan = planner.makePlan(
@@ -164,10 +168,11 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
             deletedRecordNames: []
         )
 
-        XCTAssertEqual(plan.plannedCreateCount, 1)
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
     }
 
-    func testPlanDetectsSyntheticCategoryUpdateWhenLocalIDExists() {
+    func testPlanBlocksSyntheticCategoryUpdateSoDebugCategoryIsNotUserData() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(
             localState: FakeLocalState(categoryIDs: [WalletSyncDebugSyntheticMasterDataChangeFactory.debugCategoryID])
         )
@@ -177,7 +182,8 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
             deletedRecordNames: []
         )
 
-        XCTAssertEqual(plan.plannedUpdateCount, 1)
+        XCTAssertEqual(plan.plannedUpdateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
     }
 
     func testWalletEventCreateUpdateDeleteBehaviorIsPlannedSafely() {
@@ -195,7 +201,7 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.plannedDisableCount, 1)
     }
 
-    func testAccountBalanceFieldIsNotCopiedIntoApplyPlan() {
+    func testAccountCreateCopiesStoredBalanceFieldIntoApplyPlan() {
         let id = UUID()
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         var dto = accountDTO(id: id)
@@ -207,7 +213,64 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
             XCTFail("Expected create account action")
             return
         }
-        XCTAssertEqual(account.balance, 0)
+        XCTAssertEqual(account.balance, 99_999)
+    }
+
+    func testAccountUpdateCopiesBalanceOnlyWhenRemoteIsClearlyNewer() {
+        let id = UUID()
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(accountUpdatedAtByID: [id: localUpdatedAt])
+        )
+        var dto = accountDTO(id: id, updatedAt: remoteUpdatedAt)
+        dto.fields["balance"] = .double(77_777)
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        guard case .updateAccount(let account) = plan.items.first?.action else {
+            XCTFail("Expected update account action")
+            return
+        }
+        XCTAssertEqual(account.balance, 77_777)
+    }
+
+    func testAccountUpdateBlocksWhenLocalIsNewer() {
+        let id = UUID()
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(accountUpdatedAtByID: [id: Date(timeIntervalSince1970: 1_800_000_200)])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: accountDTO(id: id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100)))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.localAccountNewer) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testAccountUpdateBlocksWhenTimestampIsMissingOrEqual() {
+        let id = UUID()
+        let timestamp = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(accountUpdatedAtByID: [id: timestamp])
+        )
+        var missingTimestampDTO = accountDTO(id: id, updatedAt: timestamp)
+        missingTimestampDTO.updatedAt = nil
+
+        let missingPlan = planner.makePlan(changedRecords: [record(for: missingTimestampDTO)], deletedRecordNames: [])
+        let equalPlan = planner.makePlan(changedRecords: [record(for: accountDTO(id: id, updatedAt: timestamp))], deletedRecordNames: [])
+
+        XCTAssertEqual(missingPlan.blockedCount, 1)
+        XCTAssertEqual(equalPlan.blockedCount, 1)
+        XCTAssertTrue((missingPlan.items + equalPlan.items).allSatisfy {
+            if case .blocked(.ambiguousAccountTimestamp) = $0.action { return true }
+            return false
+        })
     }
 
     func testSummaryCountsAreCorrect() {
@@ -499,12 +562,12 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         )
     }
 
-    private func accountDTO(id: UUID) -> WalletSyncRecordDTO {
+    private func accountDTO(id: UUID, updatedAt: Date = Date()) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             recordName: WalletSyncRecordEntity.account.recordName(for: id),
             entity: .account,
             id: id,
-            updatedAt: Date(),
+            updatedAt: updatedAt,
             fields: [
                 "name": .string("Remote Account"),
                 "balance": .double(123),
@@ -596,6 +659,7 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         var creditCardIDs: Set<UUID>
         var personDebtIDs: Set<UUID>
         var monthlyBudgetIDs: Set<UUID>
+        var accountUpdatedAtByID: [UUID: Date]
         var financialEventUpdatedAtByID: [UUID: Date]
 
         init(
@@ -605,6 +669,7 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
             creditCardIDs: Set<UUID> = [],
             personDebtIDs: Set<UUID> = [],
             monthlyBudgetIDs: Set<UUID> = [],
+            accountUpdatedAtByID: [UUID: Date] = [:],
             financialEventUpdatedAtByID: [UUID: Date] = [:]
         ) {
             self.accountIDs = accountIDs
@@ -613,10 +678,12 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
             self.creditCardIDs = creditCardIDs
             self.personDebtIDs = personDebtIDs
             self.monthlyBudgetIDs = monthlyBudgetIDs
+            self.accountUpdatedAtByID = accountUpdatedAtByID
             self.financialEventUpdatedAtByID = financialEventUpdatedAtByID
         }
 
-        func containsAccount(id: UUID) -> Bool { accountIDs.contains(id) }
+        func containsAccount(id: UUID) -> Bool { accountIDs.contains(id) || accountUpdatedAtByID[id] != nil }
+        func accountUpdatedAt(id: UUID) -> Date? { accountUpdatedAtByID[id] }
         func containsCategory(id: UUID) -> Bool { categoryIDs.contains(id) }
         func containsWalletEvent(id: UUID) -> Bool { walletEventIDs.contains(id) }
         func containsCreditCard(id: UUID) -> Bool { creditCardIDs.contains(id) }

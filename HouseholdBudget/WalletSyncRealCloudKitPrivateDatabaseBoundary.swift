@@ -254,7 +254,33 @@ struct WalletSyncCKPrivateDatabaseZoneEnsurer: WalletSyncPrivateDatabaseZoneEnsu
             return ckError.code == .zoneNotFound || ckError.code == .unknownItem
         }
 
-        return false
+        if let walletError = error as? WalletSyncCloudKitError {
+            switch walletError {
+            case .unknown(let underlying):
+                return isZoneMissingError(underlying)
+            case .invalidRecord(let message):
+                return isZoneMissingMessage(message)
+            default:
+                return false
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == CKError.errorDomain &&
+            (nsError.code == CKError.Code.zoneNotFound.rawValue ||
+             nsError.code == CKError.Code.unknownItem.rawValue) {
+            return true
+        }
+
+        return isZoneMissingMessage(nsError.localizedDescription)
+    }
+
+    private static func isZoneMissingMessage(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return normalized.contains(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName.lowercased()) &&
+            (normalized.contains("zone was purged") ||
+             normalized.contains("zone not found") ||
+             normalized.contains("unknown item"))
     }
 
     static func isZoneAlreadyExistsError(_ error: Error) -> Bool {
@@ -272,7 +298,7 @@ struct WalletSyncCKPrivateDatabaseZoneEnsurer: WalletSyncPrivateDatabaseZoneEnsu
 // provider and do not persist returned change tokens.
 final class WalletSyncRealCloudKitPrivateDatabaseBoundary: WalletSyncCloudKitDatabaseBoundary {
 
-    static let syncZoneName = "WalletSyncZone"
+    nonisolated static let syncZoneName = "WalletSyncZoneV2"
 
     private let configuration: WalletSyncCloudKitConfiguration
     private let accountStatusProvider: WalletSyncCloudKitAccountStatusProviding

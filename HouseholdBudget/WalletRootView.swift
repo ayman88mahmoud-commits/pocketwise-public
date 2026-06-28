@@ -1108,7 +1108,7 @@ struct ICloudSnapshotSyncView: View {
                 )
 
                 statusRow(
-                    title: "WalletSyncZone",
+                    title: WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName,
                     value: debugWalletSyncZoneState
                 )
 
@@ -2001,7 +2001,7 @@ struct ICloudSnapshotSyncView: View {
 
         guard let savedTokenData = stateStore.loadWalletSyncZoneChangeTokenData() else {
             debugSavedChangeTokenExists = false
-            actionMessage = "[Debug] No saved WalletSyncZone change token is available."
+            actionMessage = "[Debug] No saved \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName) change token is available."
             errorMessage = nil
             return
         }
@@ -2026,7 +2026,7 @@ struct ICloudSnapshotSyncView: View {
 
     private func saveLastReturnedChangeTokenForDebug() {
         guard let tokenData = debugLastReturnedChangeTokenData else {
-            actionMessage = "[Debug] No returned WalletSyncZone change token is available to save."
+            actionMessage = "[Debug] No returned \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName) change token is available to save."
             errorMessage = nil
             refreshSavedChangeTokenStatusForDebug()
             return
@@ -2034,14 +2034,14 @@ struct ICloudSnapshotSyncView: View {
 
         WalletSyncStateStore().saveWalletSyncZoneChangeTokenData(tokenData)
         refreshSavedChangeTokenStatusForDebug()
-        actionMessage = "[Debug] Saved WalletSyncZone change token."
+        actionMessage = "[Debug] Saved \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName) change token."
         errorMessage = nil
     }
 
     private func clearSavedChangeTokenForDebug() {
         WalletSyncStateStore().clearWalletSyncZoneChangeTokenData()
         refreshSavedChangeTokenStatusForDebug()
-        actionMessage = "[Debug] Cleared WalletSyncZone change token."
+        actionMessage = "[Debug] Cleared \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName) change token."
         errorMessage = nil
     }
 

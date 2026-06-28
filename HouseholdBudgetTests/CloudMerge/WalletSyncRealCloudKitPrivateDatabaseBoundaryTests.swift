@@ -426,6 +426,22 @@ final class WalletSyncRealCloudKitPrivateDatabaseBoundaryTests: XCTestCase {
         XCTAssertEqual(zoneOperator.saveCallCount, 1)
     }
 
+    func testRealZoneEnsurerPurgedZoneMessageThenCreateReturnsSuccess() async throws {
+        let zoneOperator = FakeZoneOperator(
+            fetchError: NSError(
+                domain: CKError.errorDomain,
+                code: CKError.Code.unknownItem.rawValue,
+                userInfo: [NSLocalizedDescriptionKey: "Error fetching record zone \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName) from server: Zone was purged by user"]
+            )
+        )
+        let ensurer = WalletSyncCKPrivateDatabaseZoneEnsurer(zoneOperator: zoneOperator)
+
+        try await ensurer.ensureZone(WalletSyncRealCloudKitPrivateDatabaseBoundary.defaultSyncZoneID())
+
+        XCTAssertEqual(zoneOperator.fetchCallCount, 1)
+        XCTAssertEqual(zoneOperator.saveCallCount, 1)
+    }
+
     func testRealZoneEnsurerCreateAlreadyExistsReturnsSuccess() async throws {
         let zoneOperator = FakeZoneOperator(
             fetchError: CKError(.zoneNotFound),

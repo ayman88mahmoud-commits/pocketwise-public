@@ -16,7 +16,7 @@ protocol WalletSyncChangeTokenStoring {
 }
 
 struct WalletSyncStateStore {
-    static let walletSyncZoneChangeTokenKey = "WalletSyncState.WalletSyncZone.changeTokenData"
+    static let walletSyncZoneChangeTokenKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).changeTokenData"
 
     private let keyValueStore: WalletSyncStateKeyValueStoring
 

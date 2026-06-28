@@ -166,11 +166,19 @@ final class WalletStore: ObservableObject {
     }
 
     var activeCategories: [Category] {
-        categories.filter { !$0.isDeleted }
+        categories.filter { !$0.isDeleted && !isDebugSyncValidationCategory($0) }
     }
 
     var activeWalletEvents: [WalletEvent] {
         walletEvents.filter { !$0.isDeleted }
+    }
+
+    private func isDebugSyncValidationCategory(_ category: Category) -> Bool {
+#if DEBUG
+        WalletSyncDebugSyntheticMasterDataChangeFactory.isDebugCategory(category)
+#else
+        false
+#endif
     }
 
     var activeMerchantMemories: [MerchantMemory] {
@@ -4502,5 +4510,89 @@ final class WalletStore: ObservableObject {
             StorageKey.personDebts,
             StorageKey.personDebtEntries
         ].contains { userDefaults.data(forKey: $0) != nil }
+    }
+}
+
+extension WalletStore: WalletSyncInitialCloudAdoptionSeedPruning {
+    @discardableResult
+    func removeSeedDataBeforeInitialCloudAdoptionIfSafe() -> Bool {
+        guard containsOnlySampleSeedDataForCloudAdoption else {
+            return false
+        }
+
+        accounts = []
+        categories = []
+        walletEvents = []
+        merchantMemories = []
+        installmentPlans = []
+        financialEvents = []
+        personDebts = []
+        personDebtEntries = []
+        monthlyBudgets = []
+        historicalMonthlySummaries = []
+        creditCards = []
+        creditCardPurchases = []
+        creditCardPayments = []
+        return true
+    }
+
+    private var containsOnlySampleSeedDataForCloudAdoption: Bool {
+        Set(accounts.map(Self.accountSeedKey)) == Set(SampleWalletData.accounts.map(Self.accountSeedKey)) &&
+        Set(categories.map(Self.categorySeedKey)) == Set(SampleWalletData.categories.map(Self.categorySeedKey)) &&
+        Set(walletEvents.map(Self.walletEventSeedKey)) == Set(SampleWalletData.walletEvents.map(Self.walletEventSeedKey)) &&
+        Set(installmentPlans.map(Self.installmentPlanSeedKey)) == Set(SampleWalletData.installmentPlans.map(Self.installmentPlanSeedKey)) &&
+        Set(financialEvents.map(Self.financialEventSeedKey)) == Set(SampleWalletData.financialEvents.map(Self.financialEventSeedKey)) &&
+        merchantMemories.isEmpty &&
+        personDebts.isEmpty &&
+        personDebtEntries.isEmpty &&
+        monthlyBudgets.isEmpty &&
+        historicalMonthlySummaries.isEmpty &&
+        creditCards.isEmpty &&
+        creditCardPurchases.isEmpty &&
+        creditCardPayments.isEmpty
+    }
+
+    nonisolated private static func accountSeedKey(_ account: Account) -> String {
+        "\(account.name)|\(account.type.rawValue)|\(account.balance)"
+    }
+
+    nonisolated private static func categorySeedKey(_ category: Category) -> String {
+        "\(category.name)|\(category.subcategories.joined(separator: "\u{1F}"))"
+    }
+
+    nonisolated private static func walletEventSeedKey(_ event: WalletEvent) -> String {
+        [
+            event.name,
+            event.categoryName,
+            event.subCategoryName,
+            event.defaultAccountName ?? "",
+            String(event.isFavorite)
+        ].joined(separator: "|")
+    }
+
+    nonisolated private static func installmentPlanSeedKey(_ plan: InstallmentPlan) -> String {
+        [
+            plan.purchaseName,
+            "\(plan.totalAmount)",
+            "\(plan.installmentCount)",
+            "\(plan.firstDueDate.timeIntervalSince1970)",
+            plan.categoryName,
+            plan.subCategoryName,
+            plan.paymentMethodName
+        ].joined(separator: "|")
+    }
+
+    nonisolated private static func financialEventSeedKey(_ event: FinancialEvent) -> String {
+        [
+            event.type.rawValue,
+            event.status.rawValue,
+            event.title,
+            "\(event.amount)",
+            "\(event.date.timeIntervalSince1970)",
+            event.accountName ?? "",
+            event.destinationAccountName ?? "",
+            event.categoryName ?? "",
+            event.subCategoryName ?? ""
+        ].joined(separator: "|")
     }
 }

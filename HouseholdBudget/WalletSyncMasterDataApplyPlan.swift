@@ -30,6 +30,15 @@ enum WalletSyncDebugSyntheticMasterDataChangeFactory {
     static func debugCategoryRecord(updatedAt: Date = Date()) -> CKRecord {
         WalletSyncCKRecordAdapter.ckRecord(from: debugCategoryDTO(updatedAt: updatedAt))
     }
+
+    static func isDebugCategoryDTO(_ dto: WalletSyncRecordDTO) -> Bool {
+        dto.entity == .category &&
+        (dto.id == debugCategoryID || dto.fields["name"] == .string(debugCategoryName))
+    }
+
+    static func isDebugCategory(_ category: Category) -> Bool {
+        category.id == debugCategoryID || category.name == debugCategoryName
+    }
 }
 #endif
 
@@ -80,6 +89,8 @@ enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case invalidFieldValue
     case localFinancialEventNewer
     case ambiguousFinancialEventTimestamp
+    case localAccountNewer
+    case ambiguousAccountTimestamp
     case missingParentRecord
     case localChildRecordNewer
     case ambiguousChildRecordTimestamp
@@ -265,13 +276,13 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             guard let account = account(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
-            return WalletSyncMasterDataApplyPlanItem(
-                recordName: dto.recordName,
-                entity: .account,
-                id: dto.id,
-                action: localState.containsAccount(id: dto.id) ? .updateAccount(account) : .createAccount(account)
-            )
+            return planAccount(dto: dto, account: account)
         case .category:
+#if DEBUG
+            if WalletSyncDebugSyntheticMasterDataChangeFactory.isDebugCategoryDTO(dto) {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .unsupportedEntity)
+            }
+#endif
             guard let category = category(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
@@ -425,6 +436,43 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         )
     }
 
+    private func planAccount(
+        dto: WalletSyncRecordDTO,
+        account: Account
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard let remoteUpdatedAt = dto.updatedAt else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousAccountTimestamp)
+        }
+
+        guard localState.containsAccount(id: dto.id) else {
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .account,
+                id: dto.id,
+                action: .createAccount(account)
+            )
+        }
+
+        guard let localUpdatedAt = localState.accountUpdatedAt(id: dto.id) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousAccountTimestamp)
+        }
+
+        if localUpdatedAt > remoteUpdatedAt.addingTimeInterval(1) {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .localAccountNewer)
+        }
+
+        guard remoteUpdatedAt > localUpdatedAt.addingTimeInterval(1) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousAccountTimestamp)
+        }
+
+        return WalletSyncMasterDataApplyPlanItem(
+            recordName: dto.recordName,
+            entity: .account,
+            id: dto.id,
+            action: .updateAccount(account)
+        )
+    }
+
     private func planCreditCardPurchase(
         dto: WalletSyncRecordDTO,
         purchase: CreditCardPurchase,
@@ -513,6 +561,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func account(from dto: WalletSyncRecordDTO) -> Account? {
         guard let name = stringField("name", in: dto),
+              let balance = doubleField("balance", in: dto),
               let typeRawValue = stringField("type", in: dto),
               let type = AccountType(rawValue: typeRawValue) else {
             return nil
@@ -521,7 +570,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         return Account(
             id: dto.id,
             name: name,
-            balance: 0,
+            balance: balance,
             type: type,
             isActive: boolField("isActive", in: dto) ?? true,
             recognitionAliases: stringArrayField("recognitionAliases", in: dto) ?? [],

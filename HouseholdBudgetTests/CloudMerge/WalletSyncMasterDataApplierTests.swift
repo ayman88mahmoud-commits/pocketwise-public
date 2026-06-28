@@ -13,9 +13,9 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertEqual(result.disabledCount, 0)
     }
 
-    func testApplierCreatesOnlySafeAccountFields() {
+    func testApplierCreatesAccountWithRemoteStoredBalance() {
         let store = FakeApplyingStore()
-        let account = makeAccount(name: "Remote Cash", balance: 0)
+        let account = makeAccount(name: "Remote Cash", balance: 900)
         let plan = WalletSyncMasterDataApplyPlanSummary(items: [
             makeItem(action: .createAccount(account), entity: .account, id: account.id)
         ])
@@ -25,13 +25,13 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertEqual(result.createdCount, 1)
         XCTAssertEqual(store.accounts.first?.name, "Remote Cash")
         XCTAssertEqual(store.accounts.first?.type, .cash)
-        XCTAssertEqual(store.accounts.first?.balance, 0)
+        XCTAssertEqual(store.accounts.first?.balance, 900)
     }
 
-    func testApplierUpdatesOnlySafeAccountFieldsAndPreservesBalance() {
+    func testApplierUpdatesAccountByDirectlyCopyingRemoteStoredBalance() {
         let id = UUID()
         let store = FakeApplyingStore(accounts: [makeAccount(id: id, name: "Local", balance: 500)])
-        let remote = makeAccount(id: id, name: "Remote", balance: 0)
+        let remote = makeAccount(id: id, name: "Remote", balance: 900)
         let plan = WalletSyncMasterDataApplyPlanSummary(items: [
             makeItem(action: .updateAccount(remote), entity: .account, id: id)
         ])
@@ -40,7 +40,7 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
 
         XCTAssertEqual(result.updatedCount, 1)
         XCTAssertEqual(store.accounts.first?.name, "Remote")
-        XCTAssertEqual(store.accounts.first?.balance, 500)
+        XCTAssertEqual(store.accounts.first?.balance, 900)
     }
 
     func testApplierSoftDisablesAccount() {

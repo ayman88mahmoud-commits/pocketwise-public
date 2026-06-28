@@ -16,6 +16,11 @@ protocol WalletSyncFullDataSourceReading: WalletSyncMasterDataSourceReading {
 
 extension WalletStore: WalletSyncFullDataSourceReading {}
 
+protocol WalletSyncInitialCloudAdoptionSeedPruning: AnyObject {
+    @discardableResult
+    func removeSeedDataBeforeInitialCloudAdoptionIfSafe() -> Bool
+}
+
 struct WalletSyncFullDataRecordValidationPipelineSummary: Equatable {
     var zoneEnsured: Bool
     var totalEligibleCount: Int
@@ -83,9 +88,27 @@ struct WalletSyncFullDataRecordValidationPipeline {
     }
 
     func run() async throws -> WalletSyncFullDataRecordValidationPipelineSummary {
-        try await zoneEnsurer.ensureSyncZone()
+        try await ensureSyncZoneForBootstrap()
 
         let uploadPlan = makeUploadPlan()
+        let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
+
+        if savedTokenData == nil {
+            let adoptionFetchResult = try await fetchInitialAdoptionChanges()
+            if !adoptionFetchResult.records.isEmpty || !adoptionFetchResult.deletedRecordNames.isEmpty {
+                (source as? WalletSyncInitialCloudAdoptionSeedPruning)?.removeSeedDataBeforeInitialCloudAdoptionIfSafe()
+                return makeSummary(
+                    uploadPlan: uploadPlan,
+                    savedRecords: [],
+                    uploadedCountsByBatch: [],
+                    uploadedCountsByEntity: [:],
+                    savedTokenData: nil,
+                    fetchResult: adoptionFetchResult,
+                    uploadedRecordNames: []
+                )
+            }
+        }
+
         var savedRecords: [CKRecord] = []
         var uploadedCountsByBatch: [Int] = []
 
@@ -98,8 +121,54 @@ struct WalletSyncFullDataRecordValidationPipeline {
 
         let uploadedRecordNames = Set(savedRecords.map(\.recordID.recordName))
 
-        let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
         let fetchResult = try await changedRecordFetcher.fetchChangedRecords(since: savedTokenData)
+        return makeSummary(
+            uploadPlan: uploadPlan,
+            savedRecords: savedRecords,
+            uploadedCountsByBatch: uploadedCountsByBatch,
+            uploadedCountsByEntity: uploadPlan.countsByEntity,
+            savedTokenData: savedTokenData,
+            fetchResult: fetchResult,
+            uploadedRecordNames: uploadedRecordNames
+        )
+    }
+
+    private func ensureSyncZoneForBootstrap() async throws {
+        do {
+            try await zoneEnsurer.ensureSyncZone()
+        } catch {
+            guard Self.isMissingOrPurgedSyncZoneError(error) else {
+                throw error
+            }
+
+            tokenStore.clearWalletSyncZoneChangeTokenData()
+            try await zoneEnsurer.ensureSyncZone()
+        }
+    }
+
+    private func fetchInitialAdoptionChanges() async throws -> WalletSyncCloudKitFetchResult {
+        do {
+            return try await changedRecordFetcher.fetchChangedRecords(since: nil)
+        } catch {
+            guard Self.isMissingOrPurgedSyncZoneError(error) else {
+                throw error
+            }
+
+            tokenStore.clearWalletSyncZoneChangeTokenData()
+            try await zoneEnsurer.ensureSyncZone()
+            return WalletSyncCloudKitFetchResult(records: [])
+        }
+    }
+
+    private func makeSummary(
+        uploadPlan: FullDataUploadPlan,
+        savedRecords: [CKRecord],
+        uploadedCountsByBatch: [Int],
+        uploadedCountsByEntity: [WalletSyncRecordEntity: Int],
+        savedTokenData: Data?,
+        fetchResult: WalletSyncCloudKitFetchResult,
+        uploadedRecordNames: Set<String>
+    ) -> WalletSyncFullDataRecordValidationPipelineSummary {
         let tokenSaved: Bool
         if let returnedTokenData = fetchResult.changeTokenData {
             tokenStore.saveWalletSyncZoneChangeTokenData(returnedTokenData)
@@ -126,7 +195,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
             uploadedCount: savedRecords.count,
             batchCount: uploadedCountsByBatch.count,
             uploadedCountsByBatch: uploadedCountsByBatch,
-            uploadedCountsByEntity: uploadPlan.countsByEntity,
+            uploadedCountsByEntity: uploadedCountsByEntity,
             excludedEntities: [.householdSettings],
             uploadCap: uploadCap,
             uploadCappedCount: uploadPlan.cappedCount,
@@ -154,7 +223,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
     private func makeUploadPlan() -> FullDataUploadPlan {
         let entityGroups: [(WalletSyncRecordEntity, [WalletSyncRecordDTO])] = [
             (.account, source.accounts.map(WalletSyncRecordMappers.dto(for:))),
-            (.category, source.categories.map(WalletSyncRecordMappers.dto(for:))),
+            (.category, uploadableCategories().map(WalletSyncRecordMappers.dto(for:))),
             (.walletEvent, source.walletEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.financialEvent, source.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudget, source.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
@@ -180,6 +249,48 @@ struct WalletSyncFullDataRecordValidationPipeline {
             totalAvailableCount: allDTOs.count,
             countsByEntity: countsByEntity
         )
+    }
+
+    private func uploadableCategories() -> [Category] {
+#if DEBUG
+        source.categories.filter { !WalletSyncDebugSyntheticMasterDataChangeFactory.isDebugCategory($0) }
+#else
+        source.categories
+#endif
+    }
+
+    private static func isMissingOrPurgedSyncZoneError(_ error: Error) -> Bool {
+        if let ckError = error as? CKError {
+            return ckError.code == .zoneNotFound || ckError.code == .unknownItem
+        }
+
+        if let walletError = error as? WalletSyncCloudKitError {
+            switch walletError {
+            case .unknown(let underlying):
+                return isMissingOrPurgedSyncZoneError(underlying)
+            case .invalidRecord(let message):
+                return isMissingOrPurgedMessage(message)
+            default:
+                return false
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == CKError.errorDomain &&
+            (nsError.code == CKError.Code.zoneNotFound.rawValue ||
+             nsError.code == CKError.Code.unknownItem.rawValue) {
+            return true
+        }
+
+        return isMissingOrPurgedMessage(nsError.localizedDescription)
+    }
+
+    private static func isMissingOrPurgedMessage(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return normalized.contains(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName.lowercased()) &&
+            (normalized.contains("zone was purged") ||
+             normalized.contains("zone not found") ||
+             normalized.contains("unknown item"))
     }
 
     private struct FullDataUploadPlan {
