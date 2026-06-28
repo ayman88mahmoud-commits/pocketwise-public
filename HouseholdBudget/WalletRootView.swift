@@ -948,6 +948,23 @@ struct ICloudSnapshotSyncView: View {
                 }
             }
 
+            #if !DEBUG
+            Section(isAr ? "مزامنة الأجهزة" : "Device Sync") {
+                statusRow(
+                    title: isAr ? "حساب iCloud" : "iCloud account",
+                    value: availabilityText(store.iCloudAvailability),
+                    isError: isUnavailable(store.iCloudAvailability)
+                )
+
+                statusRow(
+                    title: isAr ? "حالة المزامنة" : "Sync status",
+                    value: isUnavailable(store.iCloudAvailability)
+                        ? (isAr ? "غير متاحة" : "Unavailable")
+                        : (isAr ? "جاهزة" : "Ready")
+                )
+            }
+            #endif
+
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(isAr
