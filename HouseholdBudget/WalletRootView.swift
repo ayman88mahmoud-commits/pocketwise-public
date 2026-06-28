@@ -907,6 +907,9 @@ struct ICloudSnapshotSyncView: View {
     @State private var debugAutoMasterSyncEnabled = false
     @State private var debugAutoSyncGateEnabled = WalletSyncMasterDataAutoSyncGate().isEnabled
     @StateObject private var debugAutoSyncLifecycleStatus = WalletSyncMasterDataAutoSyncLifecycleStatus.shared
+    @State private var debugAdvancedSyncToolsExpanded = false
+    @State private var debugWalletSyncZoneState = "not checked"
+    @State private var debugLastMasterDataPipelineSummary: WalletSyncMasterDataManualPipelineSummary?
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1092,266 +1095,65 @@ struct ICloudSnapshotSyncView: View {
             }
 
             #if DEBUG
-            Section("Debug — iCloud Status Check") {
-                Text("Developer only. Not included in release builds. No data is uploaded or synced.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { @MainActor in
-                        do {
-                            let checker = WalletSyncAccountAvailabilityChecker.liveDefault()
-                            let result = try await checker.checkAvailability()
-                            switch result {
-                            case .available:
-                                actionMessage = "[Debug] iCloud: Available — boundary is reachable."
-                            case .noAccount:
-                                actionMessage = "[Debug] iCloud: No Account — no Apple ID signed in."
-                            case .restricted:
-                                actionMessage = "[Debug] iCloud: Restricted — iCloud restricted on this device."
-                            case .couldNotDetermine:
-                                actionMessage = "[Debug] iCloud: Could Not Determine."
-                            case .temporarilyUnavailable:
-                                actionMessage = "[Debug] iCloud: Temporarily Unavailable."
-                            case .unknown:
-                                actionMessage = "[Debug] iCloud: Unknown status."
-                            }
-                            errorMessage = nil
-                        } catch {
-                            errorMessage = "[Debug] iCloud check failed: \(error.localizedDescription)"
-                            actionMessage = nil
-                        }
-                    }
-                } label: {
-                    Label("Check iCloud Account Status", systemImage: "icloud.and.arrow.up")
-                }
-                .tint(.orange)
-            }
-
-            Section("Debug — Dry-Run Upload Summary") {
-                Text("Developer only. Not included in release builds. Builds a local sync upload summary without contacting CloudKit.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    runDryRunUploadSummaryForDebug()
-                } label: {
-                    Label("Show Dry-Run Upload Summary", systemImage: "list.bullet.clipboard")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — One Account Sync Save") {
-                Text("Developer only. Not included in release builds. Saves exactly one Account sync record when tapped. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await saveOneAccountSyncRecordForDebug() }
-                } label: {
-                    Label("Save One Account Sync Record", systemImage: "icloud.and.arrow.up")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Limited Account Batch Upload") {
-                Text("Developer only. Not included in release builds. Uploads up to 10 Account sync records when tapped. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await uploadLimitedAccountBatchForDebug() }
-                } label: {
-                    Label("Upload Account Sync Batch", systemImage: "icloud.and.arrow.up")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Limited Account Batch Fetch") {
-                Text("Developer only. Not included in release builds. Fetches up to 10 Account sync records by exact record name for verification only. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await verifyLimitedAccountBatchFetchForDebug() }
-                } label: {
-                    Label("Fetch Account Sync Batch", systemImage: "icloud.and.arrow.down")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Master Data Round Trip") {
-                Text("Developer only. Not included in release builds. Saves and fetches up to 50 Account, Category, and WalletEvent sync records only. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await verifyMasterDataRoundTripForDebug() }
-                } label: {
-                    Label("Verify Master Data Round Trip", systemImage: "arrow.triangle.2.circlepath.icloud")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Ensure Sync Zone") {
-                Text("Developer only. Not included in release builds. Creates the private WalletSyncZone if needed. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await ensureSyncZoneForDebug() }
-                } label: {
-                    Label("Ensure Sync Zone", systemImage: "square.stack.3d.up")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Sync Loop Dry Run") {
-                Text("Developer only. Not included in release builds. Fetches WalletSyncZone changes with the saved token if present, saves a returned token, and does not apply records. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await runSyncLoopDryRunForDebug() }
-                } label: {
-                    Label("Run Sync Loop Dry Run", systemImage: "arrow.triangle.2.circlepath")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Sync Inbox Plan Dry Run") {
-                Text("Developer only. Not included in release builds. Fetches WalletSyncZone changes, parses a safe inbox, plans counts only, and does not apply records. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await runSyncInboxPlanDryRunForDebug() }
-                } label: {
-                    Label("Run Sync Inbox Plan Dry Run", systemImage: "tray.full")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Master Data Apply") {
-                Text("Developer only. Not included in release builds. Plans and explicitly applies Account, Category, and WalletEvent changes only. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await createDebugCategorySyncChangeForDebug() }
-                } label: {
-                    Label("Create Debug Category Sync Change", systemImage: "tag")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-
-                Button {
-                    Task { await runMasterDataApplyPlanDryRunForDebug() }
-                } label: {
-                    Label("Run Master Data Apply Plan Dry Run", systemImage: "checklist")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-
-                Button(role: .destructive) {
-                    applyMasterDataPlanForDebug()
-                } label: {
-                    Label("Apply Master Data Plan", systemImage: "checkmark.seal")
-                }
-                .disabled(isWorking || debugLastMasterDataApplyPlan == nil)
-                .tint(.orange)
-
-                Button(role: .destructive) {
-                    Task { await runMasterDataManualSyncPipelineForDebug() }
-                } label: {
-                    Label("Run Master Data Manual Sync Pipeline", systemImage: "arrow.triangle.2.circlepath.circle")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Changed Records Dry Run") {
-                Text("Developer only. Not included in release builds. Fetches private database changes with no saved token and does not apply them. This is not full sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Button {
-                    Task { await fetchChangedRecordsDryRunForDebug() }
-                } label: {
-                    Label("Fetch Changed Records Dry Run", systemImage: "arrow.down.doc")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Saved Change Token") {
-                Text("Developer only. Not included in release builds. Stores only the WalletSyncZone change token after an explicit tap. This is not full sync.")
+            Section("Debug — Sync Health") {
+                Text("Developer only. Scope: Master data only. No transactions, balances, budgets, credit cards, debts, recurring data, or financial events.")
                     .font(.footnote)
                     .foregroundStyle(.orange)
 
                 statusRow(
-                    title: "Saved token",
+                    title: "iCloud account",
+                    value: availabilityText(store.iCloudAvailability),
+                    isError: isUnavailable(store.iCloudAvailability)
+                )
+
+                statusRow(
+                    title: "WalletSyncZone",
+                    value: debugWalletSyncZoneState
+                )
+
+                statusRow(
+                    title: "Saved change token",
                     value: debugSavedChangeTokenExists ? "yes" : "no"
                 )
+
                 statusRow(
-                    title: "Last returned token",
-                    value: debugLastReturnedChangeTokenData == nil ? "no" : "yes"
+                    title: "Auto sync gate",
+                    value: debugAutoSyncGateEnabled ? "on" : "off"
                 )
 
-                Button {
-                    Task { await fetchChangedRecordsWithSavedTokenForDebug() }
-                } label: {
-                    Label("Fetch Changes With Saved Token", systemImage: "arrow.down.doc")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
+                statusRow(
+                    title: "Last lifecycle trigger",
+                    value: debugAutoSyncLifecycleStatus.lastLifecycleTriggerAttempted ? "attempted yes" : "attempted no"
+                )
 
-                Button {
-                    saveLastReturnedChangeTokenForDebug()
-                } label: {
-                    Label("Save Last Returned Token", systemImage: "tray.and.arrow.down")
-                }
-                .disabled(isWorking || debugLastReturnedChangeTokenData == nil)
-                .tint(.orange)
+                statusRow(
+                    title: "Last coordinator result",
+                    value: debugLastCoordinatorResultText()
+                )
 
-                Button(role: .destructive) {
-                    clearSavedChangeTokenForDebug()
-                } label: {
-                    Label("Clear Saved Change Token", systemImage: "trash")
+                if let skipReason = debugLastCoordinatorSkipReasonText() {
+                    statusRow(
+                        title: "Last skip reason",
+                        value: skipReason,
+                        isError: true
+                    )
                 }
-                .disabled(isWorking || !debugSavedChangeTokenExists)
-                .tint(.orange)
+
+                statusRow(
+                    title: "Last pipeline summary",
+                    value: debugLastPipelineSummaryText()
+                )
+
+                statusRow(
+                    title: "Financial data touched",
+                    value: "no"
+                )
             }
 
-            Section("Debug — Fetch Saved Account Sync Record") {
-                Text("Developer only. Not included in release builds. Fetches one known Account sync record for verification only. This is not full sync.")
+            Section("Debug — Master Data Sync Controls") {
+                Text("Developer only. Primary validation controls for Account, Category, and WalletEvent sync health.")
                     .font(.footnote)
                     .foregroundStyle(.orange)
-
-                Button {
-                    Task { await fetchSavedAccountSyncRecordForDebug() }
-                } label: {
-                    Label("Fetch Saved Account Sync Record", systemImage: "icloud.and.arrow.down")
-                }
-                .disabled(isWorking)
-                .tint(.orange)
-            }
-
-            Section("Debug — Auto Master Data Sync Coordinator") {
-                Text("Developer only. Master data only. No transactions, balances, budgets, credit cards, debts, recurring data, or financial events.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Toggle("Enable Auto Foreground Sync (Debug)", isOn: $debugAutoMasterSyncEnabled)
-                    .tint(.orange)
 
                 Button {
                     Task { await runAutoMasterDataSyncCoordinatorForDebug() }
@@ -1361,57 +1163,201 @@ struct ICloudSnapshotSyncView: View {
                 .disabled(isWorking)
                 .tint(.orange)
 
-                if let result = debugCoordinatorResult {
-                    let statusColor: Color = result.didRun ? .secondary : .orange
-                    Text(debugCoordinatorDidRunText(result))
-                        .font(.caption)
-                        .foregroundStyle(statusColor)
+                Button {
+                    Task { await runMasterDataManualSyncPipelineForDebug() }
+                } label: {
+                    Label("Run Master Data Manual Sync Pipeline", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                Toggle("Enable Production-Safe Master Data Auto Sync Gate", isOn: $debugAutoSyncGateEnabled)
+                .tint(.orange)
+                    .onChange(of: debugAutoSyncGateEnabled) { _, newValue in
+                        let gate = WalletSyncMasterDataAutoSyncGate()
+                        if newValue { gate.enable() } else { gate.disable() }
+                    }
+
+                Button(role: .destructive) {
+                    let gate = WalletSyncMasterDataAutoSyncGate()
+                    gate.clear()
+                    debugAutoSyncGateEnabled = gate.isEnabled
+                } label: {
+                    Label("Disable and Clear Auto Sync Gate", systemImage: "power")
+                }
+                .disabled(!debugAutoSyncGateEnabled)
+                .tint(.orange)
+
+                statusRow(
+                    title: "Gate state",
+                    value: debugAutoSyncGateEnabled ? "enabled yes" : "enabled no"
+                )
+            }
+
+            Section {
+                DisclosureGroup(
+                    "Advanced Debug Sync Tools",
+                    isExpanded: $debugAdvancedSyncToolsExpanded
+                ) {
+                    Text("Legacy validation tools. Developer only. Keep collapsed unless validating a specific low-level sync boundary.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+
+                    Button {
+                        Task { await checkICloudAccountStatusForDebug() }
+                    } label: {
+                        Label("Check iCloud Account Status", systemImage: "icloud.and.arrow.up")
+                    }
+                    .tint(.orange)
+
+                    Button {
+                        runDryRunUploadSummaryForDebug()
+                    } label: {
+                        Label("Show Dry-Run Upload Summary", systemImage: "list.bullet.clipboard")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await ensureSyncZoneForDebug() }
+                    } label: {
+                        Label("Ensure Sync Zone", systemImage: "square.stack.3d.up")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Toggle("Enable Auto Foreground Sync (Debug)", isOn: $debugAutoMasterSyncEnabled)
+                        .tint(.orange)
+
+                    Button {
+                        Task { await saveOneAccountSyncRecordForDebug() }
+                    } label: {
+                        Label("Save One Account Sync Record", systemImage: "icloud.and.arrow.up")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await fetchSavedAccountSyncRecordForDebug() }
+                    } label: {
+                        Label("Fetch Saved Account Sync Record", systemImage: "icloud.and.arrow.down")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await uploadLimitedAccountBatchForDebug() }
+                    } label: {
+                        Label("Upload Account Sync Batch", systemImage: "icloud.and.arrow.up")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await verifyLimitedAccountBatchFetchForDebug() }
+                    } label: {
+                        Label("Fetch Account Sync Batch", systemImage: "icloud.and.arrow.down")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await verifyMasterDataRoundTripForDebug() }
+                    } label: {
+                        Label("Verify Master Data Round Trip", systemImage: "arrow.triangle.2.circlepath.icloud")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await createDebugCategorySyncChangeForDebug() }
+                    } label: {
+                        Label("Create Debug Category Sync Change", systemImage: "tag")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await runSyncLoopDryRunForDebug() }
+                    } label: {
+                        Label("Run Sync Loop Dry Run", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await runSyncInboxPlanDryRunForDebug() }
+                    } label: {
+                        Label("Run Sync Inbox Plan Dry Run", systemImage: "tray.full")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await runMasterDataApplyPlanDryRunForDebug() }
+                    } label: {
+                        Label("Run Master Data Apply Plan Dry Run", systemImage: "checklist")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button(role: .destructive) {
+                        applyMasterDataPlanForDebug()
+                    } label: {
+                        Label("Apply Master Data Plan", systemImage: "checkmark.seal")
+                    }
+                    .disabled(isWorking || debugLastMasterDataApplyPlan == nil)
+                    .tint(.orange)
+
+                    Button {
+                        Task { await fetchChangedRecordsDryRunForDebug() }
+                    } label: {
+                        Label("Fetch Changed Records Dry Run", systemImage: "arrow.down.doc")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    statusRow(
+                        title: "Saved token",
+                        value: debugSavedChangeTokenExists ? "yes" : "no"
+                    )
+                    statusRow(
+                        title: "Last returned token",
+                        value: debugLastReturnedChangeTokenData == nil ? "no" : "yes"
+                    )
+
+                    Button {
+                        Task { await fetchChangedRecordsWithSavedTokenForDebug() }
+                    } label: {
+                        Label("Fetch Changes With Saved Token", systemImage: "arrow.down.doc")
+                    }
+                    .disabled(isWorking)
+                    .tint(.orange)
+
+                    Button {
+                        saveLastReturnedChangeTokenForDebug()
+                    } label: {
+                        Label("Save Last Returned Token", systemImage: "tray.and.arrow.down")
+                    }
+                    .disabled(isWorking || debugLastReturnedChangeTokenData == nil)
+                    .tint(.orange)
+
+                    Button(role: .destructive) {
+                        clearSavedChangeTokenForDebug()
+                    } label: {
+                        Label("Clear Saved Change Token", systemImage: "trash")
+                    }
+                    .disabled(isWorking || !debugSavedChangeTokenExists)
+                    .tint(.orange)
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active, debugAutoMasterSyncEnabled else { return }
                 Task { await runAutoMasterDataSyncCoordinatorForDebug() }
             }
-
-            Section("Debug — Master Data Auto Sync Gate") {
-                Text("Developer only. Master data only. No transactions, balances, budgets, credit cards, debts, recurring data, or financial events. Default off.")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-
-                Toggle("Enable Production-Safe Master Data Auto Sync Gate", isOn: $debugAutoSyncGateEnabled)
-                    .tint(.orange)
-                    .onChange(of: debugAutoSyncGateEnabled) { _, newValue in
-                        let gate = WalletSyncMasterDataAutoSyncGate()
-                        if newValue { gate.enable() } else { gate.disable() }
-                    }
-
-                statusRow(
-                    title: "Auto sync gate",
-                    value: debugAutoSyncGateEnabled ? "enabled yes" : "enabled no"
-                )
-
-                statusRow(
-                    title: "Last lifecycle trigger attempted",
-                    value: debugAutoSyncLifecycleStatus.lastLifecycleTriggerAttempted ? "yes" : "no"
-                )
-
-                if let result = debugAutoSyncLifecycleStatus.lastCoordinatorResult {
-                    statusRow(
-                        title: "Last coordinator result",
-                        value: result.didRun ? "ran" : "skipped"
-                    )
-
-                    if let reason = result.skipReason {
-                        statusRow(
-                            title: "Skipped reason",
-                            value: debugSafeAutoSyncGateSkipReasonText(reason),
-                            isError: true
-                        )
-                    }
-                }
-            }
             .onAppear {
                 debugAutoSyncGateEnabled = WalletSyncMasterDataAutoSyncGate().isEnabled
+                refreshSavedChangeTokenStatusForDebug()
             }
             #endif
         }
@@ -1815,10 +1761,37 @@ struct ICloudSnapshotSyncView: View {
         do {
             let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
             try await boundary.ensureSyncZone()
+            debugWalletSyncZoneState = "ensured"
             actionMessage = "[Debug] Ensured private sync zone: \(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName)"
             errorMessage = nil
         } catch {
+            debugWalletSyncZoneState = "error"
             errorMessage = "[Debug] Ensure sync zone failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func checkICloudAccountStatusForDebug() async {
+        do {
+            let checker = WalletSyncAccountAvailabilityChecker.liveDefault()
+            let result = try await checker.checkAvailability()
+            switch result {
+            case .available:
+                actionMessage = "[Debug] iCloud: Available — boundary is reachable."
+            case .noAccount:
+                actionMessage = "[Debug] iCloud: No Account — no Apple ID signed in."
+            case .restricted:
+                actionMessage = "[Debug] iCloud: Restricted — iCloud restricted on this device."
+            case .couldNotDetermine:
+                actionMessage = "[Debug] iCloud: Could Not Determine."
+            case .temporarilyUnavailable:
+                actionMessage = "[Debug] iCloud: Temporarily Unavailable."
+            case .unknown:
+                actionMessage = "[Debug] iCloud: Unknown status."
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] iCloud check failed: \(error.localizedDescription)"
             actionMessage = nil
         }
     }
@@ -1969,6 +1942,7 @@ struct ICloudSnapshotSyncView: View {
             let summary = try await pipeline.run()
 
             debugLastMasterDataApplyPlan = nil
+            debugLastMasterDataPipelineSummary = summary
             refreshSavedChangeTokenStatusForDebug()
             actionMessage = debugMasterDataManualPipelineSummaryMessage(summary)
             errorMessage = nil
@@ -2220,9 +2194,29 @@ struct ICloudSnapshotSyncView: View {
 
         let result = await coordinator.runIfAllowed()
         debugCoordinatorResult = result
+        if let summary = result.pipelineSummary {
+            debugLastMasterDataPipelineSummary = summary
+        }
         refreshSavedChangeTokenStatusForDebug()
         actionMessage = debugCoordinatorResultMessage(result)
         errorMessage = nil
+    }
+
+    private func debugLastCoordinatorResultText() -> String {
+        let result = debugAutoSyncLifecycleStatus.lastCoordinatorResult ?? debugCoordinatorResult
+        guard let result else { return "none" }
+        return result.didRun ? "ran" : "skipped"
+    }
+
+    private func debugLastCoordinatorSkipReasonText() -> String? {
+        let result = debugAutoSyncLifecycleStatus.lastCoordinatorResult ?? debugCoordinatorResult
+        guard let reason = result?.skipReason else { return nil }
+        return debugSafeAutoSyncGateSkipReasonText(reason)
+    }
+
+    private func debugLastPipelineSummaryText() -> String {
+        guard let summary = debugLastMasterDataPipelineSummary else { return "none" }
+        return "uploaded \(summary.uploadedCount), changed \(summary.changedRecordCount), applied \(summary.appliedCreatedCount + summary.appliedUpdatedCount + summary.appliedDisabledCount)"
     }
 
     private func debugCoordinatorDidRunText(_ result: WalletSyncMasterDataCoordinatorResult) -> String {
