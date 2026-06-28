@@ -19,6 +19,7 @@ struct WalletSyncInboxItem: Equatable {
     var updatedAt: Date?
     var deletedAt: Date?
     var fieldCount: Int
+    var parentBudgetID: UUID?
     var status: WalletSyncInboxItemStatus
 }
 
@@ -61,6 +62,11 @@ struct WalletSyncInboxParser {
 
         do {
             let dto = try WalletSyncCKRecordAdapter.dto(from: record)
+            let parentBudgetID: UUID? = {
+                guard dto.entity == .monthlyBudgetItem,
+                      case .uuid(let id) = dto.fields["parentBudgetID"] else { return nil }
+                return id
+            }()
             return WalletSyncInboxItem(
                 recordName: dto.recordName,
                 entity: dto.entity,
@@ -69,7 +75,8 @@ struct WalletSyncInboxParser {
                 updatedAt: dto.updatedAt,
                 deletedAt: dto.deletedAt,
                 fieldCount: dto.fields.count,
-                status: status(for: dto)
+                parentBudgetID: parentBudgetID,
+                status: status(for: dto, parentBudgetID: parentBudgetID)
             )
         } catch WalletSyncCKRecordAdapter.AdapterError.invalidEntity(_) {
             return failedItem(recordName: recordName, status: .unsupportedEntity)
@@ -88,14 +95,16 @@ struct WalletSyncInboxParser {
             updatedAt: nil,
             deletedAt: nil,
             fieldCount: 0,
+            parentBudgetID: nil,
             status: .deletedRecordNameOnly
         )
     }
 
-    private func status(for dto: WalletSyncRecordDTO) -> WalletSyncInboxItemStatus {
+    private func status(for dto: WalletSyncRecordDTO, parentBudgetID: UUID?) -> WalletSyncInboxItemStatus {
         switch dto.entity {
         case .monthlyBudgetItem:
-            return .blockedMonthlyBudgetItemNoParent
+            guard parentBudgetID != nil else { return .blockedMonthlyBudgetItemNoParent }
+            return dto.isDeleted ? .validDeletedTombstone : .validChangedRecord
         case .householdSettings:
             return .blockedHouseholdSettingsNoModel
         default:
@@ -115,6 +124,7 @@ struct WalletSyncInboxParser {
             updatedAt: nil,
             deletedAt: nil,
             fieldCount: 0,
+            parentBudgetID: nil,
             status: status
         )
     }

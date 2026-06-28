@@ -49,7 +49,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(summary.uploadedCountsByEntity[.account], 7)
     }
 
-    func testUploadExcludesMonthlyBudgetItemAndHouseholdSettings() async throws {
+    func testUploadExcludesOnlyHouseholdSettings() async throws {
         let boundary = FakeFullDataBoundary()
         let store = FakeFullDataStore.withOneOfEachSupportedEntity()
         let pipeline = makePipeline(boundary: boundary, store: store)
@@ -57,9 +57,8 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         let summary = try await pipeline.run()
         let uploadedEntities = try boundary.savedRecords.map { try WalletSyncCKRecordAdapter.dto(from: $0).entity }
 
-        XCTAssertFalse(uploadedEntities.contains(.monthlyBudgetItem))
         XCTAssertFalse(uploadedEntities.contains(.householdSettings))
-        XCTAssertEqual(Set(summary.excludedEntities), [.monthlyBudgetItem, .householdSettings])
+        XCTAssertEqual(summary.excludedEntities, [.householdSettings])
     }
 
     func testLocalEchoGuardStillPreventsSelfApply() async throws {
@@ -673,12 +672,16 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     }
 
     func testUnsupportedEntitiesAreBlockedWithSafeReason() {
-        let itemDTO = WalletSyncRecordMappers.dto(for: makeMonthlyBudgetItem())
+        let itemWithoutParentDTO = WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .monthlyBudgetItem, id: UUID()),
+            updatedAt: Date(),
+            fields: ["categoryName": .string("Food"), "plannedAmount": .double(500)]
+        )
         let settingsDTO = WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .householdSettings, id: UUID()),
             updatedAt: Date()
         )
-        let records = [itemDTO, settingsDTO].map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let records = [itemWithoutParentDTO, settingsDTO].map(WalletSyncCKRecordAdapter.ckRecord(from:))
 
         let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
             .makePlan(changedRecords: records, deletedRecordNames: [])
@@ -694,20 +697,180 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         })
     }
 
-    func testFinancialPaymentPurchaseDebtEntryAndMonthlyBudgetRemainBlocked() {
+    func testFinancialPaymentPurchaseAndDebtEntryRemainBlockedWithoutParent() {
         let records = [
             WalletSyncRecordMappers.dto(for: makeCreditCardPayment()),
             WalletSyncRecordMappers.dto(for: makeCreditCardPurchase()),
-            WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
-            WalletSyncRecordMappers.dto(for: makeMonthlyBudget())
+            WalletSyncRecordMappers.dto(for: makePersonDebtEntry())
         ].map(WalletSyncCKRecordAdapter.ckRecord(from:))
 
         let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
             .makePlan(changedRecords: records, deletedRecordNames: [])
 
-        XCTAssertEqual(plan.blockedCount, 4)
+        XCTAssertEqual(plan.blockedCount, 3)
         XCTAssertEqual(plan.plannedCreateCount, 0)
         XCTAssertEqual(plan.plannedUpdateCount, 0)
+    }
+
+    func testMonthlyBudgetPlansAsCreateWhenNotLocal() {
+        let budget = makeMonthlyBudget()
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: budget))
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedCreateCount, 1)
+        XCTAssertEqual(plan.blockedCount, 0)
+        XCTAssertTrue(plan.items.contains {
+            if case .createWalletMonthlyBudget(let b) = $0.action { return b.id == budget.id }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetPlansAsUpdateWhenLocal() {
+        let budget = makeMonthlyBudget()
+        let store = FakeFullDataStore(monthlyBudgets: [budget])
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: budget))
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedUpdateCount, 1)
+        XCTAssertEqual(plan.blockedCount, 0)
+    }
+
+    func testMonthlyBudgetItemBlockedWhenNoParentBudgetIDField() {
+        let itemDTO = WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .monthlyBudgetItem, id: UUID()),
+            updatedAt: Date(),
+            fields: ["categoryName": .string("Food"), "plannedAmount": .double(500)]
+        )
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: itemDTO)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .monthlyBudgetItemNoParent }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetItemBlockedWhenParentNotLocal() {
+        let budget = makeMonthlyBudget()
+        var item = makeMonthlyBudgetItem()
+        item.id = UUID()
+        let itemDTO = WalletSyncRecordMappers.dto(for: item, parentBudgetID: budget.id)
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: itemDTO)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .missingParentRecord }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetItemPlansAsCreateWhenParentExistsAndItemNotLocal() {
+        let budget = makeMonthlyBudget()
+        var item = makeMonthlyBudgetItem()
+        item.id = UUID()
+        let store = FakeFullDataStore(monthlyBudgets: [budget])
+        let itemDTO = WalletSyncRecordMappers.dto(for: item, parentBudgetID: budget.id)
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: itemDTO)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedCreateCount, 1)
+        XCTAssertEqual(plan.blockedCount, 0)
+    }
+
+    func testMonthlyBudgetItemPlansAsUpdateWhenRemoteIsNewer() {
+        let budget = makeMonthlyBudget()
+        var item = makeMonthlyBudgetItem()
+        item.id = UUID()
+        item.updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var budgetWithItem = budget
+        budgetWithItem.items = [item]
+        let store = FakeFullDataStore(monthlyBudgets: [budgetWithItem])
+        var remoteItem = item
+        remoteItem.updatedAt = Date(timeIntervalSince1970: 1_800_000_200)
+        let itemDTO = WalletSyncRecordMappers.dto(for: remoteItem, parentBudgetID: budget.id)
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: itemDTO)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedUpdateCount, 1)
+        XCTAssertEqual(plan.blockedCount, 0)
+    }
+
+    func testMonthlyBudgetItemBlockedWhenLocalIsNewer() {
+        let budget = makeMonthlyBudget()
+        var item = makeMonthlyBudgetItem()
+        item.id = UUID()
+        item.updatedAt = Date(timeIntervalSince1970: 1_800_000_200)
+        var budgetWithItem = budget
+        budgetWithItem.items = [item]
+        let store = FakeFullDataStore(monthlyBudgets: [budgetWithItem])
+        var remoteItem = item
+        remoteItem.updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let itemDTO = WalletSyncRecordMappers.dto(for: remoteItem, parentBudgetID: budget.id)
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: itemDTO)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .localChildRecordNewer }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetItemsAreIncludedInUploadWhenParentHasItems() async throws {
+        let budgetID = deterministicID(index: 400)
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = budgetID
+        var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        item.id = deterministicID(index: 401)
+        budget.items = [item]
+        let boundary = FakeFullDataBoundary()
+        let store = FakeFullDataStore(monthlyBudgets: [budget])
+        let pipeline = makePipeline(boundary: boundary, store: store)
+
+        _ = try await pipeline.run()
+
+        let uploadedEntities = try boundary.savedRecords.map { try WalletSyncCKRecordAdapter.dto(from: $0).entity }
+        XCTAssertTrue(uploadedEntities.contains(.monthlyBudgetItem))
+    }
+
+    func testMonthlyBudgetItemUploadIncludesParentBudgetID() async throws {
+        let budgetID = deterministicID(index: 410)
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = budgetID
+        var item = WalletMonthlyBudgetItem(categoryName: "Transport", plannedAmount: 300)
+        item.id = deterministicID(index: 411)
+        budget.items = [item]
+        let boundary = FakeFullDataBoundary()
+        let store = FakeFullDataStore(monthlyBudgets: [budget])
+        let pipeline = makePipeline(boundary: boundary, store: store)
+
+        _ = try await pipeline.run()
+
+        let itemDTOs = try boundary.savedRecords
+            .map { try WalletSyncCKRecordAdapter.dto(from: $0) }
+            .filter { $0.entity == .monthlyBudgetItem }
+        XCTAssertEqual(itemDTOs.count, 1)
+        if case .uuid(let parentID) = itemDTOs.first?.fields["parentBudgetID"] {
+            XCTAssertEqual(parentID, budgetID)
+        } else {
+            XCTFail("parentBudgetID field missing or not a UUID")
+        }
     }
 
     func testLaterBatchFailureIsReportedByThrowingWithoutFetchOrTokenSave() async throws {
@@ -799,6 +962,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         .walletEvent,
         .financialEvent,
         .monthlyBudget,
+        .monthlyBudgetItem,
         .personDebt,
         .personDebtEntry,
         .creditCard,
@@ -810,12 +974,14 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     ]
 
     private static func supportedDTOs() -> [WalletSyncRecordDTO] {
-        [
+        let budget = makeMonthlyBudget()
+        return [
             WalletSyncRecordMappers.dto(for: makeAccount()),
             WalletSyncRecordMappers.dto(for: makeCategory()),
             WalletSyncRecordMappers.dto(for: makeWalletEvent()),
             WalletSyncRecordMappers.dto(for: makeFinancialEvent()),
-            WalletSyncRecordMappers.dto(for: makeMonthlyBudget()),
+            WalletSyncRecordMappers.dto(for: budget),
+            WalletSyncRecordMappers.dto(for: makeMonthlyBudgetItem(), parentBudgetID: budget.id),
             WalletSyncRecordMappers.dto(for: makePersonDebt()),
             WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
             WalletSyncRecordMappers.dto(for: makeCreditCard()),
@@ -979,14 +1145,16 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     }
 
     static func withOneOfEachSupportedEntity() -> FakeFullDataStore {
-        FakeFullDataStore(
+        var budgetWithItem = makeMonthlyBudget()
+        budgetWithItem.items = [makeMonthlyBudgetItem()]
+        return FakeFullDataStore(
             accounts: [makeAccount()],
             categories: [makeCategory()],
             walletEvents: [makeWalletEvent()],
             merchantMemories: [makeMerchantMemory()],
             installmentPlans: [makeInstallmentPlan()],
             financialEvents: [makeFinancialEvent()],
-            monthlyBudgets: [makeMonthlyBudget()],
+            monthlyBudgets: [budgetWithItem],
             personDebts: [makePersonDebt()],
             personDebtEntries: [makePersonDebtEntry()],
             creditCards: [makeCreditCard()],
@@ -1012,6 +1180,16 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     func creditCardPaymentUpdatedAt(id: UUID) -> Date? { creditCardPayments.first { $0.id == id }?.updatedAt }
     func containsPersonDebtEntry(id: UUID) -> Bool { personDebtEntries.contains { $0.id == id } }
     func personDebtEntryUpdatedAt(id: UUID) -> Date? { personDebtEntries.first { $0.id == id }?.updatedAt }
+    func containsMonthlyBudget(id: UUID) -> Bool { monthlyBudgets.contains { $0.id == id } }
+    func monthlyBudgetUpdatedAt(id: UUID) -> Date? { monthlyBudgets.first { $0.id == id }?.updatedAt }
+    func containsMonthlyBudgetItem(id: UUID, inBudget parentID: UUID) -> Bool {
+        guard let budget = monthlyBudgets.first(where: { $0.id == parentID }) else { return false }
+        return budget.items.contains { $0.id == id }
+    }
+    func monthlyBudgetItemUpdatedAt(id: UUID, inBudget parentID: UUID) -> Date? {
+        guard let budget = monthlyBudgets.first(where: { $0.id == parentID }) else { return nil }
+        return budget.items.first { $0.id == id }?.updatedAt
+    }
 }
 
 private func makeAccount(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, balance: Double = 0) -> Account {
@@ -1064,12 +1242,16 @@ private func makeFinancialEvent(
     return event
 }
 
-private func makeMonthlyBudget() -> WalletMonthlyBudget {
-    WalletMonthlyBudget(year: 2026, month: 6, items: [])
+private func makeMonthlyBudget(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!) -> WalletMonthlyBudget {
+    var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+    budget.id = id
+    return budget
 }
 
-private func makeMonthlyBudgetItem() -> WalletMonthlyBudgetItem {
-    WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+private func makeMonthlyBudgetItem(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000021")!) -> WalletMonthlyBudgetItem {
+    var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+    item.id = id
+    return item
 }
 
 private func makePersonDebt(

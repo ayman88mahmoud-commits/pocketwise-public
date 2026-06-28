@@ -127,7 +127,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
             batchCount: uploadedCountsByBatch.count,
             uploadedCountsByBatch: uploadedCountsByBatch,
             uploadedCountsByEntity: uploadPlan.countsByEntity,
-            excludedEntities: [.monthlyBudgetItem, .householdSettings],
+            excludedEntities: [.householdSettings],
             uploadCap: uploadCap,
             uploadCappedCount: uploadPlan.cappedCount,
             usedSavedToken: savedTokenData != nil,
@@ -158,6 +158,9 @@ struct WalletSyncFullDataRecordValidationPipeline {
             (.walletEvent, source.walletEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.financialEvent, source.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudget, source.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
+            (.monthlyBudgetItem, source.monthlyBudgets.flatMap { budget in
+                budget.items.map { WalletSyncRecordMappers.dto(for: $0, parentBudgetID: budget.id) }
+            }),
             (.personDebt, source.personDebts.map(WalletSyncRecordMappers.dto(for:))),
             (.personDebtEntry, source.personDebtEntries.map(WalletSyncRecordMappers.dto(for:))),
             (.creditCard, source.creditCards.map(WalletSyncRecordMappers.dto(for:))),

@@ -61,6 +61,10 @@ enum WalletSyncMasterDataApplyAction: Equatable {
     case updateCreditCardPayment(CreditCardPayment)
     case createPersonDebtEntry(PersonDebtEntry)
     case updatePersonDebtEntry(PersonDebtEntry)
+    case createWalletMonthlyBudget(WalletMonthlyBudget)
+    case updateWalletMonthlyBudget(WalletMonthlyBudget)
+    case createWalletMonthlyBudgetItem(WalletMonthlyBudgetItem, parentBudgetID: UUID)
+    case updateWalletMonthlyBudgetItem(WalletMonthlyBudgetItem, parentBudgetID: UUID)
     case blocked(reason: WalletSyncMasterDataApplyBlockReason)
     case failed
 }
@@ -105,6 +109,8 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .createCreditCardPurchase = $0.action { return true }
             if case .createCreditCardPayment = $0.action { return true }
             if case .createPersonDebtEntry = $0.action { return true }
+            if case .createWalletMonthlyBudget = $0.action { return true }
+            if case .createWalletMonthlyBudgetItem = $0.action { return true }
             return false
         }.count
     }
@@ -123,6 +129,8 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .updateCreditCardPurchase = $0.action { return true }
             if case .updateCreditCardPayment = $0.action { return true }
             if case .updatePersonDebtEntry = $0.action { return true }
+            if case .updateWalletMonthlyBudget = $0.action { return true }
+            if case .updateWalletMonthlyBudgetItem = $0.action { return true }
             return false
         }.count
     }
@@ -327,6 +335,32 @@ struct WalletSyncMasterDataApplyPlanBuilder {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
             return planPersonDebtEntry(dto: dto, entry: entry)
+        case .monthlyBudget:
+            guard let budget = walletMonthlyBudget(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .monthlyBudget,
+                id: dto.id,
+                action: localState.containsMonthlyBudget(id: dto.id) ? .updateWalletMonthlyBudget(budget) : .createWalletMonthlyBudget(budget)
+            )
+        case .monthlyBudgetItem:
+            guard let parentBudgetID = uuidField("parentBudgetID", in: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .monthlyBudgetItemNoParent)
+            }
+            guard localState.containsMonthlyBudget(id: parentBudgetID) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
+            }
+            guard let item = walletMonthlyBudgetItem(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return planChildRecord(
+                dto: dto,
+                localUpdatedAt: localState.monthlyBudgetItemUpdatedAt(id: dto.id, inBudget: parentBudgetID),
+                createAction: .createWalletMonthlyBudgetItem(item, parentBudgetID: parentBudgetID),
+                updateAction: .updateWalletMonthlyBudgetItem(item, parentBudgetID: parentBudgetID)
+            )
         default:
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id)
         }
@@ -771,6 +805,36 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         )
     }
 
+    private func walletMonthlyBudget(from dto: WalletSyncRecordDTO) -> WalletMonthlyBudget? {
+        guard let year = intField("year", in: dto),
+              let month = intField("month", in: dto) else {
+            return nil
+        }
+
+        var budget = WalletMonthlyBudget(year: year, month: month, items: [])
+        budget.id = dto.id
+        budget.createdAt = dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date()
+        budget.updatedAt = dto.updatedAt ?? Date()
+        budget.isDeleted = false
+        budget.deletedAt = nil
+        return budget
+    }
+
+    private func walletMonthlyBudgetItem(from dto: WalletSyncRecordDTO) -> WalletMonthlyBudgetItem? {
+        guard let categoryName = stringField("categoryName", in: dto),
+              let plannedAmount = doubleField("plannedAmount", in: dto) else {
+            return nil
+        }
+
+        var item = WalletMonthlyBudgetItem(categoryName: categoryName, plannedAmount: plannedAmount)
+        item.id = dto.id
+        item.createdAt = dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date()
+        item.updatedAt = dto.updatedAt ?? Date()
+        item.isDeleted = false
+        item.deletedAt = nil
+        return item
+    }
+
     private func blockedItem(
         recordName: String,
         entity: WalletSyncRecordEntity?,
@@ -810,12 +874,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
     }
 
     private func isFullDataEntityPendingDirectApplyValidation(_ entity: WalletSyncRecordEntity?) -> Bool {
-        switch entity {
-        case .monthlyBudget:
-            return true
-        default:
-            return false
-        }
+        return false
     }
 
     private func identityFromRecordName(_ recordName: String) -> WalletSyncRecordIdentity? {

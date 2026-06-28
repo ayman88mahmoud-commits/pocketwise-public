@@ -223,6 +223,197 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         return event
     }
 
+    func testApplyCreateMonthlyBudgetAddsToStore() {
+        let store = FakeApplyingStore()
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = UUID()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudget(budget), entity: .monthlyBudget, id: budget.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.monthlyBudgets.count, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.id, budget.id)
+        XCTAssertEqual(store.monthlyBudgets.first?.year, 2026)
+        XCTAssertEqual(store.monthlyBudgets.first?.month, 6)
+    }
+
+    func testApplyCreateMonthlyBudgetDoesNotTouchItems() {
+        let store = FakeApplyingStore()
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = UUID()
+        let itemCarriedInRemote = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        budget.items = [itemCarriedInRemote]
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudget(budget), entity: .monthlyBudget, id: budget.id)
+        ])
+
+        _ = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(store.monthlyBudgets.first?.items.count, 0)
+    }
+
+    func testApplyCreateMonthlyBudgetIgnoresDuplicate() {
+        let budgetID = UUID()
+        var existing = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        existing.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [existing])
+        var remote = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        remote.id = budgetID
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudget(remote), entity: .monthlyBudget, id: budgetID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 0)
+        XCTAssertEqual(store.monthlyBudgets.count, 1)
+    }
+
+    func testApplyUpdateMonthlyBudgetUpdatesMetadataFields() {
+        let budgetID = UUID()
+        var existing = WalletMonthlyBudget(year: 2025, month: 1, items: [])
+        existing.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [existing])
+        var remote = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        remote.id = budgetID
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .updateWalletMonthlyBudget(remote), entity: .monthlyBudget, id: budgetID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.year, 2026)
+        XCTAssertEqual(store.monthlyBudgets.first?.month, 6)
+    }
+
+    func testApplyUpdateMonthlyBudgetPreservesExistingItems() {
+        let budgetID = UUID()
+        let localItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        var existing = WalletMonthlyBudget(year: 2025, month: 1, items: [localItem])
+        existing.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [existing])
+        var remote = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        remote.id = budgetID
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .updateWalletMonthlyBudget(remote), entity: .monthlyBudget, id: budgetID)
+        ])
+
+        _ = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(store.monthlyBudgets.first?.items.count, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.categoryName, "Food")
+    }
+
+    func testApplyCreateMonthlyBudgetItemAddsToParent() {
+        let budgetID = UUID()
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [budget])
+        var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        item.id = UUID()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudgetItem(item, parentBudgetID: budgetID), entity: .monthlyBudgetItem, id: item.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.count, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.categoryName, "Food")
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.plannedAmount, 500)
+    }
+
+    func testApplyCreateMonthlyBudgetItemSkipsIfParentNotFound() {
+        let store = FakeApplyingStore()
+        var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        item.id = UUID()
+        let orphanParentID = UUID()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudgetItem(item, parentBudgetID: orphanParentID), entity: .monthlyBudgetItem, id: item.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
+    func testApplyCreateMonthlyBudgetItemIgnoresDuplicateItem() {
+        let budgetID = UUID()
+        let itemID = UUID()
+        var existingItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        existingItem.id = itemID
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [existingItem])
+        budget.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [budget])
+        var remoteItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 600)
+        remoteItem.id = itemID
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createWalletMonthlyBudgetItem(remoteItem, parentBudgetID: budgetID), entity: .monthlyBudgetItem, id: itemID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 0)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.plannedAmount, 500)
+    }
+
+    func testApplyUpdateMonthlyBudgetItemUpdatesFields() {
+        let budgetID = UUID()
+        let itemID = UUID()
+        var existingItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        existingItem.id = itemID
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [existingItem])
+        budget.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [budget])
+        var remoteItem = WalletMonthlyBudgetItem(categoryName: "Transport", plannedAmount: 750)
+        remoteItem.id = itemID
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .updateWalletMonthlyBudgetItem(remoteItem, parentBudgetID: budgetID), entity: .monthlyBudgetItem, id: itemID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.categoryName, "Transport")
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.plannedAmount, 750)
+    }
+
+    func testApplyUpdateMonthlyBudgetItemSkipsIfParentNotFound() {
+        let store = FakeApplyingStore()
+        var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        item.id = UUID()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .updateWalletMonthlyBudgetItem(item, parentBudgetID: UUID()), entity: .monthlyBudgetItem, id: item.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
+    func testApplyUpdateMonthlyBudgetItemSkipsIfItemNotFoundInParent() {
+        let budgetID = UUID()
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [])
+        budget.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [budget])
+        var item = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        item.id = UUID()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .updateWalletMonthlyBudgetItem(item, parentBudgetID: budgetID), entity: .monthlyBudgetItem, id: item.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
@@ -238,6 +429,7 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         var creditCardPurchases: [CreditCardPurchase] = []
         var creditCardPayments: [CreditCardPayment] = []
         var personDebtEntries: [PersonDebtEntry] = []
+        var monthlyBudgets: [WalletMonthlyBudget] = []
 
         var financialEventMutationCount = 0
         var creditCardMutationCount = 0
@@ -248,11 +440,13 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         init(
             accounts: [Account] = [],
             categories: [WalletBoard.Category] = [],
-            walletEvents: [WalletEvent] = []
+            walletEvents: [WalletEvent] = [],
+            monthlyBudgets: [WalletMonthlyBudget] = []
         ) {
             self.accounts = accounts
             self.categories = categories
             self.walletEvents = walletEvents
+            self.monthlyBudgets = monthlyBudgets
         }
     }
 }

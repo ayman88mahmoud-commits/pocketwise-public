@@ -130,13 +130,14 @@ enum WalletSyncRecordMappers {
         )
     }
 
-    static func dto(for item: WalletMonthlyBudgetItem) -> WalletSyncRecordDTO {
+    static func dto(for item: WalletMonthlyBudgetItem, parentBudgetID: UUID) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .monthlyBudgetItem, id: item.id),
             updatedAt: item.updatedAt,
             deletedAt: item.deletedAt,
             isDeleted: item.isDeleted,
             fields: [
+                "parentBudgetID": .uuid(parentBudgetID),
                 "categoryName": .string(item.categoryName),
                 "plannedAmount": .double(item.plannedAmount),
                 "createdAt": .date(item.createdAt)

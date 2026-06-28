@@ -13,6 +13,7 @@ protocol WalletSyncMasterDataApplyingStore: AnyObject {
     var creditCardPurchases: [CreditCardPurchase] { get set }
     var creditCardPayments: [CreditCardPayment] { get set }
     var personDebtEntries: [PersonDebtEntry] { get set }
+    var monthlyBudgets: [WalletMonthlyBudget] { get set }
 }
 
 extension WalletStore: WalletSyncMasterDataApplyingStore {}
@@ -93,6 +94,14 @@ struct WalletSyncMasterDataApplier {
                 applyCreatePersonDebtEntry(entry, result: &result)
             case .updatePersonDebtEntry(let entry):
                 applyUpdatePersonDebtEntry(entry, result: &result)
+            case .createWalletMonthlyBudget(let budget):
+                applyCreateWalletMonthlyBudget(budget, result: &result)
+            case .updateWalletMonthlyBudget(let budget):
+                applyUpdateWalletMonthlyBudget(budget, result: &result)
+            case .createWalletMonthlyBudgetItem(let item, let parentBudgetID):
+                applyCreateWalletMonthlyBudgetItem(item, parentBudgetID: parentBudgetID, result: &result)
+            case .updateWalletMonthlyBudgetItem(let item, let parentBudgetID):
+                applyUpdateWalletMonthlyBudgetItem(item, parentBudgetID: parentBudgetID, result: &result)
             case .blocked:
                 result.blockedCount += 1
             case .failed:
@@ -403,6 +412,70 @@ struct WalletSyncMasterDataApplier {
         }
 
         store.personDebtEntries[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateWalletMonthlyBudget(_ budget: WalletMonthlyBudget, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.monthlyBudgets.contains(where: { $0.id == budget.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        var newBudget = budget
+        newBudget.items = []
+        store.monthlyBudgets.append(newBudget)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateWalletMonthlyBudget(_ remote: WalletMonthlyBudget, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.monthlyBudgets.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        let existingItems = store.monthlyBudgets[index].items
+        store.monthlyBudgets[index].year = remote.year
+        store.monthlyBudgets[index].month = remote.month
+        store.monthlyBudgets[index].createdAt = remote.createdAt
+        store.monthlyBudgets[index].updatedAt = remote.updatedAt
+        store.monthlyBudgets[index].isDeleted = remote.isDeleted
+        store.monthlyBudgets[index].deletedAt = remote.deletedAt
+        store.monthlyBudgets[index].items = existingItems
+        result.updatedCount += 1
+    }
+
+    private func applyCreateWalletMonthlyBudgetItem(_ item: WalletMonthlyBudgetItem, parentBudgetID: UUID, result: inout WalletSyncMasterDataApplyResult) {
+        guard let budgetIndex = store.monthlyBudgets.firstIndex(where: { $0.id == parentBudgetID }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        guard !store.monthlyBudgets[budgetIndex].items.contains(where: { $0.id == item.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.monthlyBudgets[budgetIndex].items.append(item)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateWalletMonthlyBudgetItem(_ remote: WalletMonthlyBudgetItem, parentBudgetID: UUID, result: inout WalletSyncMasterDataApplyResult) {
+        guard let budgetIndex = store.monthlyBudgets.firstIndex(where: { $0.id == parentBudgetID }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        guard let itemIndex = store.monthlyBudgets[budgetIndex].items.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.monthlyBudgets[budgetIndex].items[itemIndex].categoryName = remote.categoryName
+        store.monthlyBudgets[budgetIndex].items[itemIndex].plannedAmount = remote.plannedAmount
+        store.monthlyBudgets[budgetIndex].items[itemIndex].createdAt = remote.createdAt
+        store.monthlyBudgets[budgetIndex].items[itemIndex].updatedAt = remote.updatedAt
+        store.monthlyBudgets[budgetIndex].items[itemIndex].isDeleted = remote.isDeleted
+        store.monthlyBudgets[budgetIndex].items[itemIndex].deletedAt = remote.deletedAt
         result.updatedCount += 1
     }
 }

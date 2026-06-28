@@ -17,6 +17,10 @@ protocol WalletSyncMergePlanLocalStateReading {
     func creditCardPaymentUpdatedAt(id: UUID) -> Date?
     func containsPersonDebtEntry(id: UUID) -> Bool
     func personDebtEntryUpdatedAt(id: UUID) -> Date?
+    func containsMonthlyBudget(id: UUID) -> Bool
+    func monthlyBudgetUpdatedAt(id: UUID) -> Date?
+    func containsMonthlyBudgetItem(id: UUID, inBudget parentID: UUID) -> Bool
+    func monthlyBudgetItemUpdatedAt(id: UUID, inBudget parentID: UUID) -> Date?
 }
 
 extension WalletSyncMergePlanLocalStateReading {
@@ -33,6 +37,10 @@ extension WalletSyncMergePlanLocalStateReading {
     func creditCardPaymentUpdatedAt(id: UUID) -> Date? { nil }
     func containsPersonDebtEntry(id: UUID) -> Bool { false }
     func personDebtEntryUpdatedAt(id: UUID) -> Date? { nil }
+    func containsMonthlyBudget(id: UUID) -> Bool { false }
+    func monthlyBudgetUpdatedAt(id: UUID) -> Date? { nil }
+    func containsMonthlyBudgetItem(id: UUID, inBudget parentID: UUID) -> Bool { false }
+    func monthlyBudgetItemUpdatedAt(id: UUID, inBudget parentID: UUID) -> Date? { nil }
 }
 
 extension WalletStore: WalletSyncMergePlanLocalStateReading {
@@ -98,6 +106,24 @@ extension WalletStore: WalletSyncMergePlanLocalStateReading {
 
     func personDebtEntryUpdatedAt(id: UUID) -> Date? {
         personDebtEntries.first { $0.id == id }?.updatedAt
+    }
+
+    func containsMonthlyBudget(id: UUID) -> Bool {
+        monthlyBudgets.contains { $0.id == id }
+    }
+
+    func monthlyBudgetUpdatedAt(id: UUID) -> Date? {
+        monthlyBudgets.first { $0.id == id }?.updatedAt
+    }
+
+    func containsMonthlyBudgetItem(id: UUID, inBudget parentID: UUID) -> Bool {
+        guard let budget = monthlyBudgets.first(where: { $0.id == parentID }) else { return false }
+        return budget.items.contains { $0.id == id }
+    }
+
+    func monthlyBudgetItemUpdatedAt(id: UUID, inBudget parentID: UUID) -> Date? {
+        guard let budget = monthlyBudgets.first(where: { $0.id == parentID }) else { return nil }
+        return budget.items.first { $0.id == id }?.updatedAt
     }
 }
 
@@ -199,8 +225,16 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsCreditCardPayment(id: id))
         case .personDebtEntry:
             return planMasterDataItem(item, exists: localState.containsPersonDebtEntry(id: id))
+        case .monthlyBudget:
+            return planMasterDataItem(item, exists: localState.containsMonthlyBudget(id: id))
         case .monthlyBudgetItem:
-            return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
+            guard let parentBudgetID = item.parentBudgetID else {
+                return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
+            }
+            guard localState.containsMonthlyBudget(id: parentBudgetID) else {
+                return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
+            }
+            return planMasterDataItem(item, exists: localState.containsMonthlyBudgetItem(id: id, inBudget: parentBudgetID))
         case .householdSettings:
             return makeItem(from: item, action: .blocked, blockReason: .householdSettingsNoModel)
         default:
