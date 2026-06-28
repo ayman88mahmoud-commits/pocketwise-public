@@ -160,6 +160,12 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
     }
 }
 
+private struct WalletSyncBatchParentAvailability {
+    var creditCardIDs: Set<UUID> = []
+    var personDebtIDs: Set<UUID> = []
+    var monthlyBudgetIDs: Set<UUID> = []
+}
+
 struct WalletSyncMasterDataApplyPlanBuilder {
     private let localState: WalletSyncMergePlanLocalStateReading
 
@@ -171,17 +177,37 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         changedRecords: [CKRecord],
         deletedRecordNames: [String]
     ) -> WalletSyncMasterDataApplyPlanSummary {
-        let changedItems = changedRecords.map(planChangedRecord)
+        let batchParents = collectBatchParentAvailability(from: changedRecords)
+        let changedItems = changedRecords.map { planChangedRecord($0, batchParents: batchParents) }
         let deletedItems = deletedRecordNames.map(planDeletedRecordName)
         return WalletSyncMasterDataApplyPlanSummary(items: changedItems + deletedItems)
     }
 
-    private func planChangedRecord(_ record: CKRecord) -> WalletSyncMasterDataApplyPlanItem {
+    private func collectBatchParentAvailability(from changedRecords: [CKRecord]) -> WalletSyncBatchParentAvailability {
+        var availability = WalletSyncBatchParentAvailability()
+        for record in changedRecords {
+            guard let dto = try? WalletSyncCKRecordAdapter.dto(from: record) else { continue }
+            guard !dto.isDeleted else { continue }
+            switch dto.entity {
+            case .creditCard:
+                if creditCard(from: dto) != nil { availability.creditCardIDs.insert(dto.id) }
+            case .personDebt:
+                if personDebt(from: dto) != nil { availability.personDebtIDs.insert(dto.id) }
+            case .monthlyBudget:
+                if walletMonthlyBudget(from: dto) != nil { availability.monthlyBudgetIDs.insert(dto.id) }
+            default:
+                break
+            }
+        }
+        return availability
+    }
+
+    private func planChangedRecord(_ record: CKRecord, batchParents: WalletSyncBatchParentAvailability) -> WalletSyncMasterDataApplyPlanItem {
         let recordName = record.recordID.recordName
 
         do {
             let dto = try WalletSyncCKRecordAdapter.dto(from: record)
-            return planDTO(dto)
+            return planDTO(dto, batchParents: batchParents)
         } catch {
             return WalletSyncMasterDataApplyPlanItem(
                 recordName: recordName,
@@ -229,7 +255,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         }
     }
 
-    private func planDTO(_ dto: WalletSyncRecordDTO) -> WalletSyncMasterDataApplyPlanItem {
+    private func planDTO(_ dto: WalletSyncRecordDTO, batchParents: WalletSyncBatchParentAvailability) -> WalletSyncMasterDataApplyPlanItem {
         if dto.isDeleted {
             return planDeletedRecordName(dto.recordName)
         }
@@ -324,17 +350,17 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             guard let purchase = creditCardPurchase(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
-            return planCreditCardPurchase(dto: dto, purchase: purchase)
+            return planCreditCardPurchase(dto: dto, purchase: purchase, batchParents: batchParents)
         case .creditCardPayment:
             guard let payment = creditCardPayment(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
-            return planCreditCardPayment(dto: dto, payment: payment)
+            return planCreditCardPayment(dto: dto, payment: payment, batchParents: batchParents)
         case .personDebtEntry:
             guard let entry = personDebtEntry(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
-            return planPersonDebtEntry(dto: dto, entry: entry)
+            return planPersonDebtEntry(dto: dto, entry: entry, batchParents: batchParents)
         case .monthlyBudget:
             guard let budget = walletMonthlyBudget(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
@@ -349,7 +375,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             guard let parentBudgetID = uuidField("parentBudgetID", in: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .monthlyBudgetItemNoParent)
             }
-            guard localState.containsMonthlyBudget(id: parentBudgetID) else {
+            guard localState.containsMonthlyBudget(id: parentBudgetID) || batchParents.monthlyBudgetIDs.contains(parentBudgetID) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
             }
             guard let item = walletMonthlyBudgetItem(from: dto) else {
@@ -401,9 +427,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func planCreditCardPurchase(
         dto: WalletSyncRecordDTO,
-        purchase: CreditCardPurchase
+        purchase: CreditCardPurchase,
+        batchParents: WalletSyncBatchParentAvailability
     ) -> WalletSyncMasterDataApplyPlanItem {
-        guard localState.containsCreditCard(id: purchase.cardID) else {
+        guard localState.containsCreditCard(id: purchase.cardID) || batchParents.creditCardIDs.contains(purchase.cardID) else {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
         }
 
@@ -417,9 +444,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func planCreditCardPayment(
         dto: WalletSyncRecordDTO,
-        payment: CreditCardPayment
+        payment: CreditCardPayment,
+        batchParents: WalletSyncBatchParentAvailability
     ) -> WalletSyncMasterDataApplyPlanItem {
-        guard localState.containsCreditCard(id: payment.cardID) else {
+        guard localState.containsCreditCard(id: payment.cardID) || batchParents.creditCardIDs.contains(payment.cardID) else {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
         }
 
@@ -433,9 +461,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func planPersonDebtEntry(
         dto: WalletSyncRecordDTO,
-        entry: PersonDebtEntry
+        entry: PersonDebtEntry,
+        batchParents: WalletSyncBatchParentAvailability
     ) -> WalletSyncMasterDataApplyPlanItem {
-        guard localState.containsPersonDebt(id: entry.debtID) else {
+        guard localState.containsPersonDebt(id: entry.debtID) || batchParents.personDebtIDs.contains(entry.debtID) else {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
         }
 

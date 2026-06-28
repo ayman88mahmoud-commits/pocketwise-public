@@ -414,6 +414,71 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertEqual(result.skippedCount, 1)
     }
 
+    func testApplyOrdersParentBeforeChildWhenChildAppearsFirst() {
+        let cardID = UUID()
+        let purchaseID = UUID()
+        let card = CreditCard(
+            id: cardID,
+            name: "Remote Card",
+            bankName: "Bank",
+            cardNetwork: .visa,
+            creditLimit: 5000,
+            statementClosingDay: 25,
+            paymentDueDay: 15
+        )
+        let purchase = CreditCardPurchase(
+            id: purchaseID,
+            cardID: cardID,
+            title: "Purchase",
+            amount: 100,
+            purchaseDate: Date(),
+            categoryName: "Food",
+            subCategoryName: "Supermarket",
+            note: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let store = FakeApplyingStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .createCreditCardPurchase(purchase), entity: .creditCardPurchase, id: purchaseID),
+            makeItem(action: .createCreditCard(card), entity: .creditCard, id: cardID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.createdCount, 2)
+        XCTAssertEqual(store.creditCards.map(\.id), [cardID])
+        XCTAssertEqual(store.creditCardPurchases.map(\.id), [purchaseID])
+    }
+
+    func testChildDoesNotCreateOrphanWhenParentApplyFailedOrMissing() {
+        let cardID = UUID()
+        let purchaseID = UUID()
+        let purchase = CreditCardPurchase(
+            id: purchaseID,
+            cardID: cardID,
+            title: "Purchase",
+            amount: 100,
+            purchaseDate: Date(),
+            categoryName: "Food",
+            subCategoryName: "Supermarket",
+            note: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let store = FakeApplyingStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .failed, entity: .creditCard, id: cardID),
+            makeItem(action: .createCreditCardPurchase(purchase), entity: .creditCardPurchase, id: purchaseID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.failedCount, 1)
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertTrue(store.creditCardPurchases.isEmpty)
+    }
+
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
@@ -441,11 +506,15 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
             accounts: [Account] = [],
             categories: [WalletBoard.Category] = [],
             walletEvents: [WalletEvent] = [],
+            creditCards: [CreditCard] = [],
+            personDebts: [PersonDebt] = [],
             monthlyBudgets: [WalletMonthlyBudget] = []
         ) {
             self.accounts = accounts
             self.categories = categories
             self.walletEvents = walletEvents
+            self.creditCards = creditCards
+            self.personDebts = personDebts
             self.monthlyBudgets = monthlyBudgets
         }
     }

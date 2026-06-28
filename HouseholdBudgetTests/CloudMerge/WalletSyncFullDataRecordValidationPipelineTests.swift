@@ -100,6 +100,38 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(applier.receivedPlan?.items.count, 0)
     }
 
+    func testLocalEchoParentDoesNotAuthorizeNonEchoChildPlanning() async throws {
+        let card = makeCreditCard(id: deterministicID(index: 430))
+        let purchase = makeCreditCardPurchase(id: deterministicID(index: 431), cardID: card.id)
+        let parentEcho = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: card))
+        let childRecord = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: purchase))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [parentEcho, childRecord], changeTokenData: Data([1]))
+        )
+        let source = FakeFullDataStore(creditCards: [card])
+        let localState = FakeFullDataStore()
+        let applier = FakeFullDataApplier()
+        let pipeline = WalletSyncFullDataRecordValidationPipeline(
+            zoneEnsurer: boundary,
+            recordSaver: boundary,
+            changedRecordFetcher: boundary,
+            tokenStore: FakeFullDataTokenStore(),
+            source: source,
+            localState: localState,
+            inboxParser: WalletSyncInboxParser(),
+            applier: applier
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.skippedLocalEchoCount, 1)
+        XCTAssertEqual(summary.blockedCount, 1)
+        XCTAssertTrue(applier.receivedPlan?.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .missingParentRecord }
+            return false
+        } ?? false)
+    }
+
     func testParserClassifiesAllTargetEntities() {
         let records = Self.supportedDTOs().map(WalletSyncCKRecordAdapter.ckRecord(from:))
 

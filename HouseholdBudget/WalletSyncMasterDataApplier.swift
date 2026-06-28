@@ -37,8 +37,9 @@ struct WalletSyncMasterDataApplier {
 
     func apply(_ plan: WalletSyncMasterDataApplyPlanSummary) -> WalletSyncMasterDataApplyResult {
         var result = WalletSyncMasterDataApplyResult()
+        let orderedItems = plan.items.sorted { applyPriority(for: $0.action) < applyPriority(for: $1.action) }
 
-        for item in plan.items {
+        for item in orderedItems {
             switch item.action {
             case .createAccount(let account):
                 applyCreateAccount(account, result: &result)
@@ -110,6 +111,22 @@ struct WalletSyncMasterDataApplier {
         }
 
         return result
+    }
+
+    private func applyPriority(for action: WalletSyncMasterDataApplyAction) -> Int {
+        switch action {
+        case .createCreditCard, .updateCreditCard,
+             .createPersonDebt, .updatePersonDebt,
+             .createWalletMonthlyBudget, .updateWalletMonthlyBudget:
+            return 0
+        case .createCreditCardPurchase, .updateCreditCardPurchase,
+             .createCreditCardPayment, .updateCreditCardPayment,
+             .createPersonDebtEntry, .updatePersonDebtEntry,
+             .createWalletMonthlyBudgetItem, .updateWalletMonthlyBudgetItem:
+            return 2
+        default:
+            return 1
+        }
     }
 
     private func applyCreateAccount(_ remote: Account, result: inout WalletSyncMasterDataApplyResult) {
@@ -356,6 +373,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyCreateCreditCardPurchase(_ purchase: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.creditCards.contains(where: { $0.id == purchase.cardID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard !store.creditCardPurchases.contains(where: { $0.id == purchase.id }) else {
             result.skippedCount += 1
             return
@@ -366,6 +387,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyUpdateCreditCardPurchase(_ remote: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.creditCards.contains(where: { $0.id == remote.cardID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard let index = store.creditCardPurchases.firstIndex(where: { $0.id == remote.id }) else {
             result.skippedCount += 1
             return
@@ -376,6 +401,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyCreateCreditCardPayment(_ payment: CreditCardPayment, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.creditCards.contains(where: { $0.id == payment.cardID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard !store.creditCardPayments.contains(where: { $0.id == payment.id }) else {
             result.skippedCount += 1
             return
@@ -386,6 +415,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyUpdateCreditCardPayment(_ remote: CreditCardPayment, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.creditCards.contains(where: { $0.id == remote.cardID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard let index = store.creditCardPayments.firstIndex(where: { $0.id == remote.id }) else {
             result.skippedCount += 1
             return
@@ -396,6 +429,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyCreatePersonDebtEntry(_ entry: PersonDebtEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.personDebts.contains(where: { $0.id == entry.debtID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard !store.personDebtEntries.contains(where: { $0.id == entry.id }) else {
             result.skippedCount += 1
             return
@@ -406,6 +443,10 @@ struct WalletSyncMasterDataApplier {
     }
 
     private func applyUpdatePersonDebtEntry(_ remote: PersonDebtEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard store.personDebts.contains(where: { $0.id == remote.debtID }) else {
+            result.skippedCount += 1
+            return
+        }
         guard let index = store.personDebtEntries.firstIndex(where: { $0.id == remote.id }) else {
             result.skippedCount += 1
             return
