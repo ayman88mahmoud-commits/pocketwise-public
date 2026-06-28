@@ -9,6 +9,8 @@ protocol WalletSyncMergePlanLocalStateReading {
     func containsPersonDebt(id: UUID) -> Bool
     func containsCreditCard(id: UUID) -> Bool
     func containsInstallmentPlan(id: UUID) -> Bool
+    func containsFinancialEvent(id: UUID) -> Bool
+    func financialEventUpdatedAt(id: UUID) -> Date?
 }
 
 extension WalletSyncMergePlanLocalStateReading {
@@ -17,6 +19,8 @@ extension WalletSyncMergePlanLocalStateReading {
     func containsPersonDebt(id: UUID) -> Bool { false }
     func containsCreditCard(id: UUID) -> Bool { false }
     func containsInstallmentPlan(id: UUID) -> Bool { false }
+    func containsFinancialEvent(id: UUID) -> Bool { false }
+    func financialEventUpdatedAt(id: UUID) -> Date? { nil }
 }
 
 extension WalletStore: WalletSyncMergePlanLocalStateReading {
@@ -50,6 +54,14 @@ extension WalletStore: WalletSyncMergePlanLocalStateReading {
 
     func containsInstallmentPlan(id: UUID) -> Bool {
         installmentPlans.contains { $0.id == id }
+    }
+
+    func containsFinancialEvent(id: UUID) -> Bool {
+        financialEvents.contains { $0.id == id }
+    }
+
+    func financialEventUpdatedAt(id: UUID) -> Date? {
+        financialEvents.first { $0.id == id }?.updatedAt
     }
 }
 
@@ -143,6 +155,8 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsCreditCard(id: id))
         case .installmentPlan:
             return planMasterDataItem(item, exists: localState.containsInstallmentPlan(id: id))
+        case .financialEvent:
+            return planMasterDataItem(item, exists: localState.containsFinancialEvent(id: id))
         case .monthlyBudgetItem:
             return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
         case .householdSettings:

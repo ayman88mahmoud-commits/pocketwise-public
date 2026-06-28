@@ -112,11 +112,9 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
 
     func testPlannerBlocksUnsafeApplyPaths() {
         let dtos = [
-            WalletSyncRecordMappers.dto(for: makeFinancialEvent()),
             WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
             WalletSyncRecordMappers.dto(for: makeCreditCardPurchase()),
-            WalletSyncRecordMappers.dto(for: makeCreditCardPayment()),
-            WalletSyncRecordMappers.dto(for: makeInstallmentPlan())
+            WalletSyncRecordMappers.dto(for: makeCreditCardPayment())
         ]
         let records = dtos.map(WalletSyncCKRecordAdapter.ckRecord(from:))
 
@@ -130,6 +128,162 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
             }
             return false
         })
+    }
+
+    func testFinancialEventCreateAppendsByIDOnlyWithoutPosting() async throws {
+        let event = makeFinancialEvent(id: deterministicID(index: 300), updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: event))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [record], changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(accounts: [makeAccount(balance: 500)])
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store)
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(store.financialEvents.map(\.id), [event.id])
+        XCTAssertEqual(store.accounts.first?.balance, 500)
+        XCTAssertEqual(store.postingCallCount, 0)
+        XCTAssertEqual(store.balanceRecalculationCount, 0)
+    }
+
+    func testFinancialEventUpdateReplacesByIDOnlyWithoutDuplicate() async throws {
+        let id = deterministicID(index: 301)
+        let local = makeFinancialEvent(id: id, amount: 10, updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        let remote = makeFinancialEvent(id: id, amount: 20, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: remote))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [record], changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(accounts: [makeAccount(balance: 500)], financialEvents: [local])
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store)
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(store.financialEvents.count, 1)
+        XCTAssertEqual(store.financialEvents.first?.amount, 20)
+        XCTAssertEqual(store.accounts.first?.balance, 500)
+        XCTAssertEqual(store.postingCallCount, 0)
+        XCTAssertEqual(store.balanceRecalculationCount, 0)
+    }
+
+    func testFinancialEventDeleteRemainsBlocked() {
+        let id = deterministicID(index: 302)
+        let deletedRecordName = WalletSyncRecordEntity.financialEvent.recordName(for: id)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore(financialEvents: [makeFinancialEvent(id: id)]))
+            .makePlan(changedRecords: [], deletedRecordNames: [deletedRecordName])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertEqual(plan.plannedDisableCount, 0)
+    }
+
+    func testFinancialEventUpdateBlocksWhenLocalIsNewer() {
+        let id = deterministicID(index: 303)
+        let local = makeFinancialEvent(id: id, updatedAt: Date(timeIntervalSince1970: 1_800_000_200))
+        let remote = makeFinancialEvent(id: id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: remote))
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore(financialEvents: [local]))
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .localFinancialEventNewer }
+            return false
+        })
+    }
+
+    func testFinancialEventUpdateBlocksWhenTimestampsAreAmbiguous() {
+        let id = deterministicID(index: 304)
+        let local = makeFinancialEvent(id: id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        var dto = WalletSyncRecordMappers.dto(for: makeFinancialEvent(id: id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100)))
+        dto.updatedAt = nil
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: dto)
+
+        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore(financialEvents: [local]))
+            .makePlan(changedRecords: [record], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .ambiguousFinancialEventTimestamp }
+            return false
+        })
+    }
+
+    func testFutureFinancialEventAndFutureIncomeRemainUnpaidAndFuture() async throws {
+        let futureDate = Date(timeIntervalSince1970: 1_900_000_000)
+        var futureExpense = makeFinancialEvent(
+            id: deterministicID(index: 305),
+            status: .unpaid,
+            date: futureDate,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
+        futureExpense.repeatRule = .monthly
+        var futureIncome = makeFinancialEvent(
+            id: deterministicID(index: 306),
+            status: .unpaid,
+            date: futureDate,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
+        futureIncome.type = .income
+        let records = [futureExpense, futureIncome]
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: records, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore()
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store)
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 2)
+        XCTAssertTrue(store.financialEvents.allSatisfy { $0.status == .unpaid && $0.date == futureDate })
+        XCTAssertEqual(store.paidMutationCount, 0)
+        XCTAssertEqual(store.futureIncomeReceivedCount, 0)
+    }
+
+    func testRecurringPaidOccurrenceIdentityIsPreservedWithoutDuplication() async throws {
+        var occurrence = makeFinancialEvent(
+            id: deterministicID(index: 307),
+            status: .paid,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
+        occurrence.sourceRecurringEventID = deterministicID(index: 308)
+        occurrence.recurringOccurrenceYear = 2026
+        occurrence.recurringOccurrenceMonth = 7
+        let record = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: occurrence))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [record], changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore()
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store)
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
+        XCTAssertEqual(store.financialEvents.count, 1)
+        XCTAssertEqual(store.financialEvents.first?.recurringPaidOccurrenceIdentity, occurrence.recurringPaidOccurrenceIdentity)
+        XCTAssertEqual(store.paidMutationCount, 0)
     }
 
     func testPlannerAllowsOnlyMasterDataDirectUpdatePaths() {
@@ -266,7 +420,9 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     }
 
     func testFullDataValidationDoesNotCallFinancialPostingOrRecalculateBalances() async throws {
-        let remoteRecord = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: makeFinancialEvent()))
+        let remoteRecord = WalletSyncCKRecordAdapter.ckRecord(
+            from: WalletSyncRecordMappers.dto(for: makeFinancialEvent(updatedAt: Date(timeIntervalSince1970: 1_800_000_100)))
+        )
         let boundary = FakeFullDataBoundary(
             fetchResult: WalletSyncCloudKitFetchResult(records: [remoteRecord], changeTokenData: Data([1]))
         )
@@ -279,10 +435,9 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
 
         let summary = try await pipeline.run()
 
-        XCTAssertEqual(summary.blockedCount, 1)
-        XCTAssertEqual(summary.appliedBlockedCount, 1)
+        XCTAssertEqual(summary.appliedCreatedCount, 1)
         XCTAssertEqual(store.accounts.first?.balance, 500)
-        XCTAssertEqual(store.financialEventMutationCount, 0)
+        XCTAssertEqual(store.postingCallCount, 0)
         XCTAssertEqual(store.balanceRecalculationCount, 0)
     }
 
@@ -334,12 +489,12 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     }
 
     func testRecurringAndFutureEventsAreNotMarkedPaidAndFutureIncomeIsNotReceived() async throws {
-        var recurring = makeFinancialEvent(status: .unpaid)
+        var recurring = makeFinancialEvent(status: .unpaid, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
         recurring.repeatRule = .monthly
         recurring.sourceRecurringEventID = UUID()
         recurring.recurringOccurrenceYear = 2026
         recurring.recurringOccurrenceMonth = 7
-        var income = makeFinancialEvent(status: .unpaid)
+        var income = makeFinancialEvent(status: .unpaid, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
         income.type = .income
         income.date = Date(timeIntervalSince1970: 1_900_000_000)
         let records = [
@@ -358,7 +513,8 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
 
         let summary = try await pipeline.run()
 
-        XCTAssertEqual(summary.blockedCount, 2)
+        XCTAssertEqual(summary.appliedCreatedCount, 2)
+        XCTAssertTrue(store.financialEvents.allSatisfy { $0.status == .unpaid })
         XCTAssertEqual(store.paidMutationCount, 0)
         XCTAssertEqual(store.futureIncomeReceivedCount, 0)
     }
@@ -387,7 +543,6 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
 
     func testFinancialPaymentPurchaseDebtEntryAndMonthlyBudgetRemainBlocked() {
         let records = [
-            WalletSyncRecordMappers.dto(for: makeFinancialEvent()),
             WalletSyncRecordMappers.dto(for: makeCreditCardPayment()),
             WalletSyncRecordMappers.dto(for: makeCreditCardPurchase()),
             WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
@@ -397,7 +552,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         let plan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
             .makePlan(changedRecords: records, deletedRecordNames: [])
 
-        XCTAssertEqual(plan.blockedCount, 5)
+        XCTAssertEqual(plan.blockedCount, 4)
         XCTAssertEqual(plan.plannedCreateCount, 0)
         XCTAssertEqual(plan.plannedUpdateCount, 0)
     }
@@ -620,6 +775,7 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     var creditCardPaymentMutationCount = 0
     var personDebtEntryMutationCount = 0
     var balanceRecalculationCount = 0
+    var postingCallCount = 0
     var paidMutationCount = 0
     var futureIncomeReceivedCount = 0
 
@@ -679,6 +835,8 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     func containsPersonDebt(id: UUID) -> Bool { personDebts.contains { $0.id == id } }
     func containsCreditCard(id: UUID) -> Bool { creditCards.contains { $0.id == id } }
     func containsInstallmentPlan(id: UUID) -> Bool { installmentPlans.contains { $0.id == id } }
+    func containsFinancialEvent(id: UUID) -> Bool { financialEvents.contains { $0.id == id } }
+    func financialEventUpdatedAt(id: UUID) -> Date? { financialEvents.first { $0.id == id }?.updatedAt }
 }
 
 private func makeAccount(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, balance: Double = 0) -> Account {
@@ -713,16 +871,21 @@ private func makeWalletEvent(id: UUID = UUID(uuidString: "00000000-0000-0000-000
 
 private func makeFinancialEvent(
     id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
-    status: FinancialEventStatus = .unpaid
+    status: FinancialEventStatus = .unpaid,
+    amount: Double = 100,
+    date: Date = Date(timeIntervalSince1970: 1_800_000_000),
+    updatedAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
 ) -> FinancialEvent {
     var event = FinancialEvent(
         type: .expense,
         status: status,
         title: "Remote Event",
-        amount: 100,
-        date: Date(timeIntervalSince1970: 1_800_000_000)
+        amount: amount,
+        date: date
     )
     event.id = id
+    event.createdAt = updatedAt
+    event.updatedAt = updatedAt
     return event
 }
 

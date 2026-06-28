@@ -53,6 +53,8 @@ enum WalletSyncMasterDataApplyAction: Equatable {
     case updateCreditCard(CreditCard)
     case createInstallmentPlan(InstallmentPlan)
     case updateInstallmentPlan(InstallmentPlan)
+    case createFinancialEvent(FinancialEvent)
+    case updateFinancialEvent(FinancialEvent)
     case blocked(reason: WalletSyncMasterDataApplyBlockReason)
     case failed
 }
@@ -66,6 +68,8 @@ enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case unsupportedEntity
     case missingRequiredField
     case invalidFieldValue
+    case localFinancialEventNewer
+    case ambiguousFinancialEventTimestamp
 }
 
 struct WalletSyncMasterDataApplyPlanItem: Equatable {
@@ -88,6 +92,7 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .createPersonDebt = $0.action { return true }
             if case .createCreditCard = $0.action { return true }
             if case .createInstallmentPlan = $0.action { return true }
+            if case .createFinancialEvent = $0.action { return true }
             return false
         }.count
     }
@@ -102,6 +107,7 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .updatePersonDebt = $0.action { return true }
             if case .updateCreditCard = $0.action { return true }
             if case .updateInstallmentPlan = $0.action { return true }
+            if case .updateFinancialEvent = $0.action { return true }
             return false
         }.count
     }
@@ -286,9 +292,47 @@ struct WalletSyncMasterDataApplyPlanBuilder {
                 id: dto.id,
                 action: localState.containsInstallmentPlan(id: dto.id) ? .updateInstallmentPlan(plan) : .createInstallmentPlan(plan)
             )
+        case .financialEvent:
+            guard let event = financialEvent(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return planFinancialEvent(dto: dto, event: event)
         default:
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id)
         }
+    }
+
+    private func planFinancialEvent(
+        dto: WalletSyncRecordDTO,
+        event: FinancialEvent
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard let remoteUpdatedAt = dto.updatedAt else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousFinancialEventTimestamp)
+        }
+
+        guard let localUpdatedAt = localState.financialEventUpdatedAt(id: dto.id) else {
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: .financialEvent,
+                id: dto.id,
+                action: .createFinancialEvent(event)
+            )
+        }
+
+        if localUpdatedAt > remoteUpdatedAt.addingTimeInterval(1) {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .localFinancialEventNewer)
+        }
+
+        guard remoteUpdatedAt > localUpdatedAt.addingTimeInterval(1) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousFinancialEventTimestamp)
+        }
+
+        return WalletSyncMasterDataApplyPlanItem(
+            recordName: dto.recordName,
+            entity: .financialEvent,
+            id: dto.id,
+            action: .updateFinancialEvent(event)
+        )
     }
 
     private func account(from dto: WalletSyncRecordDTO) -> Account? {
@@ -495,6 +539,52 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         )
     }
 
+    private func financialEvent(from dto: WalletSyncRecordDTO) -> FinancialEvent? {
+        guard let typeRawValue = stringField("type", in: dto),
+              let type = FinancialEventType(rawValue: typeRawValue),
+              let statusRawValue = stringField("status", in: dto),
+              let status = FinancialEventStatus(rawValue: statusRawValue),
+              let title = stringField("title", in: dto),
+              let amount = doubleField("amount", in: dto),
+              let date = dateField("date", in: dto) else {
+            return nil
+        }
+
+        var event = FinancialEvent(
+            type: type,
+            status: status,
+            title: title,
+            amount: amount,
+            date: date
+        )
+        event.id = dto.id
+        event.accountName = nullableStringField("accountName", in: dto)
+        event.destinationAccountName = nullableStringField("destinationAccountName", in: dto)
+        event.paymentMethodName = nullableStringField("paymentMethodName", in: dto)
+        event.walletEventName = nullableStringField("walletEventName", in: dto)
+        event.categoryName = nullableStringField("categoryName", in: dto)
+        event.subCategoryName = nullableStringField("subCategoryName", in: dto)
+        event.incomeType = incomeTypeField("incomeType", in: dto)
+        event.reimbursementCategoryName = nullableStringField("reimbursementCategoryName", in: dto)
+        event.repeatRule = repeatRuleField("repeatRule", in: dto) ?? .none
+        event.recurringEndKind = recurringEndKindField("recurringEndKind", in: dto)
+        event.recurringEndDate = nullableDateField("recurringEndDate", in: dto)
+        event.recurringEndPaymentCount = nullableIntField("recurringEndPaymentCount", in: dto)
+        event.recurringAmountMode = recurringAmountModeField("recurringAmountMode", in: dto)
+        event.recurringEstimatedAmount = nullableDoubleField("recurringEstimatedAmount", in: dto)
+        event.confidence = confidenceField("confidence", in: dto)
+        event.sourceInstallmentPlanID = nullableUUIDField("sourceInstallmentPlanID", in: dto)
+        event.sourceRecurringEventID = nullableUUIDField("sourceRecurringEventID", in: dto)
+        event.recurringOccurrenceYear = nullableIntField("recurringOccurrenceYear", in: dto)
+        event.recurringOccurrenceMonth = nullableIntField("recurringOccurrenceMonth", in: dto)
+        event.note = nullableStringField("note", in: dto)
+        event.createdAt = dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date()
+        event.updatedAt = dto.updatedAt ?? event.createdAt
+        event.isDeleted = false
+        event.deletedAt = nil
+        return event
+    }
+
     private func blockedItem(
         recordName: String,
         entity: WalletSyncRecordEntity?,
@@ -526,8 +616,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func isFinancialSideEffectSensitive(_ entity: WalletSyncRecordEntity?) -> Bool {
         switch entity {
-        case .financialEvent,
-             .personDebtEntry,
+        case .personDebtEntry,
              .creditCardPurchase,
              .creditCardPayment:
             return true
@@ -618,6 +707,53 @@ struct WalletSyncMasterDataApplyPlanBuilder {
     private func stringArrayField(_ name: String, in dto: WalletSyncRecordDTO) -> [String]? {
         guard case .some(.stringArray(let value)) = dto.fields[name] else { return nil }
         return value
+    }
+
+    private func nullableIntField(_ name: String, in dto: WalletSyncRecordDTO) -> Int? {
+        switch dto.fields[name] {
+        case .int(let value):
+            return value
+        case .null:
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func nullableDoubleField(_ name: String, in dto: WalletSyncRecordDTO) -> Double? {
+        switch dto.fields[name] {
+        case .double(let value):
+            return value
+        case .null:
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func incomeTypeField(_ name: String, in dto: WalletSyncRecordDTO) -> IncomeType? {
+        guard let rawValue = nullableStringField(name, in: dto) else { return nil }
+        return IncomeType(rawValue: rawValue)
+    }
+
+    private func repeatRuleField(_ name: String, in dto: WalletSyncRecordDTO) -> RepeatRule? {
+        guard let rawValue = nullableStringField(name, in: dto) else { return nil }
+        return RepeatRule(rawValue: rawValue)
+    }
+
+    private func recurringEndKindField(_ name: String, in dto: WalletSyncRecordDTO) -> RecurringEndKind? {
+        guard let rawValue = nullableStringField(name, in: dto) else { return nil }
+        return RecurringEndKind(rawValue: rawValue)
+    }
+
+    private func recurringAmountModeField(_ name: String, in dto: WalletSyncRecordDTO) -> RecurringAmountMode? {
+        guard let rawValue = nullableStringField(name, in: dto) else { return nil }
+        return RecurringAmountMode(rawValue: rawValue)
+    }
+
+    private func confidenceField(_ name: String, in dto: WalletSyncRecordDTO) -> ConfidenceLevel? {
+        guard let rawValue = nullableStringField(name, in: dto) else { return nil }
+        return ConfidenceLevel(rawValue: rawValue)
     }
 
     private func providerAppearanceColorField(_ name: String, in dto: WalletSyncRecordDTO) -> ProviderAppearanceColor? {

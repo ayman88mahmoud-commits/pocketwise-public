@@ -479,6 +479,9 @@ final class WalletSyncMasterDataManualPipelineTests: XCTestCase {
         var personDebts: [PersonDebt] = []
         var creditCards: [CreditCard] = []
         var installmentPlans: [InstallmentPlan] = []
+        var financialEvents: [FinancialEvent] = [] {
+            didSet { financialEventMutationCount += 1 }
+        }
 
         var financialEventMutationCount = 0
         var budgetMutationCount = 0

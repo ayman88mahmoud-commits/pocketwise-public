@@ -207,8 +207,8 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         Account(id: id, name: name, balance: balance, type: .cash)
     }
 
-    private func makeCategory(id: UUID = UUID(), name: String = "Food") -> Category {
-        Category(id: id, name: name, subcategories: ["Supermarket"])
+    private func makeCategory(id: UUID = UUID(), name: String = "Food") -> WalletBoard.Category {
+        WalletBoard.Category(id: id, name: name, subcategories: ["Supermarket"])
     }
 
     private func makeWalletEvent(id: UUID = UUID(), name: String = "Groceries") -> WalletEvent {
@@ -225,13 +225,16 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
 
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
-        var categories: [Category]
+        var categories: [WalletBoard.Category]
         var walletEvents: [WalletEvent]
         var merchantMemories: [MerchantMemory] = []
         var historicalMonthlySummaries: [HistoricalMonthlySummaryEntry] = []
         var personDebts: [PersonDebt] = []
         var creditCards: [CreditCard] = []
         var installmentPlans: [InstallmentPlan] = []
+        var financialEvents: [FinancialEvent] = [] {
+            didSet { financialEventMutationCount += 1 }
+        }
 
         var financialEventMutationCount = 0
         var creditCardMutationCount = 0
@@ -241,7 +244,7 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
 
         init(
             accounts: [Account] = [],
-            categories: [Category] = [],
+            categories: [WalletBoard.Category] = [],
             walletEvents: [WalletEvent] = []
         ) {
             self.accounts = accounts

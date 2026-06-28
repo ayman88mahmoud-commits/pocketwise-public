@@ -64,15 +64,20 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
         XCTAssertEqual(summary.wouldIgnoreCount, 1)
     }
 
-    func testPlannerBlocksOtherEntitiesAsPendingApplyImplementation() {
-        let planner = WalletSyncMergePlanDryRun(localState: FakeLocalState())
+    func testPlannerIdentifiesFinancialEventCreateUpdateAndDeleteByIDExistence() {
+        let existingID = UUID()
+        let newID = UUID()
+        let planner = WalletSyncMergePlanDryRun(localState: FakeLocalState(financialEventIDs: [existingID]))
 
         let summary = planner.makePlan(for: [
-            makeItem(entity: .financialEvent, id: UUID())
+            makeItem(entity: .financialEvent, id: newID),
+            makeItem(entity: .financialEvent, id: existingID),
+            makeItem(entity: .financialEvent, id: existingID, isDeleted: true, status: .validDeletedTombstone)
         ])
 
-        XCTAssertEqual(summary.blockedCount, 1)
-        XCTAssertEqual(summary.items.first?.blockReason, .pendingApplyImplementation)
+        XCTAssertEqual(summary.wouldCreateCount, 1)
+        XCTAssertEqual(summary.wouldUpdateCount, 1)
+        XCTAssertEqual(summary.wouldDeleteCount, 1)
     }
 
     func testPlannerBlocksMonthlyBudgetItemAndHouseholdSettings() {
@@ -111,7 +116,8 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
 
     func testSummaryCountsMatchPlanActions() {
         let existingID = UUID()
-        let localState = FakeLocalState(accountIDs: [existingID])
+        let financialEventID = UUID()
+        let localState = FakeLocalState(accountIDs: [existingID], financialEventIDs: [financialEventID])
         let planner = WalletSyncMergePlanDryRun(localState: localState)
 
         let summary = planner.makePlan(for: [
@@ -119,7 +125,7 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
             makeItem(entity: .account, id: existingID),
             makeItem(entity: .account, id: existingID, isDeleted: true, status: .validDeletedTombstone),
             makeItem(entity: .account, id: UUID(), isDeleted: true, status: .deletedRecordNameOnly),
-            makeItem(entity: .financialEvent, id: UUID()),
+            makeItem(entity: .financialEvent, id: financialEventID),
             WalletSyncInboxItem(
                 recordName: "bad-record",
                 entity: nil,
@@ -133,10 +139,10 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
         ])
 
         XCTAssertEqual(summary.wouldCreateCount, 1)
-        XCTAssertEqual(summary.wouldUpdateCount, 1)
+        XCTAssertEqual(summary.wouldUpdateCount, 2)
         XCTAssertEqual(summary.wouldDeleteCount, 1)
         XCTAssertEqual(summary.wouldIgnoreCount, 1)
-        XCTAssertEqual(summary.blockedCount, 1)
+        XCTAssertEqual(summary.blockedCount, 0)
         XCTAssertEqual(summary.failedCount, 1)
     }
 
@@ -195,16 +201,19 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
         var accountIDs: Set<UUID>
         var categoryIDs: Set<UUID>
         var walletEventIDs: Set<UUID>
+        var financialEventIDs: Set<UUID>
         var mutationCount = 0
 
         init(
             accountIDs: Set<UUID> = [],
             categoryIDs: Set<UUID> = [],
-            walletEventIDs: Set<UUID> = []
+            walletEventIDs: Set<UUID> = [],
+            financialEventIDs: Set<UUID> = []
         ) {
             self.accountIDs = accountIDs
             self.categoryIDs = categoryIDs
             self.walletEventIDs = walletEventIDs
+            self.financialEventIDs = financialEventIDs
         }
 
         func containsAccount(id: UUID) -> Bool {
@@ -217,6 +226,10 @@ final class WalletSyncMergePlanDryRunTests: XCTestCase {
 
         func containsWalletEvent(id: UUID) -> Bool {
             walletEventIDs.contains(id)
+        }
+
+        func containsFinancialEvent(id: UUID) -> Bool {
+            financialEventIDs.contains(id)
         }
     }
 }

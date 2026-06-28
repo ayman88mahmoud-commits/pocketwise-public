@@ -9,6 +9,7 @@ protocol WalletSyncMasterDataApplyingStore: AnyObject {
     var personDebts: [PersonDebt] { get set }
     var creditCards: [CreditCard] { get set }
     var installmentPlans: [InstallmentPlan] { get set }
+    var financialEvents: [FinancialEvent] { get set }
 }
 
 extension WalletStore: WalletSyncMasterDataApplyingStore {}
@@ -73,6 +74,10 @@ struct WalletSyncMasterDataApplier {
                 applyCreateInstallmentPlan(plan, result: &result)
             case .updateInstallmentPlan(let plan):
                 applyUpdateInstallmentPlan(plan, result: &result)
+            case .createFinancialEvent(let event):
+                applyCreateFinancialEvent(event, result: &result)
+            case .updateFinancialEvent(let event):
+                applyUpdateFinancialEvent(event, result: &result)
             case .blocked:
                 result.blockedCount += 1
             case .failed:
@@ -303,6 +308,26 @@ struct WalletSyncMasterDataApplier {
         }
 
         store.installmentPlans[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateFinancialEvent(_ event: FinancialEvent, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.financialEvents.contains(where: { $0.id == event.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.financialEvents.append(event)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateFinancialEvent(_ remote: FinancialEvent, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.financialEvents.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.financialEvents[index] = remote
         result.updatedCount += 1
     }
 }

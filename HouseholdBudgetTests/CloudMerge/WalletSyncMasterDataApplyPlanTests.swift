@@ -63,7 +63,7 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.blockedCount, 0)
     }
 
-    func testNonMasterEntityIsBlocked() {
+    func testMalformedFinancialEventIsBlocked() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         let dto = WalletSyncRecordDTO(
             recordName: WalletSyncRecordEntity.financialEvent.recordName(for: UUID()),
@@ -74,6 +74,27 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
 
         XCTAssertEqual(plan.blockedCount, 1)
+    }
+
+    func testFinancialEventCreateAndUpdatePlansUseTimestampGuards() {
+        let existingID = UUID()
+        let newID = UUID()
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(financialEventUpdatedAtByID: [existingID: localUpdatedAt])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: financialEventDTO(id: newID, updatedAt: remoteUpdatedAt)),
+                record(for: financialEventDTO(id: existingID, updatedAt: remoteUpdatedAt))
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 1)
+        XCTAssertEqual(plan.plannedUpdateCount, 1)
     }
 
     func testMonthlyBudgetItemAndHouseholdSettingsAreBlocked() {
@@ -264,19 +285,65 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         )
     }
 
+    private func financialEventDTO(id: UUID, updatedAt: Date) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            recordName: WalletSyncRecordEntity.financialEvent.recordName(for: id),
+            entity: .financialEvent,
+            id: id,
+            updatedAt: updatedAt,
+            fields: [
+                "type": .string(FinancialEventType.expense.rawValue),
+                "status": .string(FinancialEventStatus.unpaid.rawValue),
+                "title": .string("Remote Event"),
+                "amount": .double(100),
+                "date": .date(updatedAt),
+                "accountName": .null,
+                "destinationAccountName": .null,
+                "paymentMethodName": .null,
+                "walletEventName": .null,
+                "categoryName": .null,
+                "subCategoryName": .null,
+                "incomeType": .null,
+                "reimbursementCategoryName": .null,
+                "repeatRule": .string(RepeatRule.none.rawValue),
+                "recurringEndKind": .null,
+                "recurringEndDate": .null,
+                "recurringEndPaymentCount": .null,
+                "recurringAmountMode": .null,
+                "recurringEstimatedAmount": .null,
+                "confidence": .null,
+                "sourceInstallmentPlanID": .null,
+                "sourceRecurringEventID": .null,
+                "recurringOccurrenceYear": .null,
+                "recurringOccurrenceMonth": .null,
+                "note": .null,
+                "createdAt": .date(updatedAt)
+            ]
+        )
+    }
+
     private final class FakeLocalState: WalletSyncMergePlanLocalStateReading {
         var accountIDs: Set<UUID>
         var categoryIDs: Set<UUID>
         var walletEventIDs: Set<UUID>
+        var financialEventUpdatedAtByID: [UUID: Date]
 
-        init(accountIDs: Set<UUID> = [], categoryIDs: Set<UUID> = [], walletEventIDs: Set<UUID> = []) {
+        init(
+            accountIDs: Set<UUID> = [],
+            categoryIDs: Set<UUID> = [],
+            walletEventIDs: Set<UUID> = [],
+            financialEventUpdatedAtByID: [UUID: Date] = [:]
+        ) {
             self.accountIDs = accountIDs
             self.categoryIDs = categoryIDs
             self.walletEventIDs = walletEventIDs
+            self.financialEventUpdatedAtByID = financialEventUpdatedAtByID
         }
 
         func containsAccount(id: UUID) -> Bool { accountIDs.contains(id) }
         func containsCategory(id: UUID) -> Bool { categoryIDs.contains(id) }
         func containsWalletEvent(id: UUID) -> Bool { walletEventIDs.contains(id) }
+        func containsFinancialEvent(id: UUID) -> Bool { financialEventUpdatedAtByID[id] != nil }
+        func financialEventUpdatedAt(id: UUID) -> Date? { financialEventUpdatedAtByID[id] }
     }
 }
