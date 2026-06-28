@@ -866,6 +866,7 @@ struct ICloudSnapshotSyncView: View {
     @State private var debugLastSavedAccountSyncRecordName: String?
     @State private var debugLastReturnedChangeTokenData: Data?
     @State private var debugSavedChangeTokenExists = WalletSyncStateStore().hasWalletSyncZoneChangeToken()
+    @State private var debugLastMasterDataApplyPlan: WalletSyncMasterDataApplyPlanSummary?
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1196,6 +1197,28 @@ struct ICloudSnapshotSyncView: View {
                     Label("Run Sync Inbox Plan Dry Run", systemImage: "tray.full")
                 }
                 .disabled(isWorking)
+                .tint(.orange)
+            }
+
+            Section("Debug — Master Data Apply") {
+                Text("Developer only. Not included in release builds. Plans and explicitly applies Account, Category, and WalletEvent changes only. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await runMasterDataApplyPlanDryRunForDebug() }
+                } label: {
+                    Label("Run Master Data Apply Plan Dry Run", systemImage: "checklist")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                Button(role: .destructive) {
+                    applyMasterDataPlanForDebug()
+                } label: {
+                    Label("Apply Master Data Plan", systemImage: "checkmark.seal")
+                }
+                .disabled(isWorking || debugLastMasterDataApplyPlan == nil)
                 .tint(.orange)
             }
 
@@ -1727,6 +1750,49 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
+    private func runMasterDataApplyPlanDryRunForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let controller = WalletSyncDryRunLoopController(
+                changedRecordFetcher: WalletSyncRealCloudKitPrivateDatabaseBoundary(),
+                tokenStore: WalletSyncStateStore()
+            )
+            let output = try await controller.runDryRunLoopWithResult()
+            let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store).makePlan(
+                changedRecords: output.fetchResult.records,
+                deletedRecordNames: output.fetchResult.deletedRecordNames
+            )
+
+            debugLastMasterDataApplyPlan = plan
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugMasterDataApplyPlanSummaryMessage(
+                loop: output.summary,
+                plan: plan
+            )
+            errorMessage = nil
+        } catch {
+            debugLastMasterDataApplyPlan = nil
+            errorMessage = "[Debug] Master data apply plan dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func applyMasterDataPlanForDebug() {
+        guard let plan = debugLastMasterDataApplyPlan else {
+            actionMessage = "[Debug] No current-session Master Data apply plan is available."
+            errorMessage = nil
+            return
+        }
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+        actionMessage = debugMasterDataApplyResultMessage(result)
+        errorMessage = nil
+    }
+
     private func fetchChangedRecordsWithSavedTokenForDebug() async {
         let stateStore = WalletSyncStateStore()
 
@@ -1854,6 +1920,46 @@ struct ICloudSnapshotSyncView: View {
             "Token saved: \(tokenSaved)",
             "More coming: \(moreComing)",
             "Sample record names: \(sampleText)"
+        ].joined(separator: "\n")
+    }
+
+    private func debugMasterDataApplyPlanSummaryMessage(
+        loop: WalletSyncDryRunLoopSummary,
+        plan: WalletSyncMasterDataApplyPlanSummary
+    ) -> String {
+        let sampleRecordNames = plan.sampleRecordNames(limit: 10)
+        let sampleText = sampleRecordNames.isEmpty ? "none" : sampleRecordNames.joined(separator: ", ")
+        let usedSavedToken = loop.usedSavedToken ? "yes" : "no"
+        let tokenReturned = loop.tokenReturned ? "yes" : "no"
+        let tokenSaved = loop.tokenSaved ? "yes" : "no"
+        let moreComing = loop.moreComing ? "yes" : "no"
+
+        return [
+            "[Debug] Master data apply plan dry run",
+            "Used saved token: \(usedSavedToken)",
+            "Changed records: \(loop.changedRecordCount)",
+            "Deleted records: \(loop.deletedRecordCount)",
+            "Planned creates: \(plan.plannedCreateCount)",
+            "Planned updates: \(plan.plannedUpdateCount)",
+            "Planned disabled: \(plan.plannedDisableCount)",
+            "Blocked: \(plan.blockedCount)",
+            "Failed: \(plan.failedCount)",
+            "Token returned: \(tokenReturned)",
+            "Token saved: \(tokenSaved)",
+            "More coming: \(moreComing)",
+            "Sample record names: \(sampleText)"
+        ].joined(separator: "\n")
+    }
+
+    private func debugMasterDataApplyResultMessage(_ result: WalletSyncMasterDataApplyResult) -> String {
+        [
+            "[Debug] Master data apply result",
+            "Applied created: \(result.createdCount)",
+            "Applied updated: \(result.updatedCount)",
+            "Applied disabled: \(result.disabledCount)",
+            "Applied blocked: \(result.blockedCount)",
+            "Applied failed: \(result.failedCount)",
+            "Applied skipped: \(result.skippedCount)"
         ].joined(separator: "\n")
     }
 
