@@ -110,7 +110,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(Set(result.items.compactMap(\.entity)), Set(Self.supportedEntities))
     }
 
-    func testPlannerBlocksUnsafeApplyPaths() {
+    func testPlannerBlocksChildApplyWithoutParents() {
         let dtos = [
             WalletSyncRecordMappers.dto(for: makePersonDebtEntry()),
             WalletSyncRecordMappers.dto(for: makeCreditCardPurchase()),
@@ -124,7 +124,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(plan.blockedCount, dtos.count)
         XCTAssertTrue(plan.items.allSatisfy {
             if case .blocked(let reason) = $0.action {
-                return reason == .unsafeFinancialApply
+                return reason == .missingParentRecord
             }
             return false
         })
@@ -284,6 +284,159 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(store.financialEvents.count, 1)
         XCTAssertEqual(store.financialEvents.first?.recurringPaidOccurrenceIdentity, occurrence.recurringPaidOccurrenceIdentity)
         XCTAssertEqual(store.paidMutationCount, 0)
+    }
+
+    func testCreditCardPurchaseCreateAndUpdateApplyByIDOnly() {
+        let card = makeCreditCard(id: deterministicID(index: 320))
+        let existing = makeCreditCardPurchase(id: deterministicID(index: 321), cardID: card.id, amount: 10)
+        let updated = makeCreditCardPurchase(id: existing.id, cardID: card.id, amount: 20)
+        let created = makeCreditCardPurchase(id: deterministicID(index: 322), cardID: card.id, amount: 30)
+        let store = FakeFullDataStore(
+            creditCards: [card],
+            creditCardPurchases: [existing]
+        )
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makePlanItem(action: .updateCreditCardPurchase(updated), entity: .creditCardPurchase, id: updated.id),
+            makePlanItem(action: .createCreditCardPurchase(created), entity: .creditCardPurchase, id: created.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.creditCardPurchases.count, 2)
+        XCTAssertEqual(store.creditCardPurchases.first { $0.id == existing.id }?.amount, 20)
+        XCTAssertEqual(store.cardOutstandingMutationCount, 0)
+        XCTAssertEqual(store.financialEventMutationCount, 0)
+    }
+
+    func testCreditCardPaymentCreateAndUpdateApplyByIDOnlyWithoutBalances() {
+        let card = makeCreditCard(id: deterministicID(index: 330))
+        let account = makeAccount(balance: 500)
+        let existing = makeCreditCardPayment(id: deterministicID(index: 331), cardID: card.id, amount: 10)
+        let updated = makeCreditCardPayment(id: existing.id, cardID: card.id, amount: 20)
+        let created = makeCreditCardPayment(id: deterministicID(index: 332), cardID: card.id, amount: 30)
+        let store = FakeFullDataStore(
+            accounts: [account],
+            creditCards: [card],
+            creditCardPayments: [existing]
+        )
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makePlanItem(action: .updateCreditCardPayment(updated), entity: .creditCardPayment, id: updated.id),
+            makePlanItem(action: .createCreditCardPayment(created), entity: .creditCardPayment, id: created.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.creditCardPayments.count, 2)
+        XCTAssertEqual(store.creditCardPayments.first { $0.id == existing.id }?.amount, 20)
+        XCTAssertEqual(store.accounts.first?.balance, 500)
+        XCTAssertEqual(store.creditCardPaymentApplyCount, 0)
+        XCTAssertEqual(store.cardOutstandingMutationCount, 0)
+    }
+
+    func testPersonDebtEntryCreateAndUpdateApplyByIDOnlyWithoutSettlement() {
+        let debt = makePersonDebt(id: deterministicID(index: 340), originalAmount: 100)
+        let account = makeAccount(balance: 500)
+        let existing = makePersonDebtEntry(id: deterministicID(index: 341), debtID: debt.id, amount: 10)
+        let updated = makePersonDebtEntry(id: existing.id, debtID: debt.id, amount: 20)
+        let created = makePersonDebtEntry(id: deterministicID(index: 342), debtID: debt.id, amount: 30)
+        let store = FakeFullDataStore(
+            accounts: [account],
+            personDebts: [debt],
+            personDebtEntries: [existing]
+        )
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makePlanItem(action: .updatePersonDebtEntry(updated), entity: .personDebtEntry, id: updated.id),
+            makePlanItem(action: .createPersonDebtEntry(created), entity: .personDebtEntry, id: created.id)
+        ])
+
+        let result = WalletSyncMasterDataApplier(store: store).apply(plan)
+
+        XCTAssertEqual(result.updatedCount, 1)
+        XCTAssertEqual(result.createdCount, 1)
+        XCTAssertEqual(store.personDebtEntries.count, 2)
+        XCTAssertEqual(store.personDebtEntries.first { $0.id == existing.id }?.amount, 20)
+        XCTAssertEqual(store.accounts.first?.balance, 500)
+        XCTAssertEqual(store.debtSettlementCount, 0)
+    }
+
+    func testChildRecordDeletesAndMissingParentsBlock() {
+        let card = makeCreditCard(id: deterministicID(index: 350))
+        let debt = makePersonDebt(id: deterministicID(index: 351), originalAmount: 100)
+        let purchase = makeCreditCardPurchase(id: deterministicID(index: 352), cardID: card.id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let payment = makeCreditCardPayment(id: deterministicID(index: 353), cardID: card.id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let entry = makePersonDebtEntry(id: deterministicID(index: 354), debtID: debt.id, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        let changedRecords = [
+            WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: purchase)),
+            WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: payment)),
+            WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: entry))
+        ]
+        let missingParentPlan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore())
+            .makePlan(
+                changedRecords: changedRecords,
+                deletedRecordNames: []
+            )
+        let deletePlan = WalletSyncMasterDataApplyPlanBuilder(localState: FakeFullDataStore(personDebts: [debt], creditCards: [card]))
+            .makePlan(
+                changedRecords: [],
+                deletedRecordNames: [
+                    WalletSyncRecordEntity.creditCardPurchase.recordName(for: purchase.id),
+                    WalletSyncRecordEntity.creditCardPayment.recordName(for: payment.id),
+                    WalletSyncRecordEntity.personDebtEntry.recordName(for: entry.id)
+                ]
+            )
+
+        XCTAssertEqual(missingParentPlan.blockedCount, 3)
+        XCTAssertTrue(missingParentPlan.items.allSatisfy {
+            if case .blocked(let reason) = $0.action { return reason == .missingParentRecord }
+            return false
+        })
+        XCTAssertEqual(deletePlan.blockedCount, 3)
+    }
+
+    func testChildRecordTimestampConflictsBlock() {
+        let card = makeCreditCard(id: deterministicID(index: 360))
+        let oldRemote = makeCreditCardPurchase(
+            id: deterministicID(index: 361),
+            cardID: card.id,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
+        let localNewer = makeCreditCardPurchase(
+            id: oldRemote.id,
+            cardID: card.id,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_200)
+        )
+        var ambiguousDTO = WalletSyncRecordMappers.dto(
+            for: makeCreditCardPayment(
+                id: deterministicID(index: 362),
+                cardID: card.id,
+                updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+            )
+        )
+        ambiguousDTO.updatedAt = nil
+        let plan = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeFullDataStore(creditCards: [card], creditCardPurchases: [localNewer])
+        )
+        .makePlan(
+            changedRecords: [
+                WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: oldRemote)),
+                WalletSyncCKRecordAdapter.ckRecord(from: ambiguousDTO)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.blockedCount, 2)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .localChildRecordNewer }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(let reason) = $0.action { return reason == .ambiguousChildRecordTimestamp }
+            return false
+        })
     }
 
     func testPlannerAllowsOnlyMasterDataDirectUpdatePaths() {
@@ -627,6 +780,19 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertFalse(propertyNames.contains { $0.contains("export") })
     }
 
+    private func makePlanItem(
+        action: WalletSyncMasterDataApplyAction,
+        entity: WalletSyncRecordEntity,
+        id: UUID
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        WalletSyncMasterDataApplyPlanItem(
+            recordName: entity.recordName(for: id),
+            entity: entity,
+            id: id,
+            action: action
+        )
+    }
+
     private static let supportedEntities: [WalletSyncRecordEntity] = [
         .account,
         .category,
@@ -776,6 +942,9 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     var personDebtEntryMutationCount = 0
     var balanceRecalculationCount = 0
     var postingCallCount = 0
+    var creditCardPaymentApplyCount = 0
+    var cardOutstandingMutationCount = 0
+    var debtSettlementCount = 0
     var paidMutationCount = 0
     var futureIncomeReceivedCount = 0
 
@@ -837,6 +1006,12 @@ private final class FakeFullDataStore: WalletSyncFullDataSourceReading, WalletSy
     func containsInstallmentPlan(id: UUID) -> Bool { installmentPlans.contains { $0.id == id } }
     func containsFinancialEvent(id: UUID) -> Bool { financialEvents.contains { $0.id == id } }
     func financialEventUpdatedAt(id: UUID) -> Date? { financialEvents.first { $0.id == id }?.updatedAt }
+    func containsCreditCardPurchase(id: UUID) -> Bool { creditCardPurchases.contains { $0.id == id } }
+    func creditCardPurchaseUpdatedAt(id: UUID) -> Date? { creditCardPurchases.first { $0.id == id }?.updatedAt }
+    func containsCreditCardPayment(id: UUID) -> Bool { creditCardPayments.contains { $0.id == id } }
+    func creditCardPaymentUpdatedAt(id: UUID) -> Date? { creditCardPayments.first { $0.id == id }?.updatedAt }
+    func containsPersonDebtEntry(id: UUID) -> Bool { personDebtEntries.contains { $0.id == id } }
+    func personDebtEntryUpdatedAt(id: UUID) -> Date? { personDebtEntries.first { $0.id == id }?.updatedAt }
 }
 
 private func makeAccount(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, balance: Double = 0) -> Account {
@@ -906,13 +1081,22 @@ private func makePersonDebt(
     return debt
 }
 
-private func makePersonDebtEntry() -> PersonDebtEntry {
+private func makePersonDebtEntry(
+    id: UUID = UUID(),
+    debtID: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+    amount: Double = 50,
+    updatedAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
+) -> PersonDebtEntry {
     PersonDebtEntry(
-        debtID: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+        id: id,
+        debtID: debtID,
         entryType: .repaymentReceived,
-        amount: 50,
+        amount: amount,
         accountName: "Cash",
-        date: Date(timeIntervalSince1970: 1_800_000_000)
+        date: Date(timeIntervalSince1970: 1_800_000_000),
+        note: nil,
+        createdAt: updatedAt,
+        updatedAt: updatedAt
     )
 }
 
@@ -931,31 +1115,41 @@ private func makeCreditCard(
     )
 }
 
-private func makeCreditCardPurchase() -> CreditCardPurchase {
+private func makeCreditCardPurchase(
+    id: UUID = UUID(),
+    cardID: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+    amount: Double = 2_000,
+    updatedAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
+) -> CreditCardPurchase {
     CreditCardPurchase(
-        id: UUID(),
-        cardID: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+        id: id,
+        cardID: cardID,
         title: "Laptop",
-        amount: 2_000,
+        amount: amount,
         purchaseDate: Date(timeIntervalSince1970: 1_800_000_000),
         categoryName: "Electronics",
         subCategoryName: "Computers",
         note: nil,
-        createdAt: Date(timeIntervalSince1970: 1_800_000_000),
-        updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        createdAt: updatedAt,
+        updatedAt: updatedAt
     )
 }
 
-private func makeCreditCardPayment() -> CreditCardPayment {
+private func makeCreditCardPayment(
+    id: UUID = UUID(),
+    cardID: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+    amount: Double = 1_000,
+    updatedAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
+) -> CreditCardPayment {
     CreditCardPayment(
-        id: UUID(),
-        cardID: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+        id: id,
+        cardID: cardID,
         fromAccountName: "Cash",
-        amount: 1_000,
+        amount: amount,
         paymentDate: Date(timeIntervalSince1970: 1_800_000_000),
         note: nil,
-        createdAt: Date(timeIntervalSince1970: 1_800_000_000),
-        updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        createdAt: updatedAt,
+        updatedAt: updatedAt
     )
 }
 

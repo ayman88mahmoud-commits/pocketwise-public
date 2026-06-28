@@ -235,6 +235,9 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         var financialEvents: [FinancialEvent] = [] {
             didSet { financialEventMutationCount += 1 }
         }
+        var creditCardPurchases: [CreditCardPurchase] = []
+        var creditCardPayments: [CreditCardPayment] = []
+        var personDebtEntries: [PersonDebtEntry] = []
 
         var financialEventMutationCount = 0
         var creditCardMutationCount = 0

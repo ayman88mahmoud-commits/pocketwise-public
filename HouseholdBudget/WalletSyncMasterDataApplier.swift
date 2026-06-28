@@ -10,6 +10,9 @@ protocol WalletSyncMasterDataApplyingStore: AnyObject {
     var creditCards: [CreditCard] { get set }
     var installmentPlans: [InstallmentPlan] { get set }
     var financialEvents: [FinancialEvent] { get set }
+    var creditCardPurchases: [CreditCardPurchase] { get set }
+    var creditCardPayments: [CreditCardPayment] { get set }
+    var personDebtEntries: [PersonDebtEntry] { get set }
 }
 
 extension WalletStore: WalletSyncMasterDataApplyingStore {}
@@ -78,6 +81,18 @@ struct WalletSyncMasterDataApplier {
                 applyCreateFinancialEvent(event, result: &result)
             case .updateFinancialEvent(let event):
                 applyUpdateFinancialEvent(event, result: &result)
+            case .createCreditCardPurchase(let purchase):
+                applyCreateCreditCardPurchase(purchase, result: &result)
+            case .updateCreditCardPurchase(let purchase):
+                applyUpdateCreditCardPurchase(purchase, result: &result)
+            case .createCreditCardPayment(let payment):
+                applyCreateCreditCardPayment(payment, result: &result)
+            case .updateCreditCardPayment(let payment):
+                applyUpdateCreditCardPayment(payment, result: &result)
+            case .createPersonDebtEntry(let entry):
+                applyCreatePersonDebtEntry(entry, result: &result)
+            case .updatePersonDebtEntry(let entry):
+                applyUpdatePersonDebtEntry(entry, result: &result)
             case .blocked:
                 result.blockedCount += 1
             case .failed:
@@ -328,6 +343,66 @@ struct WalletSyncMasterDataApplier {
         }
 
         store.financialEvents[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateCreditCardPurchase(_ purchase: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.creditCardPurchases.contains(where: { $0.id == purchase.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCardPurchases.append(purchase)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateCreditCardPurchase(_ remote: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.creditCardPurchases.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCardPurchases[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreateCreditCardPayment(_ payment: CreditCardPayment, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.creditCardPayments.contains(where: { $0.id == payment.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCardPayments.append(payment)
+        result.createdCount += 1
+    }
+
+    private func applyUpdateCreditCardPayment(_ remote: CreditCardPayment, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.creditCardPayments.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.creditCardPayments[index] = remote
+        result.updatedCount += 1
+    }
+
+    private func applyCreatePersonDebtEntry(_ entry: PersonDebtEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard !store.personDebtEntries.contains(where: { $0.id == entry.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.personDebtEntries.append(entry)
+        result.createdCount += 1
+    }
+
+    private func applyUpdatePersonDebtEntry(_ remote: PersonDebtEntry, result: inout WalletSyncMasterDataApplyResult) {
+        guard let index = store.personDebtEntries.firstIndex(where: { $0.id == remote.id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.personDebtEntries[index] = remote
         result.updatedCount += 1
     }
 }

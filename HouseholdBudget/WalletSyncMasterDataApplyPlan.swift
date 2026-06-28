@@ -55,6 +55,12 @@ enum WalletSyncMasterDataApplyAction: Equatable {
     case updateInstallmentPlan(InstallmentPlan)
     case createFinancialEvent(FinancialEvent)
     case updateFinancialEvent(FinancialEvent)
+    case createCreditCardPurchase(CreditCardPurchase)
+    case updateCreditCardPurchase(CreditCardPurchase)
+    case createCreditCardPayment(CreditCardPayment)
+    case updateCreditCardPayment(CreditCardPayment)
+    case createPersonDebtEntry(PersonDebtEntry)
+    case updatePersonDebtEntry(PersonDebtEntry)
     case blocked(reason: WalletSyncMasterDataApplyBlockReason)
     case failed
 }
@@ -70,6 +76,9 @@ enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case invalidFieldValue
     case localFinancialEventNewer
     case ambiguousFinancialEventTimestamp
+    case missingParentRecord
+    case localChildRecordNewer
+    case ambiguousChildRecordTimestamp
 }
 
 struct WalletSyncMasterDataApplyPlanItem: Equatable {
@@ -93,6 +102,9 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .createCreditCard = $0.action { return true }
             if case .createInstallmentPlan = $0.action { return true }
             if case .createFinancialEvent = $0.action { return true }
+            if case .createCreditCardPurchase = $0.action { return true }
+            if case .createCreditCardPayment = $0.action { return true }
+            if case .createPersonDebtEntry = $0.action { return true }
             return false
         }.count
     }
@@ -108,6 +120,9 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .updateCreditCard = $0.action { return true }
             if case .updateInstallmentPlan = $0.action { return true }
             if case .updateFinancialEvent = $0.action { return true }
+            if case .updateCreditCardPurchase = $0.action { return true }
+            if case .updateCreditCardPayment = $0.action { return true }
+            if case .updatePersonDebtEntry = $0.action { return true }
             return false
         }.count
     }
@@ -297,6 +312,21 @@ struct WalletSyncMasterDataApplyPlanBuilder {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
             return planFinancialEvent(dto: dto, event: event)
+        case .creditCardPurchase:
+            guard let purchase = creditCardPurchase(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return planCreditCardPurchase(dto: dto, purchase: purchase)
+        case .creditCardPayment:
+            guard let payment = creditCardPayment(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return planCreditCardPayment(dto: dto, payment: payment)
+        case .personDebtEntry:
+            guard let entry = personDebtEntry(from: dto) else {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
+            }
+            return planPersonDebtEntry(dto: dto, entry: entry)
         default:
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id)
         }
@@ -332,6 +362,89 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             entity: .financialEvent,
             id: dto.id,
             action: .updateFinancialEvent(event)
+        )
+    }
+
+    private func planCreditCardPurchase(
+        dto: WalletSyncRecordDTO,
+        purchase: CreditCardPurchase
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard localState.containsCreditCard(id: purchase.cardID) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
+        }
+
+        return planChildRecord(
+            dto: dto,
+            localUpdatedAt: localState.creditCardPurchaseUpdatedAt(id: dto.id),
+            createAction: .createCreditCardPurchase(purchase),
+            updateAction: .updateCreditCardPurchase(purchase)
+        )
+    }
+
+    private func planCreditCardPayment(
+        dto: WalletSyncRecordDTO,
+        payment: CreditCardPayment
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard localState.containsCreditCard(id: payment.cardID) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
+        }
+
+        return planChildRecord(
+            dto: dto,
+            localUpdatedAt: localState.creditCardPaymentUpdatedAt(id: dto.id),
+            createAction: .createCreditCardPayment(payment),
+            updateAction: .updateCreditCardPayment(payment)
+        )
+    }
+
+    private func planPersonDebtEntry(
+        dto: WalletSyncRecordDTO,
+        entry: PersonDebtEntry
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard localState.containsPersonDebt(id: entry.debtID) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingParentRecord)
+        }
+
+        return planChildRecord(
+            dto: dto,
+            localUpdatedAt: localState.personDebtEntryUpdatedAt(id: dto.id),
+            createAction: .createPersonDebtEntry(entry),
+            updateAction: .updatePersonDebtEntry(entry)
+        )
+    }
+
+    private func planChildRecord(
+        dto: WalletSyncRecordDTO,
+        localUpdatedAt: Date?,
+        createAction: WalletSyncMasterDataApplyAction,
+        updateAction: WalletSyncMasterDataApplyAction
+    ) -> WalletSyncMasterDataApplyPlanItem {
+        guard let remoteUpdatedAt = dto.updatedAt else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousChildRecordTimestamp)
+        }
+
+        guard let localUpdatedAt else {
+            return WalletSyncMasterDataApplyPlanItem(
+                recordName: dto.recordName,
+                entity: dto.entity,
+                id: dto.id,
+                action: createAction
+            )
+        }
+
+        if localUpdatedAt > remoteUpdatedAt.addingTimeInterval(1) {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .localChildRecordNewer)
+        }
+
+        guard remoteUpdatedAt > localUpdatedAt.addingTimeInterval(1) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousChildRecordTimestamp)
+        }
+
+        return WalletSyncMasterDataApplyPlanItem(
+            recordName: dto.recordName,
+            entity: dto.entity,
+            id: dto.id,
+            action: updateAction
         )
     }
 
@@ -585,6 +698,79 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         return event
     }
 
+    private func creditCardPurchase(from dto: WalletSyncRecordDTO) -> CreditCardPurchase? {
+        guard let cardID = uuidField("cardID", in: dto),
+              let title = stringField("title", in: dto),
+              let amount = doubleField("amount", in: dto),
+              let purchaseDate = dateField("purchaseDate", in: dto),
+              let categoryName = stringField("categoryName", in: dto),
+              let subCategoryName = stringField("subCategoryName", in: dto) else {
+            return nil
+        }
+
+        return CreditCardPurchase(
+            id: dto.id,
+            cardID: cardID,
+            title: title,
+            amount: amount,
+            purchaseDate: purchaseDate,
+            categoryName: categoryName,
+            subCategoryName: subCategoryName,
+            note: nullableStringField("note", in: dto),
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
+    private func creditCardPayment(from dto: WalletSyncRecordDTO) -> CreditCardPayment? {
+        guard let cardID = uuidField("cardID", in: dto),
+              let fromAccountName = stringField("fromAccountName", in: dto),
+              let amount = doubleField("amount", in: dto),
+              let paymentDate = dateField("paymentDate", in: dto) else {
+            return nil
+        }
+
+        return CreditCardPayment(
+            id: dto.id,
+            cardID: cardID,
+            fromAccountName: fromAccountName,
+            amount: amount,
+            paymentDate: paymentDate,
+            note: nullableStringField("note", in: dto),
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
+    private func personDebtEntry(from dto: WalletSyncRecordDTO) -> PersonDebtEntry? {
+        guard let debtID = uuidField("debtID", in: dto),
+              let entryTypeRawValue = stringField("entryType", in: dto),
+              let entryType = PersonDebtEntryType(rawValue: entryTypeRawValue),
+              let amount = doubleField("amount", in: dto),
+              let accountName = stringField("accountName", in: dto),
+              let date = dateField("date", in: dto) else {
+            return nil
+        }
+
+        return PersonDebtEntry(
+            id: dto.id,
+            debtID: debtID,
+            entryType: entryType,
+            amount: amount,
+            accountName: accountName,
+            date: date,
+            note: nullableStringField("note", in: dto),
+            createdAt: dateField("createdAt", in: dto) ?? dto.updatedAt ?? Date(),
+            updatedAt: dto.updatedAt ?? Date(),
+            isDeleted: false,
+            deletedAt: nil
+        )
+    }
+
     private func blockedItem(
         recordName: String,
         entity: WalletSyncRecordEntity?,
@@ -616,10 +802,8 @@ struct WalletSyncMasterDataApplyPlanBuilder {
 
     private func isFinancialSideEffectSensitive(_ entity: WalletSyncRecordEntity?) -> Bool {
         switch entity {
-        case .personDebtEntry,
-             .creditCardPurchase,
-             .creditCardPayment:
-            return true
+        case .none:
+            return false
         default:
             return false
         }
@@ -702,6 +886,11 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         default:
             return nil
         }
+    }
+
+    private func uuidField(_ name: String, in dto: WalletSyncRecordDTO) -> UUID? {
+        guard case .some(.uuid(let value)) = dto.fields[name] else { return nil }
+        return value
     }
 
     private func stringArrayField(_ name: String, in dto: WalletSyncRecordDTO) -> [String]? {

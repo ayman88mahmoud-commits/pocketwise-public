@@ -11,6 +11,12 @@ protocol WalletSyncMergePlanLocalStateReading {
     func containsInstallmentPlan(id: UUID) -> Bool
     func containsFinancialEvent(id: UUID) -> Bool
     func financialEventUpdatedAt(id: UUID) -> Date?
+    func containsCreditCardPurchase(id: UUID) -> Bool
+    func creditCardPurchaseUpdatedAt(id: UUID) -> Date?
+    func containsCreditCardPayment(id: UUID) -> Bool
+    func creditCardPaymentUpdatedAt(id: UUID) -> Date?
+    func containsPersonDebtEntry(id: UUID) -> Bool
+    func personDebtEntryUpdatedAt(id: UUID) -> Date?
 }
 
 extension WalletSyncMergePlanLocalStateReading {
@@ -21,6 +27,12 @@ extension WalletSyncMergePlanLocalStateReading {
     func containsInstallmentPlan(id: UUID) -> Bool { false }
     func containsFinancialEvent(id: UUID) -> Bool { false }
     func financialEventUpdatedAt(id: UUID) -> Date? { nil }
+    func containsCreditCardPurchase(id: UUID) -> Bool { false }
+    func creditCardPurchaseUpdatedAt(id: UUID) -> Date? { nil }
+    func containsCreditCardPayment(id: UUID) -> Bool { false }
+    func creditCardPaymentUpdatedAt(id: UUID) -> Date? { nil }
+    func containsPersonDebtEntry(id: UUID) -> Bool { false }
+    func personDebtEntryUpdatedAt(id: UUID) -> Date? { nil }
 }
 
 extension WalletStore: WalletSyncMergePlanLocalStateReading {
@@ -62,6 +74,30 @@ extension WalletStore: WalletSyncMergePlanLocalStateReading {
 
     func financialEventUpdatedAt(id: UUID) -> Date? {
         financialEvents.first { $0.id == id }?.updatedAt
+    }
+
+    func containsCreditCardPurchase(id: UUID) -> Bool {
+        creditCardPurchases.contains { $0.id == id }
+    }
+
+    func creditCardPurchaseUpdatedAt(id: UUID) -> Date? {
+        creditCardPurchases.first { $0.id == id }?.updatedAt
+    }
+
+    func containsCreditCardPayment(id: UUID) -> Bool {
+        creditCardPayments.contains { $0.id == id }
+    }
+
+    func creditCardPaymentUpdatedAt(id: UUID) -> Date? {
+        creditCardPayments.first { $0.id == id }?.updatedAt
+    }
+
+    func containsPersonDebtEntry(id: UUID) -> Bool {
+        personDebtEntries.contains { $0.id == id }
+    }
+
+    func personDebtEntryUpdatedAt(id: UUID) -> Date? {
+        personDebtEntries.first { $0.id == id }?.updatedAt
     }
 }
 
@@ -157,6 +193,12 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsInstallmentPlan(id: id))
         case .financialEvent:
             return planMasterDataItem(item, exists: localState.containsFinancialEvent(id: id))
+        case .creditCardPurchase:
+            return planMasterDataItem(item, exists: localState.containsCreditCardPurchase(id: id))
+        case .creditCardPayment:
+            return planMasterDataItem(item, exists: localState.containsCreditCardPayment(id: id))
+        case .personDebtEntry:
+            return planMasterDataItem(item, exists: localState.containsPersonDebtEntry(id: id))
         case .monthlyBudgetItem:
             return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
         case .householdSettings:
