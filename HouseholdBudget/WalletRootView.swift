@@ -1228,6 +1228,14 @@ struct ICloudSnapshotSyncView: View {
                 }
                 .disabled(isWorking || debugLastMasterDataApplyPlan == nil)
                 .tint(.orange)
+
+                Button(role: .destructive) {
+                    Task { await runMasterDataManualSyncPipelineForDebug() }
+                } label: {
+                    Label("Run Master Data Manual Sync Pipeline", systemImage: "arrow.triangle.2.circlepath.circle")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
             }
 
             Section("Debug — Changed Records Dry Run") {
@@ -1829,6 +1837,38 @@ struct ICloudSnapshotSyncView: View {
         errorMessage = nil
     }
 
+    private func runMasterDataManualSyncPipelineForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let pipeline = WalletSyncMasterDataManualPipeline(
+                zoneEnsurer: boundary,
+                recordSaver: boundary,
+                changedRecordFetcher: boundary,
+                tokenStore: WalletSyncStateStore(),
+                source: store,
+                localState: store,
+                inboxParser: WalletSyncInboxParser(),
+                applier: WalletSyncMasterDataApplier(store: store),
+                uploadCap: WalletSyncMasterDataManualPipeline.defaultUploadCap,
+                sampleLimit: WalletSyncMasterDataManualPipeline.defaultSampleLimit
+            )
+            let summary = try await pipeline.run()
+
+            debugLastMasterDataApplyPlan = nil
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugMasterDataManualPipelineSummaryMessage(summary)
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Master data manual sync pipeline failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
     private func fetchChangedRecordsWithSavedTokenForDebug() async {
         let stateStore = WalletSyncStateStore()
 
@@ -1996,6 +2036,47 @@ struct ICloudSnapshotSyncView: View {
             "Applied blocked: \(result.blockedCount)",
             "Applied failed: \(result.failedCount)",
             "Applied skipped: \(result.skippedCount)"
+        ].joined(separator: "\n")
+    }
+
+    private func debugMasterDataManualPipelineSummaryMessage(_ summary: WalletSyncMasterDataManualPipelineSummary) -> String {
+        let zoneEnsured = summary.zoneEnsured ? "yes" : "no"
+        let usedSavedToken = summary.usedSavedToken ? "yes" : "no"
+        let tokenReturned = summary.tokenReturned ? "yes" : "no"
+        let tokenSaved = summary.tokenSaved ? "yes" : "no"
+        let moreComing = summary.moreComing ? "yes" : "no"
+        let sampleText = summary.sampleRecordNames.isEmpty ? "none" : summary.sampleRecordNames.joined(separator: ", ")
+        let echoNamesText = summary.skippedLocalEchoRecordNames.isEmpty ? "none" : summary.skippedLocalEchoRecordNames.joined(separator: ", ")
+
+        return [
+            "[Debug] Master data manual sync pipeline",
+            "Zone ensured: \(zoneEnsured)",
+            "Uploaded records: \(summary.uploadedCount)",
+            "Uploaded accounts: \(summary.uploadedAccountCount)",
+            "Uploaded categories: \(summary.uploadedCategoryCount)",
+            "Uploaded wallet events: \(summary.uploadedWalletEventCount)",
+            "Upload cap: \(summary.uploadCap)",
+            "Upload capped count: \(summary.uploadCappedCount)",
+            "Used saved token: \(usedSavedToken)",
+            "Changed records: \(summary.changedRecordCount)",
+            "Deleted records: \(summary.deletedRecordCount)",
+            "Skipped local echo: \(summary.skippedLocalEchoCount)",
+            "Skipped echo names: \(echoNamesText)",
+            "Parsed valid: \(summary.parsedValidCount)",
+            "Blocked: \(summary.blockedCount)",
+            "Failed: \(summary.failedCount)",
+            "Planned creates: \(summary.plannedCreateCount)",
+            "Planned updates: \(summary.plannedUpdateCount)",
+            "Planned disabled: \(summary.plannedDisableCount)",
+            "Applied created: \(summary.appliedCreatedCount)",
+            "Applied updated: \(summary.appliedUpdatedCount)",
+            "Applied disabled: \(summary.appliedDisabledCount)",
+            "Applied blocked: \(summary.appliedBlockedCount)",
+            "Applied failed: \(summary.appliedFailedCount)",
+            "Token returned: \(tokenReturned)",
+            "Token saved: \(tokenSaved)",
+            "More coming: \(moreComing)",
+            "Sample record names: \(sampleText)"
         ].joined(separator: "\n")
     }
 
