@@ -1,0 +1,136 @@
+import Foundation
+
+protocol WalletSyncMergePlanLocalStateReading {
+    func containsAccount(id: UUID) -> Bool
+    func containsCategory(id: UUID) -> Bool
+    func containsWalletEvent(id: UUID) -> Bool
+}
+
+extension WalletStore: WalletSyncMergePlanLocalStateReading {
+    func containsAccount(id: UUID) -> Bool {
+        accounts.contains { $0.id == id }
+    }
+
+    func containsCategory(id: UUID) -> Bool {
+        categories.contains { $0.id == id }
+    }
+
+    func containsWalletEvent(id: UUID) -> Bool {
+        walletEvents.contains { $0.id == id }
+    }
+}
+
+enum WalletSyncMergePlanAction: Equatable {
+    case wouldCreate
+    case wouldUpdate
+    case wouldDelete
+    case wouldIgnoreNoChange
+    case blocked
+    case failed
+}
+
+enum WalletSyncMergePlanBlockReason: Equatable {
+    case monthlyBudgetItemNoParent
+    case householdSettingsNoModel
+    case pendingApplyImplementation
+    case unsupportedEntity
+}
+
+struct WalletSyncMergePlanItem: Equatable {
+    var recordName: String
+    var entity: WalletSyncRecordEntity?
+    var id: UUID?
+    var action: WalletSyncMergePlanAction
+    var blockReason: WalletSyncMergePlanBlockReason?
+}
+
+struct WalletSyncMergePlanDryRunSummary: Equatable {
+    var items: [WalletSyncMergePlanItem]
+
+    var wouldCreateCount: Int { count(.wouldCreate) }
+    var wouldUpdateCount: Int { count(.wouldUpdate) }
+    var wouldDeleteCount: Int { count(.wouldDelete) }
+    var wouldIgnoreCount: Int { count(.wouldIgnoreNoChange) }
+    var blockedCount: Int { count(.blocked) }
+    var failedCount: Int { count(.failed) }
+
+    func sampleRecordNames(limit: Int = 10) -> [String] {
+        Array(items.map(\.recordName).prefix(limit))
+    }
+
+    private func count(_ action: WalletSyncMergePlanAction) -> Int {
+        items.filter { $0.action == action }.count
+    }
+}
+
+struct WalletSyncMergePlanDryRun {
+    private let localState: WalletSyncMergePlanLocalStateReading
+
+    init(localState: WalletSyncMergePlanLocalStateReading) {
+        self.localState = localState
+    }
+
+    func makePlan(for inboxItems: [WalletSyncInboxItem]) -> WalletSyncMergePlanDryRunSummary {
+        let planItems = inboxItems.map(planItem)
+        return WalletSyncMergePlanDryRunSummary(items: planItems)
+    }
+
+    private func planItem(for item: WalletSyncInboxItem) -> WalletSyncMergePlanItem {
+        switch item.status {
+        case .decodeFailed:
+            return makeItem(from: item, action: .failed)
+        case .unsupportedEntity:
+            return makeItem(from: item, action: .blocked, blockReason: .unsupportedEntity)
+        case .blockedMonthlyBudgetItemNoParent:
+            return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
+        case .blockedHouseholdSettingsNoModel:
+            return makeItem(from: item, action: .blocked, blockReason: .householdSettingsNoModel)
+        case .validChangedRecord, .validDeletedTombstone, .deletedRecordNameOnly:
+            break
+        }
+
+        guard let entity = item.entity, let id = item.id else {
+            return makeItem(from: item, action: .blocked, blockReason: .unsupportedEntity)
+        }
+
+        switch entity {
+        case .account:
+            return planMasterDataItem(item, exists: localState.containsAccount(id: id))
+        case .category:
+            return planMasterDataItem(item, exists: localState.containsCategory(id: id))
+        case .walletEvent:
+            return planMasterDataItem(item, exists: localState.containsWalletEvent(id: id))
+        case .monthlyBudgetItem:
+            return makeItem(from: item, action: .blocked, blockReason: .monthlyBudgetItemNoParent)
+        case .householdSettings:
+            return makeItem(from: item, action: .blocked, blockReason: .householdSettingsNoModel)
+        default:
+            return makeItem(from: item, action: .blocked, blockReason: .pendingApplyImplementation)
+        }
+    }
+
+    private func planMasterDataItem(
+        _ item: WalletSyncInboxItem,
+        exists: Bool
+    ) -> WalletSyncMergePlanItem {
+        if item.isDeleted {
+            return makeItem(from: item, action: exists ? .wouldDelete : .wouldIgnoreNoChange)
+        }
+
+        return makeItem(from: item, action: exists ? .wouldUpdate : .wouldCreate)
+    }
+
+    private func makeItem(
+        from item: WalletSyncInboxItem,
+        action: WalletSyncMergePlanAction,
+        blockReason: WalletSyncMergePlanBlockReason? = nil
+    ) -> WalletSyncMergePlanItem {
+        WalletSyncMergePlanItem(
+            recordName: item.recordName,
+            entity: item.entity,
+            id: item.id,
+            action: action,
+            blockReason: blockReason
+        )
+    }
+}

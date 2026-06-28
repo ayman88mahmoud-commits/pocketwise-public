@@ -18,6 +18,11 @@ struct WalletSyncDryRunLoopSummary: Equatable {
     var sampleDeletedRecordNames: [String]
 }
 
+struct WalletSyncDryRunLoopOutput {
+    var fetchResult: WalletSyncCloudKitFetchResult
+    var summary: WalletSyncDryRunLoopSummary
+}
+
 struct WalletSyncDryRunLoopController {
     private let changedRecordFetcher: WalletSyncDryRunChangedRecordFetching
     private let tokenStore: WalletSyncChangeTokenStoring
@@ -34,6 +39,10 @@ struct WalletSyncDryRunLoopController {
     }
 
     func runDryRunLoop() async throws -> WalletSyncDryRunLoopSummary {
+        try await runDryRunLoopWithResult().summary
+    }
+
+    func runDryRunLoopWithResult() async throws -> WalletSyncDryRunLoopOutput {
         let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
         let result = try await changedRecordFetcher.fetchChangedRecords(since: savedTokenData)
         let tokenSaved: Bool
@@ -45,7 +54,7 @@ struct WalletSyncDryRunLoopController {
             tokenSaved = false
         }
 
-        return WalletSyncDryRunLoopSummary(
+        let summary = WalletSyncDryRunLoopSummary(
             usedSavedToken: savedTokenData != nil,
             changedRecordCount: result.records.count,
             deletedRecordCount: result.deletedRecordNames.count,
@@ -55,5 +64,7 @@ struct WalletSyncDryRunLoopController {
             sampleChangedRecordNames: Array(result.records.map(\.recordID.recordName).prefix(sampleLimit)),
             sampleDeletedRecordNames: Array(result.deletedRecordNames.prefix(sampleLimit))
         )
+
+        return WalletSyncDryRunLoopOutput(fetchResult: result, summary: summary)
     }
 }

@@ -1185,6 +1185,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Sync Inbox Plan Dry Run") {
+                Text("Developer only. Not included in release builds. Fetches WalletSyncZone changes, parses a safe inbox, plans counts only, and does not apply records. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await runSyncInboxPlanDryRunForDebug() }
+                } label: {
+                    Label("Run Sync Inbox Plan Dry Run", systemImage: "tray.full")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Changed Records Dry Run") {
                 Text("Developer only. Not included in release builds. Fetches private database changes with no saved token and does not apply them. This is not full sync.")
                     .font(.footnote)
@@ -1682,6 +1696,37 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
+    private func runSyncInboxPlanDryRunForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let controller = WalletSyncDryRunLoopController(
+                changedRecordFetcher: WalletSyncRealCloudKitPrivateDatabaseBoundary(),
+                tokenStore: WalletSyncStateStore()
+            )
+            let output = try await controller.runDryRunLoopWithResult()
+            let inbox = WalletSyncInboxParser().parse(
+                changedRecords: output.fetchResult.records,
+                deletedRecordNames: output.fetchResult.deletedRecordNames
+            )
+            let plan = WalletSyncMergePlanDryRun(localState: store).makePlan(for: inbox.items)
+
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugSyncInboxPlanSummaryMessage(
+                loop: output.summary,
+                inbox: inbox,
+                plan: plan
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Sync inbox plan dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
     private func fetchChangedRecordsWithSavedTokenForDebug() async {
         let stateStore = WalletSyncStateStore()
 
@@ -1778,6 +1823,37 @@ struct ICloudSnapshotSyncView: View {
             "More coming: \(moreComing)",
             "Sample changed record names: \(changedSamples)",
             "Sample deleted record names: \(deletedSamples)"
+        ].joined(separator: "\n")
+    }
+
+    private func debugSyncInboxPlanSummaryMessage(
+        loop: WalletSyncDryRunLoopSummary,
+        inbox: WalletSyncInboxParseResult,
+        plan: WalletSyncMergePlanDryRunSummary
+    ) -> String {
+        let sampleRecordNames = plan.sampleRecordNames(limit: 10)
+        let sampleText = sampleRecordNames.isEmpty ? "none" : sampleRecordNames.joined(separator: ", ")
+        let usedSavedToken = loop.usedSavedToken ? "yes" : "no"
+        let tokenReturned = loop.tokenReturned ? "yes" : "no"
+        let tokenSaved = loop.tokenSaved ? "yes" : "no"
+        let moreComing = loop.moreComing ? "yes" : "no"
+
+        return [
+            "[Debug] Sync inbox plan dry run",
+            "Used saved token: \(usedSavedToken)",
+            "Changed records: \(loop.changedRecordCount)",
+            "Deleted records: \(loop.deletedRecordCount)",
+            "Parsed valid: \(inbox.validCount)",
+            "Blocked: \(plan.blockedCount)",
+            "Failed: \(plan.failedCount)",
+            "Would create: \(plan.wouldCreateCount)",
+            "Would update: \(plan.wouldUpdateCount)",
+            "Would delete: \(plan.wouldDeleteCount)",
+            "Would ignore: \(plan.wouldIgnoreCount)",
+            "Token returned: \(tokenReturned)",
+            "Token saved: \(tokenSaved)",
+            "More coming: \(moreComing)",
+            "Sample record names: \(sampleText)"
         ].joined(separator: "\n")
     }
 
