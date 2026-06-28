@@ -8,6 +8,13 @@ protocol WalletSyncStateKeyValueStoring {
 
 extension UserDefaults: WalletSyncStateKeyValueStoring {}
 
+protocol WalletSyncChangeTokenStoring {
+    func loadWalletSyncZoneChangeTokenData() -> Data?
+    func saveWalletSyncZoneChangeTokenData(_ tokenData: Data)
+    func clearWalletSyncZoneChangeTokenData()
+    func hasWalletSyncZoneChangeToken() -> Bool
+}
+
 struct WalletSyncStateStore {
     static let walletSyncZoneChangeTokenKey = "WalletSyncState.WalletSyncZone.changeTokenData"
 
@@ -33,3 +40,5 @@ struct WalletSyncStateStore {
         loadWalletSyncZoneChangeTokenData() != nil
     }
 }
+
+extension WalletSyncStateStore: WalletSyncChangeTokenStoring {}

@@ -1171,6 +1171,20 @@ struct ICloudSnapshotSyncView: View {
                 .tint(.orange)
             }
 
+            Section("Debug — Sync Loop Dry Run") {
+                Text("Developer only. Not included in release builds. Fetches WalletSyncZone changes with the saved token if present, saves a returned token, and does not apply records. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                Button {
+                    Task { await runSyncLoopDryRunForDebug() }
+                } label: {
+                    Label("Run Sync Loop Dry Run", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+            }
+
             Section("Debug — Changed Records Dry Run") {
                 Text("Developer only. Not included in release builds. Fetches private database changes with no saved token and does not apply them. This is not full sync.")
                     .font(.footnote)
@@ -1647,6 +1661,27 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
+    private func runSyncLoopDryRunForDebug() async {
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let controller = WalletSyncDryRunLoopController(
+                changedRecordFetcher: WalletSyncRealCloudKitPrivateDatabaseBoundary(),
+                tokenStore: WalletSyncStateStore()
+            )
+            let summary = try await controller.runDryRunLoop()
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugSyncLoopSummaryMessage(summary)
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Sync loop dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
     private func fetchChangedRecordsWithSavedTokenForDebug() async {
         let stateStore = WalletSyncStateStore()
 
@@ -1718,6 +1753,31 @@ struct ICloudSnapshotSyncView: View {
             "More coming: \(moreComing)",
             "Sample changed record names: \(changedSamples)",
             "Sample deleted record names: \(deletedSampleText)"
+        ].joined(separator: "\n")
+    }
+
+    private func debugSyncLoopSummaryMessage(_ summary: WalletSyncDryRunLoopSummary) -> String {
+        let changedSamples = summary.sampleChangedRecordNames.isEmpty
+            ? "none"
+            : summary.sampleChangedRecordNames.joined(separator: ", ")
+        let deletedSamples = summary.sampleDeletedRecordNames.isEmpty
+            ? "none"
+            : summary.sampleDeletedRecordNames.joined(separator: ", ")
+        let usedSavedToken = summary.usedSavedToken ? "yes" : "no"
+        let tokenReturned = summary.tokenReturned ? "yes" : "no"
+        let tokenSaved = summary.tokenSaved ? "yes" : "no"
+        let moreComing = summary.moreComing ? "yes" : "no"
+
+        return [
+            "[Debug] Sync loop dry run",
+            "Used saved token: \(usedSavedToken)",
+            "Changed records: \(summary.changedRecordCount)",
+            "Deleted records: \(summary.deletedRecordCount)",
+            "Token returned: \(tokenReturned)",
+            "Token saved: \(tokenSaved)",
+            "More coming: \(moreComing)",
+            "Sample changed record names: \(changedSamples)",
+            "Sample deleted record names: \(deletedSamples)"
         ].joined(separator: "\n")
     }
 
