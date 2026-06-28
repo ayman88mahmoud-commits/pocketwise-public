@@ -864,6 +864,8 @@ struct ICloudSnapshotSyncView: View {
     @State private var isConfirmingRestore = false
     #if DEBUG
     @State private var debugLastSavedAccountSyncRecordName: String?
+    @State private var debugLastReturnedChangeTokenData: Data?
+    @State private var debugSavedChangeTokenExists = WalletSyncStateStore().hasWalletSyncZoneChangeToken()
     #endif
 
     private var isAr: Bool { store.appLanguage == .arabicEgyptian }
@@ -1180,6 +1182,45 @@ struct ICloudSnapshotSyncView: View {
                     Label("Fetch Changed Records Dry Run", systemImage: "arrow.down.doc")
                 }
                 .disabled(isWorking)
+                .tint(.orange)
+            }
+
+            Section("Debug — Saved Change Token") {
+                Text("Developer only. Not included in release builds. Stores only the WalletSyncZone change token after an explicit tap. This is not full sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+
+                statusRow(
+                    title: "Saved token",
+                    value: debugSavedChangeTokenExists ? "yes" : "no"
+                )
+                statusRow(
+                    title: "Last returned token",
+                    value: debugLastReturnedChangeTokenData == nil ? "no" : "yes"
+                )
+
+                Button {
+                    Task { await fetchChangedRecordsWithSavedTokenForDebug() }
+                } label: {
+                    Label("Fetch Changes With Saved Token", systemImage: "arrow.down.doc")
+                }
+                .disabled(isWorking)
+                .tint(.orange)
+
+                Button {
+                    saveLastReturnedChangeTokenForDebug()
+                } label: {
+                    Label("Save Last Returned Token", systemImage: "tray.and.arrow.down")
+                }
+                .disabled(isWorking || debugLastReturnedChangeTokenData == nil)
+                .tint(.orange)
+
+                Button(role: .destructive) {
+                    clearSavedChangeTokenForDebug()
+                } label: {
+                    Label("Clear Saved Change Token", systemImage: "trash")
+                }
+                .disabled(isWorking || !debugSavedChangeTokenExists)
                 .tint(.orange)
             }
 
@@ -1579,6 +1620,8 @@ struct ICloudSnapshotSyncView: View {
         do {
             let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
             let result = try await boundary.fetchChangedRecords(since: nil)
+            debugLastReturnedChangeTokenData = result.changeTokenData
+            refreshSavedChangeTokenStatusForDebug()
             actionMessage = debugChangedRecordsSummaryMessage(result)
             errorMessage = nil
         } catch {
@@ -1604,12 +1647,66 @@ struct ICloudSnapshotSyncView: View {
         }
     }
 
+    private func fetchChangedRecordsWithSavedTokenForDebug() async {
+        let stateStore = WalletSyncStateStore()
+
+        guard let savedTokenData = stateStore.loadWalletSyncZoneChangeTokenData() else {
+            debugSavedChangeTokenExists = false
+            actionMessage = "[Debug] No saved WalletSyncZone change token is available."
+            errorMessage = nil
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        actionMessage = nil
+        errorMessage = nil
+
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let result = try await boundary.fetchChangedRecords(since: savedTokenData)
+            debugLastReturnedChangeTokenData = result.changeTokenData
+            refreshSavedChangeTokenStatusForDebug()
+            actionMessage = debugChangedRecordsSummaryMessage(result)
+            errorMessage = nil
+        } catch {
+            errorMessage = "[Debug] Saved-token changed records dry run failed: \(error.localizedDescription)"
+            actionMessage = nil
+        }
+    }
+
+    private func saveLastReturnedChangeTokenForDebug() {
+        guard let tokenData = debugLastReturnedChangeTokenData else {
+            actionMessage = "[Debug] No returned WalletSyncZone change token is available to save."
+            errorMessage = nil
+            refreshSavedChangeTokenStatusForDebug()
+            return
+        }
+
+        WalletSyncStateStore().saveWalletSyncZoneChangeTokenData(tokenData)
+        refreshSavedChangeTokenStatusForDebug()
+        actionMessage = "[Debug] Saved WalletSyncZone change token."
+        errorMessage = nil
+    }
+
+    private func clearSavedChangeTokenForDebug() {
+        WalletSyncStateStore().clearWalletSyncZoneChangeTokenData()
+        refreshSavedChangeTokenStatusForDebug()
+        actionMessage = "[Debug] Cleared WalletSyncZone change token."
+        errorMessage = nil
+    }
+
+    private func refreshSavedChangeTokenStatusForDebug() {
+        debugSavedChangeTokenExists = WalletSyncStateStore().hasWalletSyncZoneChangeToken()
+    }
+
     private func debugChangedRecordsSummaryMessage(_ result: WalletSyncCloudKitFetchResult) -> String {
         let sampleRecordNames = Array(result.records.map(\.recordID.recordName).prefix(10))
         let changedSamples = sampleRecordNames.isEmpty ? "none" : sampleRecordNames.joined(separator: ", ")
         let deletedSamples = Array(result.deletedRecordNames.prefix(10))
         let deletedSampleText = deletedSamples.isEmpty ? "none" : deletedSamples.joined(separator: ", ")
         let tokenReturned = result.changeTokenData == nil ? "no" : "yes"
+        let savedTokenExists = WalletSyncStateStore().hasWalletSyncZoneChangeToken() ? "yes" : "no"
         let moreComing = result.moreComing ? "yes" : "no"
 
         return [
@@ -1617,6 +1714,7 @@ struct ICloudSnapshotSyncView: View {
             "Changed records: \(result.records.count)",
             "Deleted records: \(result.deletedRecordNames.count)",
             "Token returned: \(tokenReturned)",
+            "Saved token exists: \(savedTokenExists)",
             "More coming: \(moreComing)",
             "Sample changed record names: \(changedSamples)",
             "Sample deleted record names: \(deletedSampleText)"
