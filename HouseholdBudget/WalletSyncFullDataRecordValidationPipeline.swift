@@ -18,7 +18,10 @@ extension WalletStore: WalletSyncFullDataSourceReading {}
 
 struct WalletSyncFullDataRecordValidationPipelineSummary: Equatable {
     var zoneEnsured: Bool
+    var totalEligibleCount: Int
     var uploadedCount: Int
+    var batchCount: Int
+    var uploadedCountsByBatch: [Int]
     var uploadedCountsByEntity: [WalletSyncRecordEntity: Int]
     var excludedEntities: [WalletSyncRecordEntity]
     var uploadCap: Int
@@ -83,8 +86,16 @@ struct WalletSyncFullDataRecordValidationPipeline {
         try await zoneEnsurer.ensureSyncZone()
 
         let uploadPlan = makeUploadPlan()
-        let records = uploadPlan.dtos.map(WalletSyncCKRecordAdapter.ckRecord(from:))
-        let savedRecords = try await recordSaver.saveRecords(records)
+        var savedRecords: [CKRecord] = []
+        var uploadedCountsByBatch: [Int] = []
+
+        for batch in uploadPlan.batches {
+            let records = batch.map(WalletSyncCKRecordAdapter.ckRecord(from:))
+            let batchSavedRecords = try await recordSaver.saveRecords(records)
+            savedRecords.append(contentsOf: batchSavedRecords)
+            uploadedCountsByBatch.append(batchSavedRecords.count)
+        }
+
         let uploadedRecordNames = Set(savedRecords.map(\.recordID.recordName))
 
         let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
@@ -111,7 +122,10 @@ struct WalletSyncFullDataRecordValidationPipeline {
 
         return WalletSyncFullDataRecordValidationPipelineSummary(
             zoneEnsured: true,
+            totalEligibleCount: uploadPlan.totalAvailableCount,
             uploadedCount: savedRecords.count,
+            batchCount: uploadedCountsByBatch.count,
+            uploadedCountsByBatch: uploadedCountsByBatch,
             uploadedCountsByEntity: uploadPlan.countsByEntity,
             excludedEntities: [.monthlyBudgetItem, .householdSettings],
             uploadCap: uploadCap,
@@ -155,23 +169,38 @@ struct WalletSyncFullDataRecordValidationPipeline {
         ]
 
         let allDTOs = entityGroups.flatMap(\.1)
-        let limitedDTOs = Array(allDTOs.prefix(uploadCap))
-        let countsByEntity = Dictionary(grouping: limitedDTOs, by: \.entity).mapValues(\.count)
+        let batches = allDTOs.chunked(maximumSize: uploadCap)
+        let countsByEntity = Dictionary(grouping: allDTOs, by: \.entity).mapValues(\.count)
 
         return FullDataUploadPlan(
-            dtos: limitedDTOs,
+            batches: batches,
             totalAvailableCount: allDTOs.count,
             countsByEntity: countsByEntity
         )
     }
 
     private struct FullDataUploadPlan {
-        var dtos: [WalletSyncRecordDTO]
+        var batches: [[WalletSyncRecordDTO]]
         var totalAvailableCount: Int
         var countsByEntity: [WalletSyncRecordEntity: Int]
 
         var cappedCount: Int {
-            max(0, totalAvailableCount - dtos.count)
+            0
         }
+    }
+}
+
+private extension Array {
+    func chunked(maximumSize: Int) -> [[Element]] {
+        guard maximumSize > 0 else { return isEmpty ? [] : [self] }
+
+        var result: [[Element]] = []
+        var startIndex = 0
+        while startIndex < count {
+            let endIndex = Swift.min(startIndex + maximumSize, count)
+            result.append(Array(self[startIndex..<endIndex]))
+            startIndex = endIndex
+        }
+        return result
     }
 }

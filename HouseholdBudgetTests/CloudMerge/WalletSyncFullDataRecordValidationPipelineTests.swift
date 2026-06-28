@@ -18,6 +18,35 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         for entity in Self.supportedEntities {
             XCTAssertEqual(summary.uploadedCountsByEntity[entity], 1)
         }
+        XCTAssertEqual(summary.totalEligibleCount, Self.supportedEntities.count)
+        XCTAssertEqual(summary.uploadCappedCount, 0)
+    }
+
+    func testPipelineSplitsEligibleRecordsIntoMultipleSequentialBatches() async throws {
+        let boundary = FakeFullDataBoundary()
+        let store = FakeFullDataStore(accounts: makeAccounts(count: 5))
+        let pipeline = makePipeline(boundary: boundary, store: store, uploadCap: 2)
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.totalEligibleCount, 5)
+        XCTAssertEqual(summary.uploadedCount, 5)
+        XCTAssertEqual(summary.batchCount, 3)
+        XCTAssertEqual(summary.uploadedCountsByBatch, [2, 2, 1])
+        XCTAssertEqual(boundary.savedRecordBatches.map(\.count), [2, 2, 1])
+        XCTAssertEqual(boundary.events, ["ensure", "save", "save", "save", "fetch"])
+    }
+
+    func testCappedRemainingCountIsZeroAfterBatchedUpload() async throws {
+        let boundary = FakeFullDataBoundary()
+        let store = FakeFullDataStore(accounts: makeAccounts(count: 7))
+        let pipeline = makePipeline(boundary: boundary, store: store, uploadCap: 3)
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.uploadedCount, 7)
+        XCTAssertEqual(summary.uploadCappedCount, 0)
+        XCTAssertEqual(summary.uploadedCountsByEntity[.account], 7)
     }
 
     func testUploadExcludesMonthlyBudgetItemAndHouseholdSettings() async throws {
@@ -48,6 +77,27 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(summary.changedRecordCount, 1)
         XCTAssertEqual(summary.skippedLocalEchoCount, 1)
         XCTAssertEqual(summary.blockedCount, 0)
+        XCTAssertEqual(applier.receivedPlan?.items.count, 0)
+    }
+
+    func testLocalEchoGuardIncludesRecordsFromAllBatches() async throws {
+        let accounts = makeAccounts(count: 5)
+        let echoRecords = accounts
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: echoRecords, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(accounts: accounts)
+        let applier = FakeFullDataApplier()
+        let pipeline = makePipeline(boundary: boundary, store: store, applier: applier, uploadCap: 2)
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.batchCount, 3)
+        XCTAssertEqual(summary.changedRecordCount, 5)
+        XCTAssertEqual(summary.skippedLocalEchoCount, 5)
+        XCTAssertEqual(summary.parsedValidCount, 0)
         XCTAssertEqual(applier.receivedPlan?.items.count, 0)
     }
 
@@ -121,6 +171,30 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(store.accounts.first?.balance, 500)
         XCTAssertEqual(store.financialEventMutationCount, 0)
         XCTAssertEqual(store.balanceRecalculationCount, 0)
+    }
+
+    func testFinancialAppEntitiesAreUploadedButNotAppliedWhenEchoedFromAllBatches() async throws {
+        let events = (0..<5).map { index in makeFinancialEvent(id: deterministicID(index: index + 100)) }
+        let echoRecords = events
+            .map(WalletSyncRecordMappers.dto(for:))
+            .map(WalletSyncCKRecordAdapter.ckRecord(from:))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: echoRecords, changeTokenData: Data([1]))
+        )
+        let store = FakeFullDataStore(financialEvents: events)
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store),
+            uploadCap: 2
+        )
+
+        let summary = try await pipeline.run()
+
+        XCTAssertEqual(summary.uploadedCountsByEntity[.financialEvent], 5)
+        XCTAssertEqual(summary.skippedLocalEchoCount, 5)
+        XCTAssertEqual(summary.appliedUpdatedCount, 0)
+        XCTAssertEqual(store.financialEventMutationCount, 0)
     }
 
     func testCreditCardPaymentAndPersonDebtEntryDoNotDoubleApply() async throws {
@@ -198,6 +272,60 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         })
     }
 
+    func testLaterBatchFailureIsReportedByThrowingWithoutFetchOrTokenSave() async throws {
+        let boundary = FakeFullDataBoundary(failingSaveBatchIndex: 1)
+        let tokenStore = FakeFullDataTokenStore()
+        let store = FakeFullDataStore(accounts: makeAccounts(count: 5))
+        let pipeline = makePipeline(
+            boundary: boundary,
+            tokenStore: tokenStore,
+            store: store,
+            uploadCap: 2
+        )
+
+        do {
+            _ = try await pipeline.run()
+            XCTFail("Expected later batch failure")
+        } catch {
+            XCTAssertEqual(boundary.savedRecordBatches.map(\.count), [2])
+            XCTAssertEqual(boundary.fetchCallCount, 0)
+            XCTAssertNil(tokenStore.token)
+        }
+    }
+
+    func testTokenSavingOnlyHappensWhenFetchReturnsToken() async throws {
+        let withoutTokenBoundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [], changeTokenData: nil)
+        )
+        let withoutTokenStore = FakeFullDataTokenStore()
+        let withoutTokenPipeline = makePipeline(
+            boundary: withoutTokenBoundary,
+            tokenStore: withoutTokenStore,
+            store: FakeFullDataStore(accounts: [makeAccount()])
+        )
+
+        let withoutTokenSummary = try await withoutTokenPipeline.run()
+
+        XCTAssertFalse(withoutTokenSummary.tokenSaved)
+        XCTAssertNil(withoutTokenStore.token)
+
+        let token = Data([9, 9])
+        let withTokenBoundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [], changeTokenData: token)
+        )
+        let withTokenStore = FakeFullDataTokenStore()
+        let withTokenPipeline = makePipeline(
+            boundary: withTokenBoundary,
+            tokenStore: withTokenStore,
+            store: FakeFullDataStore(accounts: [makeAccount()])
+        )
+
+        let withTokenSummary = try await withTokenPipeline.run()
+
+        XCTAssertTrue(withTokenSummary.tokenSaved)
+        XCTAssertEqual(withTokenStore.token, token)
+    }
+
     func testNoWalletICloudSyncServiceDependencyIsIntroduced() {
         let pipeline = makePipeline(boundary: FakeFullDataBoundary(), store: FakeFullDataStore())
         let propertyNames = Mirror(reflecting: pipeline).children.compactMap { $0.label?.lowercased() }
@@ -271,21 +399,42 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
 
 private final class FakeFullDataBoundary: WalletSyncMasterDataZoneEnsuring, WalletSyncMasterDataRecordSaving, WalletSyncDryRunChangedRecordFetching {
     var savedRecords: [CKRecord] = []
+    var savedRecordBatches: [[CKRecord]] = []
+    var events: [String] = []
+    var fetchCallCount = 0
     var fetchResult: WalletSyncCloudKitFetchResult
+    var failingSaveBatchIndex: Int?
 
-    init(fetchResult: WalletSyncCloudKitFetchResult = WalletSyncCloudKitFetchResult(records: [])) {
+    init(
+        fetchResult: WalletSyncCloudKitFetchResult = WalletSyncCloudKitFetchResult(records: []),
+        failingSaveBatchIndex: Int? = nil
+    ) {
         self.fetchResult = fetchResult
+        self.failingSaveBatchIndex = failingSaveBatchIndex
     }
 
-    func ensureSyncZone() async throws {}
+    func ensureSyncZone() async throws {
+        events.append("ensure")
+    }
 
     func saveRecords(_ records: [CKRecord]) async throws -> [CKRecord] {
-        savedRecords = records
+        events.append("save")
+        if savedRecordBatches.count == failingSaveBatchIndex {
+            throw FakeFullDataBoundaryError.saveFailed
+        }
+        savedRecordBatches.append(records)
+        savedRecords.append(contentsOf: records)
         return records
     }
 
     func fetchChangedRecords(since changeToken: Data?) async throws -> WalletSyncCloudKitFetchResult {
-        fetchResult
+        events.append("fetch")
+        fetchCallCount += 1
+        return fetchResult
+    }
+
+    enum FakeFullDataBoundaryError: Error {
+        case saveFailed
     }
 }
 
@@ -401,6 +550,16 @@ private func makeAccount(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-00
     Account(id: id, name: "Cash", balance: balance, type: .cash)
 }
 
+private func makeAccounts(count: Int) -> [Account] {
+    (0..<count).map { index in
+        makeAccount(id: deterministicID(index: index + 1))
+    }
+}
+
+private func deterministicID(index: Int) -> UUID {
+    UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index))!
+}
+
 private func makeCategory(id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!) -> WalletBoard.Category {
     WalletBoard.Category(id: id, name: "Food", subcategories: ["Groceries"])
 }
@@ -417,14 +576,19 @@ private func makeWalletEvent(id: UUID = UUID(uuidString: "00000000-0000-0000-000
     return event
 }
 
-private func makeFinancialEvent(status: FinancialEventStatus = .unpaid) -> FinancialEvent {
-    FinancialEvent(
+private func makeFinancialEvent(
+    id: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
+    status: FinancialEventStatus = .unpaid
+) -> FinancialEvent {
+    var event = FinancialEvent(
         type: .expense,
         status: status,
         title: "Remote Event",
         amount: 100,
         date: Date(timeIntervalSince1970: 1_800_000_000)
     )
+    event.id = id
+    return event
 }
 
 private func makeMonthlyBudget() -> WalletMonthlyBudget {

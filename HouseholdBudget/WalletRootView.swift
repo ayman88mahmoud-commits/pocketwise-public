@@ -2217,11 +2217,14 @@ struct ICloudSnapshotSyncView: View {
         return [
             "[Debug] Full data record sync validation",
             "Zone ensured: \(zoneEnsured)",
-            "Uploaded: \(summary.uploadedCount)",
+            "Total eligible records: \(summary.totalEligibleCount)",
+            "Uploaded total: \(summary.uploadedCount)",
+            "Batch count: \(summary.batchCount)",
+            "Per-batch uploaded counts: \(debugIntegerListText(summary.uploadedCountsByBatch))",
             "Uploaded by entity: \(debugEntityCountsText(summary.uploadedCountsByEntity))",
             "Excluded entities: \(debugEntityListText(summary.excludedEntities))",
-            "Upload cap: \(summary.uploadCap)",
-            "Upload capped count: \(summary.uploadCappedCount)",
+            "Batch upload cap: \(summary.uploadCap)",
+            "Remaining capped count: \(summary.uploadCappedCount)",
             "Used saved token: \(usedSavedToken)",
             "Changed records: \(summary.changedRecordCount)",
             "Deleted records: \(summary.deletedRecordCount)",
@@ -2302,7 +2305,7 @@ struct ICloudSnapshotSyncView: View {
 
     private func debugLastFullDataValidationText() -> String {
         guard let summary = debugLastFullDataValidationSummary else { return "none" }
-        return "uploaded \(summary.uploadedCount), changed \(summary.changedRecordCount), blocked \(summary.blockedCount)"
+        return "uploaded \(summary.uploadedCount)/\(summary.totalEligibleCount), batches \(summary.batchCount), remaining \(summary.uploadCappedCount)"
     }
 
     private func debugEntityCountsText(_ counts: [WalletSyncRecordEntity: Int]) -> String {
@@ -2315,6 +2318,10 @@ struct ICloudSnapshotSyncView: View {
     private func debugEntityListText(_ entities: [WalletSyncRecordEntity]) -> String {
         let parts = entities.map(\.rawValue).sorted()
         return parts.isEmpty ? "none" : parts.joined(separator: ", ")
+    }
+
+    private func debugIntegerListText(_ values: [Int]) -> String {
+        values.isEmpty ? "none" : values.map(String.init).joined(separator: ", ")
     }
 
     private func debugCoordinatorDidRunText(_ result: WalletSyncMasterDataCoordinatorResult) -> String {
