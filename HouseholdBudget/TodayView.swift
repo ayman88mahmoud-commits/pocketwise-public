@@ -7,6 +7,7 @@ struct TodayView: View {
     @Binding private var isAddExpenseSheetActive: Bool
     private let pendingBankSMSImportCount: Int
     private let reviewPendingBankSMSImports: () -> Void
+    private let requestUserInitiatedSync: () async -> Void
 
     @State private var addExpenseRoute: AddExpenseRoute?
     @State private var selectedFinancialEvent: FinancialEvent?
@@ -46,11 +47,13 @@ struct TodayView: View {
     init(
         isAddExpenseSheetActive: Binding<Bool> = .constant(false),
         pendingBankSMSImportCount: Int = 0,
-        reviewPendingBankSMSImports: @escaping () -> Void = {}
+        reviewPendingBankSMSImports: @escaping () -> Void = {},
+        requestUserInitiatedSync: @escaping () async -> Void = {}
     ) {
         _isAddExpenseSheetActive = isAddExpenseSheetActive
         self.pendingBankSMSImportCount = pendingBankSMSImportCount
         self.reviewPendingBankSMSImports = reviewPendingBankSMSImports
+        self.requestUserInitiatedSync = requestUserInitiatedSync
     }
 
     private var today: Date {
@@ -139,6 +142,9 @@ struct TodayView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: 28)
+            }
+            .refreshable {
+                await requestUserInitiatedSync()
             }
             .accessibilityIdentifier("screen.today")
             .background(Color(.systemGroupedBackground))

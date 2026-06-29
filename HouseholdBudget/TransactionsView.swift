@@ -69,13 +69,18 @@ struct TransactionsView: View {
     @State private var monthFilter: TransactionMonthFilter = .allTime
     @State private var selectedMonthDate: Date?
     @State private var isShowingMoreFilters = false
+    private let requestUserInitiatedSync: () async -> Void
 
-    init(initialFilter: TransactionInitialFilter? = nil) {
+    init(
+        initialFilter: TransactionInitialFilter? = nil,
+        requestUserInitiatedSync: @escaping () async -> Void = {}
+    ) {
         _searchText = State(initialValue: initialFilter?.searchText ?? "")
         _mainFilter = State(initialValue: initialFilter?.incomeOnly == true ? .income : (initialFilter?.paidOnly == true ? .expenses : .all))
         _selectedCategoryName = State(initialValue: initialFilter?.categoryName)
         _monthFilter = State(initialValue: initialFilter?.monthDate == nil ? .allTime : .selectedMonth)
         _selectedMonthDate = State(initialValue: initialFilter?.monthDate)
+        self.requestUserInitiatedSync = requestUserInitiatedSync
     }
 
     private var sortedItems: [TransactionListItem] {
@@ -438,6 +443,9 @@ struct TransactionsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .refreshable {
+                await requestUserInitiatedSync()
+            }
             .scrollContentBackground(.hidden)
             .accessibilityIdentifier("screen.transactions")
             .background(Color(.systemGroupedBackground))

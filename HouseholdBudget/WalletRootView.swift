@@ -19,7 +19,7 @@ struct WalletRootView: View {
     var body: some View {
         TabView {
             if store.appLanguage == .arabicEgyptian {
-                SettingsView()
+                SettingsView(requestUserInitiatedSync: requestUserInitiatedFullDataSync)
                     .environment(\.layoutDirection, layoutDirection)
                     .accessibilityIdentifier("screen.settings")
                     .tabItem {
@@ -41,7 +41,7 @@ struct WalletRootView: View {
                             .accessibilityIdentifier("tab.budget")
                     }
 
-                TransactionsView()
+                TransactionsView(requestUserInitiatedSync: requestUserInitiatedFullDataSync)
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabTransactions(store.appLanguage), systemImage: "list.bullet.rectangle")
@@ -52,7 +52,7 @@ struct WalletRootView: View {
             } else {
                 todayTab
 
-                TransactionsView()
+                TransactionsView(requestUserInitiatedSync: requestUserInitiatedFullDataSync)
                     .environment(\.layoutDirection, layoutDirection)
                     .tabItem {
                         Label(AppText.tabTransactions(store.appLanguage), systemImage: "list.bullet.rectangle")
@@ -73,7 +73,7 @@ struct WalletRootView: View {
                             .accessibilityIdentifier("tab.analysis")
                     }
 
-                SettingsView()
+                SettingsView(requestUserInitiatedSync: requestUserInitiatedFullDataSync)
                     .environment(\.layoutDirection, layoutDirection)
                     .accessibilityIdentifier("screen.settings")
                     .tabItem {
@@ -138,7 +138,8 @@ struct WalletRootView: View {
             pendingBankSMSImportCount: pendingBankSMSImportDrafts.count,
             reviewPendingBankSMSImports: {
                 presentNextPendingBankSMSImportIfPossible(includingPaused: true)
-            }
+            },
+            requestUserInitiatedSync: requestUserInitiatedFullDataSync
         )
         .environment(\.layoutDirection, layoutDirection)
         .accessibilityIdentifier("screen.today")
@@ -221,6 +222,12 @@ struct WalletRootView: View {
 
     private func requestAutomaticFullDataSync(trigger: WalletSyncFullDataAutomaticSyncRunner.Trigger) {
         fullDataAutoSyncRunner.requestSync(trigger: trigger) {
+            await runAutomaticFullDataRecordSync()
+        }
+    }
+
+    private func requestUserInitiatedFullDataSync() async {
+        await fullDataAutoSyncRunner.runUserInitiatedSync {
             await runAutomaticFullDataRecordSync()
         }
     }
@@ -660,9 +667,14 @@ struct AnalysisCard: View {
 struct SettingsView: View {
 
     @EnvironmentObject private var store: WalletStore
+    let requestUserInitiatedSync: () async -> Void
 
     @State private var isEditingInstaPayFees = false
     @State private var isConfirmingReset = false
+
+    init(requestUserInitiatedSync: @escaping () async -> Void = {}) {
+        self.requestUserInitiatedSync = requestUserInitiatedSync
+    }
 
     var body: some View {
         NavigationStack {
@@ -728,7 +740,7 @@ struct SettingsView: View {
                     }
 
                     NavigationLink {
-                        AccountManagementView()
+                        AccountManagementView(requestUserInitiatedSync: requestUserInitiatedSync)
                             .environmentObject(store)
                     } label: {
                         settingsRow(

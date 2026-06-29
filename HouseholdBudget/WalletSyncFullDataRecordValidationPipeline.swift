@@ -452,17 +452,25 @@ final class WalletSyncFullDataAutomaticSyncRunner {
             }
 
             guard !Task.isCancelled else { return }
-            await self?.runWhenAllowed(operation)
+            await self?.runWhenAllowed(operation, enforceMinimumInterval: true)
         }
     }
 
-    private func runWhenAllowed(_ operation: @escaping @MainActor () async -> Void) async {
+    func runUserInitiatedSync(operation: @escaping @MainActor () async -> Void) async {
+        scheduledTask?.cancel()
+        await runWhenAllowed(operation, enforceMinimumInterval: false)
+    }
+
+    private func runWhenAllowed(
+        _ operation: @escaping @MainActor () async -> Void,
+        enforceMinimumInterval: Bool
+    ) async {
         guard !isRunning else {
             queuedRunRequested = true
             return
         }
 
-        if let lastRunAt {
+        if enforceMinimumInterval, let lastRunAt {
             let elapsed = Date().timeIntervalSince(lastRunAt)
             let remaining = minimumRunInterval - elapsed
             if remaining > 0 {

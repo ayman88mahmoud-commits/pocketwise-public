@@ -3,9 +3,14 @@ import SwiftUI
 struct AccountManagementView: View {
 
     @EnvironmentObject private var store: WalletStore
+    let requestUserInitiatedSync: () async -> Void
 
     @State private var isAddingAccount = false
     @State private var selectedAccount: Account?
+
+    init(requestUserInitiatedSync: @escaping () async -> Void = {}) {
+        self.requestUserInitiatedSync = requestUserInitiatedSync
+    }
 
     private var sortedAccounts: [Account] {
         store.activeAccounts.sorted {
@@ -36,6 +41,9 @@ struct AccountManagementView: View {
                 }
             }
             .navigationTitle(isArabic ? "إدارة الحسابات" : "Manage Accounts")
+            .refreshable {
+                await requestUserInitiatedSync()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
