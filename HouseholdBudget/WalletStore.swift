@@ -667,6 +667,7 @@ final class WalletStore: ObservableObject {
         }
 
         accounts[index].balance = newBalance
+        accounts[index].updatedAt = Date()
     }
 
     func updateAccountBalance(accountName: String, newBalance: Double) {
@@ -675,6 +676,7 @@ final class WalletStore: ObservableObject {
         }
 
         accounts[index].balance = newBalance
+        accounts[index].updatedAt = Date()
     }
 
     func accountNameExists(_ name: String, excluding accountID: UUID? = nil) -> Bool {
@@ -746,6 +748,7 @@ final class WalletStore: ObservableObject {
         accounts[index].recognitionAliases = cleanRecognitionValues(recognitionAliases ?? accounts[index].recognitionAliases)
         accounts[index].recognitionCardEndings = cleanCardEndings(recognitionCardEndings ?? accounts[index].recognitionCardEndings)
         accounts[index].appearanceColor = appearanceColor ?? accounts[index].appearanceColor
+        accounts[index].updatedAt = Date()
 
         if oldName != cleanName {
             renameAccountReferences(from: oldName, to: cleanName)
@@ -2107,6 +2110,7 @@ final class WalletStore: ObservableObject {
         }
 
         accounts[accountIndex].balance -= amount
+        accounts[accountIndex].updatedAt = Date()
         creditCardPayments.append(
             CreditCardPayment(
                 id: UUID(),
@@ -2724,6 +2728,10 @@ final class WalletStore: ObservableObject {
 
         case .initialBorrowing, .repaymentReceived:
             accounts[index].balance += entry.amount * multiplier
+        }
+
+        if multiplier > 0 {
+            accounts[index].updatedAt = Date()
         }
     }
 
@@ -3436,7 +3444,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
-        reverseAccountImpactIfNeeded(financialEvents[index])
+        applyAccountImpact(financialEvents[index], multiplier: -1, markAccountsUpdatedForSync: true)
         financialEvents[index] = updatedEvent
         applyAccountImpactIfNeeded(updatedEvent)
     }
@@ -3446,6 +3454,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
+        WalletSyncStateStore().markFinancialEventDeletedLocally(id: financialEvents[index].id)
         reverseAccountImpactIfNeeded(financialEvents[index])
         financialEvents.remove(at: index)
     }
@@ -4292,14 +4301,18 @@ final class WalletStore: ObservableObject {
     // MARK: - Account Impact
 
     private func applyAccountImpactIfNeeded(_ event: FinancialEvent) {
-        applyAccountImpact(event, multiplier: 1)
+        applyAccountImpact(event, multiplier: 1, markAccountsUpdatedForSync: true)
     }
 
     private func reverseAccountImpactIfNeeded(_ event: FinancialEvent) {
-        applyAccountImpact(event, multiplier: -1)
+        applyAccountImpact(event, multiplier: -1, markAccountsUpdatedForSync: false)
     }
 
-    private func applyAccountImpact(_ event: FinancialEvent, multiplier: Double) {
+    private func applyAccountImpact(
+        _ event: FinancialEvent,
+        multiplier: Double,
+        markAccountsUpdatedForSync: Bool
+    ) {
         guard event.status == .paid else {
             return
         }
@@ -4315,9 +4328,11 @@ final class WalletStore: ObservableObject {
         switch event.type {
         case .expense, .obligation, .expectedExpense, .installment:
             accounts[index].balance -= event.amount * multiplier
+            markAccountUpdatedForSyncIfNeeded(at: index, enabled: markAccountsUpdatedForSync)
 
         case .income:
             accounts[index].balance += event.amount * multiplier
+            markAccountUpdatedForSyncIfNeeded(at: index, enabled: markAccountsUpdatedForSync)
 
         case .transfer:
             guard let destinationAccountName = event.destinationAccountName,
@@ -4327,7 +4342,14 @@ final class WalletStore: ObservableObject {
 
             accounts[index].balance -= event.amount * multiplier
             accounts[destinationIndex].balance += event.amount * multiplier
+            markAccountUpdatedForSyncIfNeeded(at: index, enabled: markAccountsUpdatedForSync)
+            markAccountUpdatedForSyncIfNeeded(at: destinationIndex, enabled: markAccountsUpdatedForSync)
         }
+    }
+
+    private func markAccountUpdatedForSyncIfNeeded(at index: Int, enabled: Bool) {
+        guard enabled else { return }
+        accounts[index].updatedAt = Date()
     }
 
     private func canApplyFinancialEvent(_ event: FinancialEvent) -> Bool {

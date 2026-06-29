@@ -45,6 +45,54 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertEqual(secondStore.displayName, "Persisted Test Wallet")
     }
 
+    func testUpdateAccountAdvancesAccountUpdatedAtAndLocalDataTimestamp() throws {
+        let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let account = Account(
+            name: "Manual Balance Account",
+            balance: 100,
+            type: .bank,
+            createdAt: oldDate,
+            updatedAt: oldDate
+        )
+        store.accounts = [account]
+        store.localDataUpdatedAt = oldDate
+
+        store.updateAccount(
+            accountID: account.id,
+            name: account.name,
+            type: account.type,
+            balance: 250,
+            isActive: true
+        )
+
+        let updatedAccount = try XCTUnwrap(store.accounts.first)
+        XCTAssertEqual(updatedAccount.balance, 250, accuracy: 0.001)
+        XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
+        XCTAssertGreaterThan(store.localDataUpdatedAt, oldDate)
+    }
+
+    func testUpdateAccountBalanceAdvancesAccountUpdatedAtAndLocalDataTimestamp() throws {
+        let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let account = Account(
+            name: "Direct Balance Account",
+            balance: 100,
+            type: .cash,
+            createdAt: oldDate,
+            updatedAt: oldDate
+        )
+        store.accounts = [account]
+        store.localDataUpdatedAt = oldDate
+
+        store.updateAccountBalance(accountID: account.id, newBalance: 300)
+
+        let updatedAccount = try XCTUnwrap(store.accounts.first)
+        XCTAssertEqual(updatedAccount.balance, 300, accuracy: 0.001)
+        XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
+        XCTAssertGreaterThan(store.localDataUpdatedAt, oldDate)
+    }
+
     func testClearingIsolatedSuiteGivesCleanWalletStore() {
         let suiteName = makeSuiteName()
         let defaults = makeIsolatedUserDefaults(suiteName: suiteName)

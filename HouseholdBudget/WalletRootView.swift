@@ -10,6 +10,7 @@ struct WalletRootView: View {
     @State private var isAddExpenseSheetActive = false
     @State private var pausedBankSMSImportIdentities: Set<String> = []
     @State private var autoSyncLifecycleTrigger: WalletSyncMasterDataAutoSyncLifecycleTrigger? = nil
+    @State private var fullDataAutoSyncRunner = WalletSyncFullDataAutomaticSyncRunner()
 
     init(pendingBankSMSImportDrafts: Binding<[BankSMSImportDraft]> = .constant([])) {
         _pendingBankSMSImportDrafts = pendingBankSMSImportDrafts
@@ -83,6 +84,7 @@ struct WalletRootView: View {
         }
         .onAppear {
             refreshPendingBankSMSImports()
+            requestAutomaticFullDataSync(trigger: .launch)
         }
         .sheet(item: $activeBankSMSImportDraft, onDismiss: {
             closeActiveBankSMSImportDraftForLater()
@@ -118,6 +120,11 @@ struct WalletRootView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             Task { await handleAutoSyncGateForScenePhase(newPhase) }
+            guard newPhase == .active else { return }
+            requestAutomaticFullDataSync(trigger: .foreground)
+        }
+        .onChange(of: store.localDataUpdatedAt) { _, _ in
+            requestAutomaticFullDataSync(trigger: .localDataChanged)
         }
     }
 
@@ -210,6 +217,35 @@ struct WalletRootView: View {
         }
 
         await autoSyncLifecycleTrigger?.handleScenePhase(phase)
+    }
+
+    private func requestAutomaticFullDataSync(trigger: WalletSyncFullDataAutomaticSyncRunner.Trigger) {
+        fullDataAutoSyncRunner.requestSync(trigger: trigger) {
+            await runAutomaticFullDataRecordSync()
+        }
+    }
+
+    private func runAutomaticFullDataRecordSync() async {
+        do {
+            let boundary = WalletSyncRealCloudKitPrivateDatabaseBoundary()
+            let availability = try await boundary.accountAvailability()
+            guard availability == .available else { return }
+
+            let pipeline = WalletSyncFullDataRecordValidationPipeline(
+                zoneEnsurer: boundary,
+                recordSaver: boundary,
+                changedRecordFetcher: boundary,
+                tokenStore: WalletSyncStateStore(),
+                source: store,
+                localState: store,
+                inboxParser: WalletSyncInboxParser(),
+                applier: WalletSyncMasterDataApplier(store: store),
+                executionOrder: .fetchThenUpload
+            )
+            _ = try await pipeline.run()
+        } catch {
+            // Automatic sync is opportunistic and should not interrupt normal app use.
+        }
     }
 }
 

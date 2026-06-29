@@ -970,6 +970,57 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertTrue(boundary.savedRecords.isEmpty)
     }
 
+    func testAutomaticFetchThenUploadAppliesRemoteAccountBeforeUploadingLocalAccounts() async throws {
+        let accountID = deterministicID(index: 820)
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_000)
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 2_000)
+        let localAccount = Account(
+            id: accountID,
+            name: "Cash",
+            balance: 100,
+            type: .cash,
+            createdAt: localUpdatedAt,
+            updatedAt: localUpdatedAt
+        )
+        let remoteAccount = Account(
+            id: accountID,
+            name: "Cash",
+            balance: 500,
+            type: .cash,
+            createdAt: localUpdatedAt,
+            updatedAt: remoteUpdatedAt
+        )
+        let remoteRecord = WalletSyncCKRecordAdapter.ckRecord(from: WalletSyncRecordMappers.dto(for: remoteAccount))
+        let boundary = FakeFullDataBoundary(
+            fetchResult: WalletSyncCloudKitFetchResult(records: [remoteRecord], changeTokenData: Data([5]))
+        )
+        let tokenStore = FakeFullDataTokenStore(token: Data([4]))
+        let store = FakeFullDataStore(accounts: [localAccount])
+        let pipeline = makePipeline(
+            boundary: boundary,
+            tokenStore: tokenStore,
+            store: store,
+            applier: WalletSyncMasterDataApplier(store: store),
+            executionOrder: .fetchThenUpload
+        )
+
+        let summary = try await pipeline.run()
+        let uploadedAccountDTO = try XCTUnwrap(
+            boundary.savedRecords
+                .map { try WalletSyncCKRecordAdapter.dto(from: $0) }
+                .first { $0.entity == .account && $0.id == accountID }
+        )
+
+        XCTAssertEqual(boundary.events, ["ensure", "fetch", "save"])
+        XCTAssertEqual(store.accounts.first?.balance, 500, accuracy: 0.001)
+        XCTAssertEqual(uploadedAccountDTO.fields["balance"], .double(500))
+        XCTAssertEqual(uploadedAccountDTO.updatedAt, remoteUpdatedAt)
+        XCTAssertEqual(summary.plannedUpdateCount, 1)
+        XCTAssertEqual(summary.appliedUpdatedCount, 1)
+        XCTAssertEqual(summary.uploadedCount, 1)
+        XCTAssertEqual(tokenStore.token, Data([5]))
+    }
+
     func testNoTokenPurgedZoneBootstrapReEnsuresZoneAndUploadsSourceRecords() async throws {
         let tokenStore = FakeFullDataTokenStore(token: Data([7]))
         tokenStore.clearWalletSyncZoneChangeTokenData()
@@ -1204,7 +1255,8 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         tokenStore: FakeFullDataTokenStore = FakeFullDataTokenStore(),
         store: FakeFullDataStore,
         applier: WalletSyncMasterDataPlanApplying? = nil,
-        uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap
+        uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap,
+        executionOrder: WalletSyncFullDataRecordValidationPipeline.ExecutionOrder = .uploadThenFetch
     ) -> WalletSyncFullDataRecordValidationPipeline {
         WalletSyncFullDataRecordValidationPipeline(
             zoneEnsurer: boundary,
@@ -1215,7 +1267,8 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
             localState: store,
             inboxParser: WalletSyncInboxParser(),
             applier: applier ?? FakeFullDataApplier(),
-            uploadCap: uploadCap
+            uploadCap: uploadCap,
+            executionOrder: executionOrder
         )
     }
 }

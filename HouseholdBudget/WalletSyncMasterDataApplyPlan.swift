@@ -89,6 +89,7 @@ enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case invalidFieldValue
     case localFinancialEventNewer
     case ambiguousFinancialEventTimestamp
+    case locallyDeletedFinancialEvent
     case localAccountNewer
     case ambiguousAccountTimestamp
     case missingParentRecord
@@ -179,9 +180,14 @@ private struct WalletSyncBatchParentAvailability {
 
 struct WalletSyncMasterDataApplyPlanBuilder {
     private let localState: WalletSyncMergePlanLocalStateReading
+    private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading
 
-    init(localState: WalletSyncMergePlanLocalStateReading) {
+    init(
+        localState: WalletSyncMergePlanLocalStateReading,
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading = WalletSyncStateStore()
+    ) {
         self.localState = localState
+        self.localFinancialEventDeletionStore = localFinancialEventDeletionStore
     }
 
     func makePlan(
@@ -407,6 +413,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         dto: WalletSyncRecordDTO,
         event: FinancialEvent
     ) -> WalletSyncMasterDataApplyPlanItem {
+        if localFinancialEventDeletionStore.isFinancialEventDeletedLocally(id: dto.id) {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .locallyDeletedFinancialEvent)
+        }
+
         guard let remoteUpdatedAt = dto.updatedAt else {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousFinancialEventTimestamp)
         }

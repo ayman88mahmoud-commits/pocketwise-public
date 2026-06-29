@@ -82,6 +82,26 @@ final class WalletSyncStateStoreTests: XCTestCase {
         XCTAssertNotEqual(WalletSyncStateStore.walletSyncZoneChangeTokenKey, "WalletSyncState.WalletSyncZone.changeTokenData")
     }
 
+    func testLocallyDeletedFinancialEventIDsPersistThroughStore() {
+        let keyValueStore = FakeKeyValueStore()
+        let store = WalletSyncStateStore(keyValueStore: keyValueStore)
+        let deletedID = UUID()
+
+        XCTAssertFalse(store.isFinancialEventDeletedLocally(id: deletedID))
+
+        store.markFinancialEventDeletedLocally(id: deletedID)
+
+        XCTAssertTrue(store.isFinancialEventDeletedLocally(id: deletedID))
+    }
+
+    func testLocallyDeletedFinancialEventIDsAreZoneNamespaced() {
+        XCTAssertTrue(WalletSyncStateStore.locallyDeletedFinancialEventIDsKey.contains(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName))
+        XCTAssertNotEqual(
+            WalletSyncStateStore.locallyDeletedFinancialEventIDsKey,
+            "WalletSyncState.WalletSyncZone.locallyDeletedFinancialEventIDs"
+        )
+    }
+
     func testStoreDoesNotReferenceWalletStoreOrICloudSyncService() {
         let store = WalletSyncStateStore(keyValueStore: FakeKeyValueStore())
         let propertyNames = Mirror(reflecting: store).children.compactMap { $0.label?.lowercased() }

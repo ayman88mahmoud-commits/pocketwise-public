@@ -742,6 +742,92 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         XCTAssertEqual(store.availableCash, 10_000, accuracy: 0.001)
     }
 
+    func testPaidExpenseAdvancesAffectedAccountUpdatedAtForSync() throws {
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let account = Account(
+            name: accountName,
+            balance: 10_000,
+            type: .cash,
+            createdAt: oldDate,
+            updatedAt: oldDate
+        )
+        let store = makeStore(accounts: [account])
+
+        store.addManualExpense(
+            title: "Timestamped Expense",
+            amount: 500,
+            date: startDate,
+            accountName: accountName,
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+
+        let updatedAccount = try XCTUnwrap(store.accounts.first)
+        XCTAssertEqual(updatedAccount.balance, 9_500, accuracy: 0.001)
+        XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
+    }
+
+    func testPaidIncomeAdvancesAffectedAccountUpdatedAtForSync() throws {
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let account = Account(
+            name: accountName,
+            balance: 10_000,
+            type: .cash,
+            createdAt: oldDate,
+            updatedAt: oldDate
+        )
+        let store = makeStore(accounts: [account])
+
+        store.addIncome(
+            title: "Timestamped Income",
+            amount: 2_000,
+            date: startDate,
+            accountName: accountName,
+            incomeType: .oneTimeCashInflow
+        )
+
+        let updatedAccount = try XCTUnwrap(store.accounts.first)
+        XCTAssertEqual(updatedAccount.balance, 12_000, accuracy: 0.001)
+        XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
+    }
+
+    func testTransferAdvancesBothAffectedAccountUpdatedAtForSync() throws {
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let store = makeStore(
+            accounts: [
+                Account(
+                    name: "Source Cash",
+                    balance: 10_000,
+                    type: .cash,
+                    createdAt: oldDate,
+                    updatedAt: oldDate
+                ),
+                Account(
+                    name: "Destination Bank",
+                    balance: 2_000,
+                    type: .bank,
+                    createdAt: oldDate,
+                    updatedAt: oldDate
+                )
+            ]
+        )
+
+        store.addTransfer(
+            amount: 1_500,
+            date: startDate,
+            fromAccountName: "Source Cash",
+            toAccountName: "Destination Bank"
+        )
+
+        let source = try XCTUnwrap(store.accounts.first { $0.name == "Source Cash" })
+        let destination = try XCTUnwrap(store.accounts.first { $0.name == "Destination Bank" })
+        XCTAssertEqual(source.balance, 8_500, accuracy: 0.001)
+        XCTAssertEqual(destination.balance, 3_500, accuracy: 0.001)
+        XCTAssertGreaterThan(source.updatedAt, oldDate)
+        XCTAssertGreaterThan(destination.updatedAt, oldDate)
+    }
+
     private func makeStore(
         startingCash: Double,
         userDefaults: UserDefaults? = nil

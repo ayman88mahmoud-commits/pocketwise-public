@@ -55,6 +55,11 @@ struct WalletSyncFullDataRecordValidationPipelineSummary: Equatable {
 struct WalletSyncFullDataRecordValidationPipeline {
     nonisolated static let defaultUploadCap = 200
 
+    enum ExecutionOrder {
+        case uploadThenFetch
+        case fetchThenUpload
+    }
+
     private let zoneEnsurer: WalletSyncMasterDataZoneEnsuring
     private let recordSaver: WalletSyncMasterDataRecordSaving
     private let changedRecordFetcher: WalletSyncDryRunChangedRecordFetching
@@ -64,6 +69,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
     private let inboxParser: WalletSyncInboxParser
     private let applier: WalletSyncMasterDataPlanApplying
     private let uploadCap: Int
+    private let executionOrder: ExecutionOrder
 
     init(
         zoneEnsurer: WalletSyncMasterDataZoneEnsuring,
@@ -74,7 +80,8 @@ struct WalletSyncFullDataRecordValidationPipeline {
         localState: WalletSyncMergePlanLocalStateReading,
         inboxParser: WalletSyncInboxParser,
         applier: WalletSyncMasterDataPlanApplying,
-        uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap
+        uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap,
+        executionOrder: ExecutionOrder = .uploadThenFetch
     ) {
         self.zoneEnsurer = zoneEnsurer
         self.recordSaver = recordSaver
@@ -85,14 +92,23 @@ struct WalletSyncFullDataRecordValidationPipeline {
         self.inboxParser = inboxParser
         self.applier = applier
         self.uploadCap = uploadCap
+        self.executionOrder = executionOrder
     }
 
     func run() async throws -> WalletSyncFullDataRecordValidationPipelineSummary {
         try await ensureSyncZoneForBootstrap()
 
-        let uploadPlan = makeUploadPlan()
         let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
+        switch executionOrder {
+        case .uploadThenFetch:
+            return try await runUploadThenFetch(savedTokenData: savedTokenData)
+        case .fetchThenUpload:
+            return try await runFetchThenUpload(savedTokenData: savedTokenData)
+        }
+    }
 
+    private func runUploadThenFetch(savedTokenData: Data?) async throws -> WalletSyncFullDataRecordValidationPipelineSummary {
+        let uploadPlan = makeUploadPlan()
         if savedTokenData == nil {
             let adoptionFetchResult = try await fetchInitialAdoptionChanges()
             if !adoptionFetchResult.records.isEmpty || !adoptionFetchResult.deletedRecordNames.isEmpty {
@@ -104,11 +120,62 @@ struct WalletSyncFullDataRecordValidationPipeline {
                     uploadedCountsByEntity: [:],
                     savedTokenData: nil,
                     fetchResult: adoptionFetchResult,
-                    uploadedRecordNames: []
+                    processedFetch: processFetchResult(adoptionFetchResult, uploadedRecordNames: [])
                 )
             }
         }
 
+        let uploadResult = try await uploadRecords(using: uploadPlan)
+        let uploadedRecordNames = Set(uploadResult.savedRecords.map(\.recordID.recordName))
+        let fetchResult = try await changedRecordFetcher.fetchChangedRecords(since: savedTokenData)
+        return makeSummary(
+            uploadPlan: uploadPlan,
+            savedRecords: uploadResult.savedRecords,
+            uploadedCountsByBatch: uploadResult.uploadedCountsByBatch,
+            uploadedCountsByEntity: uploadPlan.countsByEntity,
+            savedTokenData: savedTokenData,
+            fetchResult: fetchResult,
+            processedFetch: processFetchResult(fetchResult, uploadedRecordNames: uploadedRecordNames)
+        )
+    }
+
+    private func runFetchThenUpload(savedTokenData: Data?) async throws -> WalletSyncFullDataRecordValidationPipelineSummary {
+        let fetchResult: WalletSyncCloudKitFetchResult
+        if savedTokenData == nil {
+            fetchResult = try await fetchInitialAdoptionChanges()
+            if !fetchResult.records.isEmpty || !fetchResult.deletedRecordNames.isEmpty {
+                let processedFetch = processFetchResult(fetchResult, uploadedRecordNames: [])
+                (source as? WalletSyncInitialCloudAdoptionSeedPruning)?.removeSeedDataBeforeInitialCloudAdoptionIfSafe()
+                let uploadPlan = makeUploadPlan()
+                return makeSummary(
+                    uploadPlan: uploadPlan,
+                    savedRecords: [],
+                    uploadedCountsByBatch: [],
+                    uploadedCountsByEntity: [:],
+                    savedTokenData: nil,
+                    fetchResult: fetchResult,
+                    processedFetch: processedFetch
+                )
+            }
+        } else {
+            fetchResult = try await changedRecordFetcher.fetchChangedRecords(since: savedTokenData)
+        }
+
+        let processedFetch = processFetchResult(fetchResult, uploadedRecordNames: [])
+        let uploadPlan = makeUploadPlan()
+        let uploadResult = try await uploadRecords(using: uploadPlan)
+        return makeSummary(
+            uploadPlan: uploadPlan,
+            savedRecords: uploadResult.savedRecords,
+            uploadedCountsByBatch: uploadResult.uploadedCountsByBatch,
+            uploadedCountsByEntity: uploadPlan.countsByEntity,
+            savedTokenData: savedTokenData,
+            fetchResult: fetchResult,
+            processedFetch: processedFetch
+        )
+    }
+
+    private func uploadRecords(using uploadPlan: FullDataUploadPlan) async throws -> FullDataUploadResult {
         var savedRecords: [CKRecord] = []
         var uploadedCountsByBatch: [Int] = []
 
@@ -119,17 +186,9 @@ struct WalletSyncFullDataRecordValidationPipeline {
             uploadedCountsByBatch.append(batchSavedRecords.count)
         }
 
-        let uploadedRecordNames = Set(savedRecords.map(\.recordID.recordName))
-
-        let fetchResult = try await changedRecordFetcher.fetchChangedRecords(since: savedTokenData)
-        return makeSummary(
-            uploadPlan: uploadPlan,
+        return FullDataUploadResult(
             savedRecords: savedRecords,
-            uploadedCountsByBatch: uploadedCountsByBatch,
-            uploadedCountsByEntity: uploadPlan.countsByEntity,
-            savedTokenData: savedTokenData,
-            fetchResult: fetchResult,
-            uploadedRecordNames: uploadedRecordNames
+            uploadedCountsByBatch: uploadedCountsByBatch
         )
     }
 
@@ -167,8 +226,43 @@ struct WalletSyncFullDataRecordValidationPipeline {
         uploadedCountsByEntity: [WalletSyncRecordEntity: Int],
         savedTokenData: Data?,
         fetchResult: WalletSyncCloudKitFetchResult,
-        uploadedRecordNames: Set<String>
+        processedFetch: FullDataFetchProcessingResult
     ) -> WalletSyncFullDataRecordValidationPipelineSummary {
+        WalletSyncFullDataRecordValidationPipelineSummary(
+            zoneEnsured: true,
+            totalEligibleCount: uploadPlan.totalAvailableCount,
+            uploadedCount: savedRecords.count,
+            batchCount: uploadedCountsByBatch.count,
+            uploadedCountsByBatch: uploadedCountsByBatch,
+            uploadedCountsByEntity: uploadedCountsByEntity,
+            excludedEntities: [.householdSettings],
+            uploadCap: uploadCap,
+            uploadCappedCount: uploadPlan.cappedCount,
+            usedSavedToken: savedTokenData != nil,
+            changedRecordCount: fetchResult.records.count,
+            deletedRecordCount: fetchResult.deletedRecordNames.count,
+            skippedLocalEchoCount: processedFetch.skippedLocalEchoCount,
+            parsedValidCount: processedFetch.parsedValidCount,
+            blockedCount: processedFetch.blockedCount,
+            failedCount: processedFetch.failedCount,
+            plannedCreateCount: processedFetch.plannedCreateCount,
+            plannedUpdateCount: processedFetch.plannedUpdateCount,
+            plannedDisableCount: processedFetch.plannedDisableCount,
+            appliedCreatedCount: processedFetch.appliedCreatedCount,
+            appliedUpdatedCount: processedFetch.appliedUpdatedCount,
+            appliedDisabledCount: processedFetch.appliedDisabledCount,
+            appliedBlockedCount: processedFetch.appliedBlockedCount,
+            appliedFailedCount: processedFetch.appliedFailedCount,
+            tokenReturned: fetchResult.changeTokenData != nil,
+            tokenSaved: processedFetch.tokenSaved,
+            moreComing: fetchResult.moreComing
+        )
+    }
+
+    private func processFetchResult(
+        _ fetchResult: WalletSyncCloudKitFetchResult,
+        uploadedRecordNames: Set<String>
+    ) -> FullDataFetchProcessingResult {
         let tokenSaved: Bool
         if let returnedTokenData = fetchResult.changeTokenData {
             tokenStore.saveWalletSyncZoneChangeTokenData(returnedTokenData)
@@ -189,19 +283,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
         )
         let applyResult = applier.apply(plan)
 
-        return WalletSyncFullDataRecordValidationPipelineSummary(
-            zoneEnsured: true,
-            totalEligibleCount: uploadPlan.totalAvailableCount,
-            uploadedCount: savedRecords.count,
-            batchCount: uploadedCountsByBatch.count,
-            uploadedCountsByBatch: uploadedCountsByBatch,
-            uploadedCountsByEntity: uploadedCountsByEntity,
-            excludedEntities: [.householdSettings],
-            uploadCap: uploadCap,
-            uploadCappedCount: uploadPlan.cappedCount,
-            usedSavedToken: savedTokenData != nil,
-            changedRecordCount: fetchResult.records.count,
-            deletedRecordCount: fetchResult.deletedRecordNames.count,
+        return FullDataFetchProcessingResult(
             skippedLocalEchoCount: skippedLocalEchoCount,
             parsedValidCount: inbox.validCount,
             blockedCount: plan.blockedCount,
@@ -214,9 +296,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
             appliedDisabledCount: applyResult.disabledCount,
             appliedBlockedCount: applyResult.blockedCount,
             appliedFailedCount: applyResult.failedCount,
-            tokenReturned: fetchResult.changeTokenData != nil,
-            tokenSaved: tokenSaved,
-            moreComing: fetchResult.moreComing
+            tokenSaved: tokenSaved
         )
     }
 
@@ -300,6 +380,100 @@ struct WalletSyncFullDataRecordValidationPipeline {
 
         var cappedCount: Int {
             0
+        }
+    }
+
+    private struct FullDataUploadResult {
+        var savedRecords: [CKRecord]
+        var uploadedCountsByBatch: [Int]
+    }
+
+    private struct FullDataFetchProcessingResult {
+        var skippedLocalEchoCount: Int
+        var parsedValidCount: Int
+        var blockedCount: Int
+        var failedCount: Int
+        var plannedCreateCount: Int
+        var plannedUpdateCount: Int
+        var plannedDisableCount: Int
+        var appliedCreatedCount: Int
+        var appliedUpdatedCount: Int
+        var appliedDisabledCount: Int
+        var appliedBlockedCount: Int
+        var appliedFailedCount: Int
+        var tokenSaved: Bool
+    }
+}
+
+@MainActor
+final class WalletSyncFullDataAutomaticSyncRunner {
+    enum Trigger {
+        case launch
+        case foreground
+        case localDataChanged
+    }
+
+    private let minimumRunInterval: TimeInterval
+    private let localChangeDebounceInterval: TimeInterval
+    private var scheduledTask: Task<Void, Never>?
+    private var isRunning = false
+    private var queuedRunRequested = false
+    private var lastRunAt: Date?
+
+    init(
+        minimumRunInterval: TimeInterval = 30,
+        localChangeDebounceInterval: TimeInterval = 5
+    ) {
+        self.minimumRunInterval = minimumRunInterval
+        self.localChangeDebounceInterval = localChangeDebounceInterval
+    }
+
+    func requestSync(
+        trigger: Trigger,
+        operation: @escaping @MainActor () async -> Void
+    ) {
+        guard !isRunning else {
+            queuedRunRequested = true
+            return
+        }
+
+        scheduledTask?.cancel()
+        scheduledTask = Task { [weak self] in
+            let debounceInterval = trigger == .localDataChanged ? localChangeDebounceInterval : 0
+            if debounceInterval > 0 {
+                try? await Task.sleep(for: .seconds(debounceInterval))
+            }
+
+            guard !Task.isCancelled else { return }
+            await self?.runWhenAllowed(operation)
+        }
+    }
+
+    private func runWhenAllowed(_ operation: @escaping @MainActor () async -> Void) async {
+        guard !isRunning else {
+            queuedRunRequested = true
+            return
+        }
+
+        if let lastRunAt {
+            let elapsed = Date().timeIntervalSince(lastRunAt)
+            let remaining = minimumRunInterval - elapsed
+            if remaining > 0 {
+                try? await Task.sleep(for: .seconds(remaining))
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+
+        isRunning = true
+        await operation()
+        lastRunAt = Date()
+        isRunning = false
+        scheduledTask = nil
+
+        if queuedRunRequested {
+            queuedRunRequested = false
+            requestSync(trigger: .localDataChanged, operation: operation)
         }
     }
 }

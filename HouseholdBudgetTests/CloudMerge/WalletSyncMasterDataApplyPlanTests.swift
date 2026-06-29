@@ -97,6 +97,49 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.plannedUpdateCount, 1)
     }
 
+    func testLocallyDeletedFinancialEventDoesNotPlanCreateFromRemoteRecord() {
+        let deletedID = UUID()
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(),
+            localFinancialEventDeletionStore: FakeLocalFinancialEventDeletionStore(deletedIDs: [deletedID])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: financialEventDTO(id: deletedID, updatedAt: remoteUpdatedAt))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedFinancialEvent) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testLocallyDeletedFinancialEventDoesNotPlanUpdateFromRemoteRecord() {
+        let deletedID = UUID()
+        let localUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(financialEventUpdatedAtByID: [deletedID: localUpdatedAt]),
+            localFinancialEventDeletionStore: FakeLocalFinancialEventDeletionStore(deletedIDs: [deletedID])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: financialEventDTO(id: deletedID, updatedAt: remoteUpdatedAt))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedUpdateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedFinancialEvent) = $0.action { return true }
+            return false
+        })
+    }
+
     func testMonthlyBudgetItemAndHouseholdSettingsAreBlocked() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         let records = [
@@ -691,5 +734,13 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         func containsMonthlyBudget(id: UUID) -> Bool { monthlyBudgetIDs.contains(id) }
         func containsFinancialEvent(id: UUID) -> Bool { financialEventUpdatedAtByID[id] != nil }
         func financialEventUpdatedAt(id: UUID) -> Date? { financialEventUpdatedAtByID[id] }
+    }
+
+    private struct FakeLocalFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading {
+        var deletedIDs: Set<UUID>
+
+        func isFinancialEventDeletedLocally(id: UUID) -> Bool {
+            deletedIDs.contains(id)
+        }
     }
 }

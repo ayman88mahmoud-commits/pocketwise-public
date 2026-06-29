@@ -15,8 +15,17 @@ protocol WalletSyncChangeTokenStoring {
     func hasWalletSyncZoneChangeToken() -> Bool
 }
 
+protocol WalletSyncLocalFinancialEventDeletionReading {
+    func isFinancialEventDeletedLocally(id: UUID) -> Bool
+}
+
+protocol WalletSyncLocalFinancialEventDeletionStoring: WalletSyncLocalFinancialEventDeletionReading {
+    func markFinancialEventDeletedLocally(id: UUID)
+}
+
 struct WalletSyncStateStore {
     static let walletSyncZoneChangeTokenKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).changeTokenData"
+    static let locallyDeletedFinancialEventIDsKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).locallyDeletedFinancialEventIDs"
 
     private let keyValueStore: WalletSyncStateKeyValueStoring
 
@@ -39,6 +48,36 @@ struct WalletSyncStateStore {
     func hasWalletSyncZoneChangeToken() -> Bool {
         loadWalletSyncZoneChangeTokenData() != nil
     }
+
+    func markFinancialEventDeletedLocally(id: UUID) {
+        var ids = locallyDeletedFinancialEventIDs()
+        ids.insert(id)
+        saveLocallyDeletedFinancialEventIDs(ids)
+    }
+
+    func isFinancialEventDeletedLocally(id: UUID) -> Bool {
+        locallyDeletedFinancialEventIDs().contains(id)
+    }
+
+    func clearLocallyDeletedFinancialEventIDs() {
+        keyValueStore.removeObject(forKey: Self.locallyDeletedFinancialEventIDsKey)
+    }
+
+    private func locallyDeletedFinancialEventIDs() -> Set<UUID> {
+        guard let data = keyValueStore.data(forKey: Self.locallyDeletedFinancialEventIDsKey),
+              let rawIDs = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+
+        return Set(rawIDs.compactMap(UUID.init(uuidString:)))
+    }
+
+    private func saveLocallyDeletedFinancialEventIDs(_ ids: Set<UUID>) {
+        let rawIDs = ids.map(\.uuidString).sorted()
+        guard let data = try? JSONEncoder().encode(rawIDs) else { return }
+        keyValueStore.set(data, forKey: Self.locallyDeletedFinancialEventIDsKey)
+    }
 }
 
 extension WalletSyncStateStore: WalletSyncChangeTokenStoring {}
+extension WalletSyncStateStore: WalletSyncLocalFinancialEventDeletionStoring {}
