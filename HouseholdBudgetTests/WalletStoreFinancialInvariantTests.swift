@@ -792,6 +792,36 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
     }
 
+    func testDeletingPaidExpenseAdvancesAffectedAccountUpdatedAtForSync() throws {
+        let oldDate = Date(timeIntervalSince1970: 1_000)
+        let account = Account(
+            name: accountName,
+            balance: 10_000,
+            type: .cash,
+            createdAt: oldDate,
+            updatedAt: oldDate
+        )
+        let store = makeStore(accounts: [account])
+
+        store.addManualExpense(
+            title: "Delete Timestamped Expense",
+            amount: 500,
+            date: startDate,
+            accountName: accountName,
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let event = try XCTUnwrap(store.financialEvents.first)
+        store.accounts[0].updatedAt = oldDate
+
+        store.deleteFinancialEvent(event)
+
+        let updatedAccount = try XCTUnwrap(store.accounts.first)
+        XCTAssertEqual(updatedAccount.balance, 10_000, accuracy: 0.001)
+        XCTAssertGreaterThan(updatedAccount.updatedAt, oldDate)
+    }
+
     func testTransferAdvancesBothAffectedAccountUpdatedAtForSync() throws {
         let oldDate = Date(timeIntervalSince1970: 1_000)
         let store = makeStore(

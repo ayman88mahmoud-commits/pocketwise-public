@@ -140,6 +140,48 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         })
     }
 
+    func testFinancialEventDeletionMarkerPlansDeleteAction() {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: deletedID, deletedAt: deletedAt))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteFinancialEvent(let id, let markerDate) = $0.action {
+                return id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testFinancialEventDeletionMarkerBlocksOlderEventInSameBatch() {
+        let deletedID = UUID()
+        let eventUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: financialEventDTO(id: deletedID, updatedAt: eventUpdatedAt)),
+                record(for: WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: deletedID, deletedAt: deletedAt))
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedFinancialEvent) = $0.action { return true }
+            return false
+        })
+    }
+
     func testMonthlyBudgetItemAndHouseholdSettingsAreBlocked() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         let records = [
@@ -737,10 +779,22 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
     }
 
     private struct FakeLocalFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading {
-        var deletedIDs: Set<UUID>
+        var deletedAtByID: [UUID: Date]
+
+        init(deletedIDs: Set<UUID>) {
+            self.deletedAtByID = Dictionary(uniqueKeysWithValues: deletedIDs.map { ($0, .distantFuture) })
+        }
+
+        init(deletedAtByID: [UUID: Date]) {
+            self.deletedAtByID = deletedAtByID
+        }
 
         func isFinancialEventDeletedLocally(id: UUID) -> Bool {
-            deletedIDs.contains(id)
+            deletedAtByID[id] != nil
+        }
+
+        func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date? {
+            deletedAtByID[id]
         }
     }
 }

@@ -93,6 +93,31 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertGreaterThan(store.localDataUpdatedAt, oldDate)
     }
 
+    func testDeleteFinancialEventRecordsSyncableLocalDeletionMarker() throws {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        var event = FinancialEvent(
+            type: .expense,
+            status: .unpaid,
+            title: "Delete Marker Event",
+            amount: 50,
+            date: Date(),
+            accountName: nil,
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        event.id = UUID()
+        store.financialEvents = [event]
+
+        store.deleteFinancialEvent(event)
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isFinancialEventDeletedLocally(id: event.id))
+        XCTAssertEqual(syncState.syncableFinancialEventDeletionDTOs().first?.id, event.id)
+        XCTAssertTrue(store.financialEvents.isEmpty)
+    }
+
     func testClearingIsolatedSuiteGivesCleanWalletStore() {
         let suiteName = makeSuiteName()
         let defaults = makeIsolatedUserDefaults(suiteName: suiteName)

@@ -66,6 +66,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
     private let tokenStore: WalletSyncChangeTokenStoring
     private let source: WalletSyncFullDataSourceReading
     private let localState: WalletSyncMergePlanLocalStateReading
+    private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring
     private let inboxParser: WalletSyncInboxParser
     private let applier: WalletSyncMasterDataPlanApplying
     private let uploadCap: Int
@@ -78,6 +79,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
         tokenStore: WalletSyncChangeTokenStoring,
         source: WalletSyncFullDataSourceReading,
         localState: WalletSyncMergePlanLocalStateReading,
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
         inboxParser: WalletSyncInboxParser,
         applier: WalletSyncMasterDataPlanApplying,
         uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap,
@@ -89,6 +91,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
         self.tokenStore = tokenStore
         self.source = source
         self.localState = localState
+        self.localFinancialEventDeletionStore = localFinancialEventDeletionStore ?? WalletSyncStateStore()
         self.inboxParser = inboxParser
         self.applier = applier
         self.uploadCap = uploadCap
@@ -277,7 +280,10 @@ struct WalletSyncFullDataRecordValidationPipeline {
             changedRecords: nonEchoRecords,
             deletedRecordNames: fetchResult.deletedRecordNames
         )
-        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: localState).makePlan(
+        let plan = WalletSyncMasterDataApplyPlanBuilder(
+            localState: localState,
+            localFinancialEventDeletionStore: localFinancialEventDeletionStore
+        ).makePlan(
             changedRecords: nonEchoRecords,
             deletedRecordNames: fetchResult.deletedRecordNames
         )
@@ -306,6 +312,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
             (.category, uploadableCategories().map(WalletSyncRecordMappers.dto(for:))),
             (.walletEvent, source.walletEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.financialEvent, source.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
+            (.financialEventDeletion, localFinancialEventDeletionStore.syncableFinancialEventDeletionDTOs()),
             (.monthlyBudget, source.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudgetItem, source.monthlyBudgets.flatMap { budget in
                 budget.items.map { WalletSyncRecordMappers.dto(for: $0, parentBudgetID: budget.id) }
@@ -439,7 +446,7 @@ final class WalletSyncFullDataAutomaticSyncRunner {
 
         scheduledTask?.cancel()
         scheduledTask = Task { [weak self] in
-            let debounceInterval = trigger == .localDataChanged ? localChangeDebounceInterval : 0
+            let debounceInterval = trigger == .localDataChanged ? self?.localChangeDebounceInterval ?? 0 : 0
             if debounceInterval > 0 {
                 try? await Task.sleep(for: .seconds(debounceInterval))
             }

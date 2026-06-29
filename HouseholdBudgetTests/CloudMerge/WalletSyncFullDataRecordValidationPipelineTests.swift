@@ -22,6 +22,27 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(summary.uploadCappedCount, 0)
     }
 
+    func testUploadIncludesLocalFinancialEventDeletionMarkers() async throws {
+        let boundary = FakeFullDataBoundary()
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
+        let deletionStore = FakeFinancialEventDeletionStore(deletedAtByID: [deletedID: deletedAt])
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: FakeFullDataStore(),
+            localFinancialEventDeletionStore: deletionStore
+        )
+
+        let summary = try await pipeline.run()
+        let uploadedDTOs = try boundary.savedRecords.map { try WalletSyncCKRecordAdapter.dto(from: $0) }
+
+        XCTAssertEqual(summary.uploadedCountsByEntity[.financialEventDeletion], 1)
+        XCTAssertEqual(uploadedDTOs.first?.entity, .financialEventDeletion)
+        XCTAssertEqual(uploadedDTOs.first?.id, deletedID)
+        XCTAssertEqual(uploadedDTOs.first?.deletedAt, deletedAt)
+        XCTAssertEqual(uploadedDTOs.first?.isDeleted, true)
+    }
+
     func testPipelineSplitsEligibleRecordsIntoMultipleSequentialBatches() async throws {
         let boundary = FakeFullDataBoundary()
         let store = FakeFullDataStore(accounts: makeAccounts(count: 5))
@@ -1012,7 +1033,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         )
 
         XCTAssertEqual(boundary.events, ["ensure", "fetch", "save"])
-        XCTAssertEqual(store.accounts.first?.balance, 500, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(store.accounts.first?.balance), 500, accuracy: 0.001)
         XCTAssertEqual(uploadedAccountDTO.fields["balance"], .double(500))
         XCTAssertEqual(uploadedAccountDTO.updatedAt, remoteUpdatedAt)
         XCTAssertEqual(summary.plannedUpdateCount, 1)
@@ -1254,6 +1275,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         boundary: FakeFullDataBoundary,
         tokenStore: FakeFullDataTokenStore = FakeFullDataTokenStore(),
         store: FakeFullDataStore,
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
         applier: WalletSyncMasterDataPlanApplying? = nil,
         uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap,
         executionOrder: WalletSyncFullDataRecordValidationPipeline.ExecutionOrder = .uploadThenFetch
@@ -1265,6 +1287,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
             tokenStore: tokenStore,
             source: store,
             localState: store,
+            localFinancialEventDeletionStore: localFinancialEventDeletionStore ?? FakeFinancialEventDeletionStore(),
             inboxParser: WalletSyncInboxParser(),
             applier: applier ?? FakeFullDataApplier(),
             uploadCap: uploadCap,
@@ -1355,6 +1378,33 @@ private final class FakeFullDataApplier: WalletSyncMasterDataPlanApplying {
             blockedCount: plan.blockedCount,
             failedCount: plan.failedCount
         )
+    }
+}
+
+private final class FakeFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring {
+    var deletedAtByID: [UUID: Date]
+
+    init(deletedAtByID: [UUID: Date] = [:]) {
+        self.deletedAtByID = deletedAtByID
+    }
+
+    func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date) {
+        let existingDeletedAt = deletedAtByID[id] ?? .distantPast
+        deletedAtByID[id] = max(existingDeletedAt, deletedAt)
+    }
+
+    func isFinancialEventDeletedLocally(id: UUID) -> Bool {
+        deletedAtByID[id] != nil
+    }
+
+    func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date? {
+        deletedAtByID[id]
+    }
+
+    func syncableFinancialEventDeletionDTOs() -> [WalletSyncRecordDTO] {
+        deletedAtByID.map { id, deletedAt in
+            WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: id, deletedAt: deletedAt)
+        }
     }
 }
 

@@ -479,6 +479,26 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertTrue(store.creditCardPurchases.isEmpty)
     }
 
+    func testRemoteFinancialEventDeletionRemovesEventAndRecordsLocalTombstone() {
+        let eventID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
+        let store = FakeApplyingStore()
+        store.financialEvents = [makeFinancialEvent(id: eventID)]
+        let deletionStore = FakeFinancialEventDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .deleteFinancialEvent(id: eventID, deletedAt: deletedAt), entity: .financialEventDeletion, id: eventID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localFinancialEventDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.financialEvents.isEmpty)
+        XCTAssertEqual(deletionStore.deletedAtByID[eventID], deletedAt)
+    }
+
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
@@ -516,6 +536,46 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
             self.creditCards = creditCards
             self.personDebts = personDebts
             self.monthlyBudgets = monthlyBudgets
+        }
+    }
+
+    private func makeFinancialEvent(id: UUID = UUID()) -> FinancialEvent {
+        var event = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Groceries",
+            amount: 100,
+            date: Date(),
+            accountName: "Cash",
+            destinationAccountName: nil,
+            paymentMethodName: nil,
+            walletEventName: nil,
+            categoryName: "Food",
+            subCategoryName: "Supermarket"
+        )
+        event.id = id
+        return event
+    }
+}
+
+private final class FakeFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring {
+    var deletedAtByID: [UUID: Date] = [:]
+
+    func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date) {
+        deletedAtByID[id] = max(deletedAtByID[id] ?? .distantPast, deletedAt)
+    }
+
+    func isFinancialEventDeletedLocally(id: UUID) -> Bool {
+        deletedAtByID[id] != nil
+    }
+
+    func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date? {
+        deletedAtByID[id]
+    }
+
+    func syncableFinancialEventDeletionDTOs() -> [WalletSyncRecordDTO] {
+        deletedAtByID.map { id, deletedAt in
+            WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: id, deletedAt: deletedAt)
         }
     }
 }

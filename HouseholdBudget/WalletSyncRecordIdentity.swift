@@ -2,6 +2,7 @@ import Foundation
 
 enum WalletSyncRecordEntity: String, CaseIterable, Codable, Hashable {
     case financialEvent = "FinancialEvent"
+    case financialEventDeletion = "FinancialEventDeletion"
     case account = "Account"
     case category = "Category"
     case walletEvent = "WalletEvent"

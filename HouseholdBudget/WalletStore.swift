@@ -3454,7 +3454,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
-        WalletSyncStateStore().markFinancialEventDeletedLocally(id: financialEvents[index].id)
+        WalletSyncStateStore(keyValueStore: userDefaults).markFinancialEventDeletedLocally(id: financialEvents[index].id, deletedAt: Date())
         reverseAccountImpactIfNeeded(financialEvents[index])
         financialEvents.remove(at: index)
     }
@@ -4305,7 +4305,7 @@ final class WalletStore: ObservableObject {
     }
 
     private func reverseAccountImpactIfNeeded(_ event: FinancialEvent) {
-        applyAccountImpact(event, multiplier: -1, markAccountsUpdatedForSync: false)
+        applyAccountImpact(event, multiplier: -1, markAccountsUpdatedForSync: true)
     }
 
     private func applyAccountImpact(

@@ -245,6 +245,18 @@ enum WalletSyncRecordMappers {
     // HouseholdSettings mapper is intentionally omitted — no HouseholdSettings model struct exists in WalletModels yet. The .householdSettings entity case is reserved. Map once the model is defined.
 
     // recurringScheduleOverrides is intentionally omitted — it is a nested object array with no matching WalletSyncFieldValue type yet.
+    static func dtoForFinancialEventDeletion(id: UUID, deletedAt: Date) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .financialEventDeletion, id: id),
+            updatedAt: deletedAt,
+            deletedAt: deletedAt,
+            isDeleted: true,
+            fields: [
+                "financialEventID": .uuid(id)
+            ]
+        )
+    }
+
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

@@ -86,12 +86,30 @@ final class WalletSyncStateStoreTests: XCTestCase {
         let keyValueStore = FakeKeyValueStore()
         let store = WalletSyncStateStore(keyValueStore: keyValueStore)
         let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
 
         XCTAssertFalse(store.isFinancialEventDeletedLocally(id: deletedID))
 
-        store.markFinancialEventDeletedLocally(id: deletedID)
+        store.markFinancialEventDeletedLocally(id: deletedID, deletedAt: deletedAt)
 
         XCTAssertTrue(store.isFinancialEventDeletedLocally(id: deletedID))
+        XCTAssertEqual(store.locallyDeletedFinancialEventDeletedAt(id: deletedID), deletedAt)
+    }
+
+    func testLocallyDeletedFinancialEventsProduceSyncableDeletionDTOs() {
+        let keyValueStore = FakeKeyValueStore()
+        let store = WalletSyncStateStore(keyValueStore: keyValueStore)
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_000)
+
+        store.markFinancialEventDeletedLocally(id: deletedID, deletedAt: deletedAt)
+
+        let dto = store.syncableFinancialEventDeletionDTOs().first
+        XCTAssertEqual(dto?.entity, .financialEventDeletion)
+        XCTAssertEqual(dto?.id, deletedID)
+        XCTAssertEqual(dto?.updatedAt, deletedAt)
+        XCTAssertEqual(dto?.deletedAt, deletedAt)
+        XCTAssertEqual(dto?.isDeleted, true)
     }
 
     func testLocallyDeletedFinancialEventIDsAreZoneNamespaced() {

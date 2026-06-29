@@ -30,9 +30,14 @@ struct WalletSyncMasterDataApplyResult: Equatable {
 @MainActor
 struct WalletSyncMasterDataApplier {
     private let store: WalletSyncMasterDataApplyingStore
+    private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring
 
-    init(store: WalletSyncMasterDataApplyingStore) {
+    init(
+        store: WalletSyncMasterDataApplyingStore,
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil
+    ) {
         self.store = store
+        self.localFinancialEventDeletionStore = localFinancialEventDeletionStore ?? WalletSyncStateStore()
     }
 
     func apply(_ plan: WalletSyncMasterDataApplyPlanSummary) -> WalletSyncMasterDataApplyResult {
@@ -83,6 +88,8 @@ struct WalletSyncMasterDataApplier {
                 applyCreateFinancialEvent(event, result: &result)
             case .updateFinancialEvent(let event):
                 applyUpdateFinancialEvent(event, result: &result)
+            case .deleteFinancialEvent(let id, let deletedAt):
+                applyDeleteFinancialEvent(id: id, deletedAt: deletedAt, result: &result)
             case .createCreditCardPurchase(let purchase):
                 applyCreateCreditCardPurchase(purchase, result: &result)
             case .updateCreditCardPurchase(let purchase):
@@ -115,6 +122,8 @@ struct WalletSyncMasterDataApplier {
 
     private func applyPriority(for action: WalletSyncMasterDataApplyAction) -> Int {
         switch action {
+        case .deleteFinancialEvent:
+            return 0
         case .createCreditCard, .updateCreditCard,
              .createPersonDebt, .updatePersonDebt,
              .createWalletMonthlyBudget, .updateWalletMonthlyBudget:
@@ -369,6 +378,18 @@ struct WalletSyncMasterDataApplier {
 
         store.financialEvents[index] = remote
         result.updatedCount += 1
+    }
+
+    private func applyDeleteFinancialEvent(id: UUID, deletedAt: Date, result: inout WalletSyncMasterDataApplyResult) {
+        localFinancialEventDeletionStore.markFinancialEventDeletedLocally(id: id, deletedAt: deletedAt)
+
+        guard let index = store.financialEvents.firstIndex(where: { $0.id == id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.financialEvents.remove(at: index)
+        result.disabledCount += 1
     }
 
     private func applyCreateCreditCardPurchase(_ purchase: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {

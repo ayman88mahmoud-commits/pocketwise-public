@@ -17,10 +17,12 @@ protocol WalletSyncChangeTokenStoring {
 
 protocol WalletSyncLocalFinancialEventDeletionReading {
     func isFinancialEventDeletedLocally(id: UUID) -> Bool
+    func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date?
 }
 
 protocol WalletSyncLocalFinancialEventDeletionStoring: WalletSyncLocalFinancialEventDeletionReading {
-    func markFinancialEventDeletedLocally(id: UUID)
+    func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date)
+    func syncableFinancialEventDeletionDTOs() -> [WalletSyncRecordDTO]
 }
 
 struct WalletSyncStateStore {
@@ -49,32 +51,60 @@ struct WalletSyncStateStore {
         loadWalletSyncZoneChangeTokenData() != nil
     }
 
-    func markFinancialEventDeletedLocally(id: UUID) {
-        var ids = locallyDeletedFinancialEventIDs()
-        ids.insert(id)
-        saveLocallyDeletedFinancialEventIDs(ids)
+    func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date = Date()) {
+        var deletions = locallyDeletedFinancialEventDeletions()
+        let existingDeletedAt = deletions[id] ?? .distantPast
+        deletions[id] = max(existingDeletedAt, deletedAt)
+        saveLocallyDeletedFinancialEventDeletions(deletions)
     }
 
     func isFinancialEventDeletedLocally(id: UUID) -> Bool {
-        locallyDeletedFinancialEventIDs().contains(id)
+        locallyDeletedFinancialEventDeletions()[id] != nil
+    }
+
+    func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date? {
+        locallyDeletedFinancialEventDeletions()[id]
+    }
+
+    func syncableFinancialEventDeletionDTOs() -> [WalletSyncRecordDTO] {
+        locallyDeletedFinancialEventDeletions()
+            .map { id, deletedAt in
+                WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: id, deletedAt: deletedAt)
+            }
+            .sorted { $0.recordName < $1.recordName }
     }
 
     func clearLocallyDeletedFinancialEventIDs() {
         keyValueStore.removeObject(forKey: Self.locallyDeletedFinancialEventIDsKey)
     }
 
-    private func locallyDeletedFinancialEventIDs() -> Set<UUID> {
-        guard let data = keyValueStore.data(forKey: Self.locallyDeletedFinancialEventIDsKey),
-              let rawIDs = try? JSONDecoder().decode([String].self, from: data) else {
-            return []
+    private func locallyDeletedFinancialEventDeletions() -> [UUID: Date] {
+        guard let data = keyValueStore.data(forKey: Self.locallyDeletedFinancialEventIDsKey) else {
+            return [:]
         }
 
-        return Set(rawIDs.compactMap(UUID.init(uuidString:)))
+        if let encodedDeletions = try? JSONDecoder().decode([String: Date].self, from: data) {
+            return Dictionary(uniqueKeysWithValues: encodedDeletions.compactMap { rawID, deletedAt in
+                guard let id = UUID(uuidString: rawID) else { return nil }
+                return (id, deletedAt)
+            })
+        }
+
+        if let legacyIDs = try? JSONDecoder().decode([String].self, from: data) {
+            return Dictionary(uniqueKeysWithValues: legacyIDs.compactMap { rawID in
+                guard let id = UUID(uuidString: rawID) else { return nil }
+                return (id, Date.distantFuture)
+            })
+        }
+
+        return [:]
     }
 
-    private func saveLocallyDeletedFinancialEventIDs(_ ids: Set<UUID>) {
-        let rawIDs = ids.map(\.uuidString).sorted()
-        guard let data = try? JSONEncoder().encode(rawIDs) else { return }
+    private func saveLocallyDeletedFinancialEventDeletions(_ deletions: [UUID: Date]) {
+        let encodedDeletions = Dictionary(uniqueKeysWithValues: deletions.map { id, deletedAt in
+            (id.uuidString, deletedAt)
+        })
+        guard let data = try? JSONEncoder().encode(encodedDeletions) else { return }
         keyValueStore.set(data, forKey: Self.locallyDeletedFinancialEventIDsKey)
     }
 }
