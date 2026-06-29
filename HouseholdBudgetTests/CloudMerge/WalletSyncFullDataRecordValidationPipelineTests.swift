@@ -64,6 +64,53 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         XCTAssertEqual(uploadedDTOs.first?.isDeleted, true)
     }
 
+    func testUploadIncludesLocalHighRiskDeletionMarkers() async throws {
+        let boundary = FakeFullDataBoundary()
+        let purchaseID = UUID()
+        let paymentID = UUID()
+        let debtID = UUID()
+        let entryID = UUID()
+        let budgetItemID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_002_000)
+        let deletionStore = FakeHighRiskRecordDeletionStore(deletedAtByRecord: [
+            WalletSyncRecordEntity.creditCardPurchase.recordName(for: purchaseID): deletedAt,
+            WalletSyncRecordEntity.creditCardPayment.recordName(for: paymentID): deletedAt,
+            WalletSyncRecordEntity.personDebt.recordName(for: debtID): deletedAt,
+            WalletSyncRecordEntity.personDebtEntry.recordName(for: entryID): deletedAt,
+            WalletSyncRecordEntity.monthlyBudgetItem.recordName(for: budgetItemID): deletedAt
+        ])
+        let pipeline = makePipeline(
+            boundary: boundary,
+            store: FakeFullDataStore(),
+            localHighRiskRecordDeletionStore: deletionStore
+        )
+
+        let summary = try await pipeline.run()
+        let uploadedDTOs = try boundary.savedRecords.map { try WalletSyncCKRecordAdapter.dto(from: $0) }
+
+        XCTAssertEqual(summary.uploadedCountsByEntity[.creditCardPurchaseDeletion], 1)
+        XCTAssertEqual(summary.uploadedCountsByEntity[.creditCardPaymentDeletion], 1)
+        XCTAssertEqual(summary.uploadedCountsByEntity[.personDebtDeletion], 1)
+        XCTAssertEqual(summary.uploadedCountsByEntity[.personDebtEntryDeletion], 1)
+        XCTAssertEqual(summary.uploadedCountsByEntity[.monthlyBudgetItemDeletion], 1)
+        XCTAssertEqual(
+            Set(uploadedDTOs.map(\.entity)),
+            [
+                .creditCardPurchaseDeletion,
+                .creditCardPaymentDeletion,
+                .personDebtDeletion,
+                .personDebtEntryDeletion,
+                .monthlyBudgetItemDeletion
+            ]
+        )
+        XCTAssertTrue(uploadedDTOs.allSatisfy { $0.deletedAt == deletedAt && $0.isDeleted })
+        XCTAssertTrue(uploadedDTOs.contains { $0.entity == .creditCardPurchaseDeletion && $0.id == purchaseID })
+        XCTAssertTrue(uploadedDTOs.contains { $0.entity == .creditCardPaymentDeletion && $0.id == paymentID })
+        XCTAssertTrue(uploadedDTOs.contains { $0.entity == .personDebtDeletion && $0.id == debtID })
+        XCTAssertTrue(uploadedDTOs.contains { $0.entity == .personDebtEntryDeletion && $0.id == entryID })
+        XCTAssertTrue(uploadedDTOs.contains { $0.entity == .monthlyBudgetItemDeletion && $0.id == budgetItemID })
+    }
+
     func testPipelineSplitsEligibleRecordsIntoMultipleSequentialBatches() async throws {
         let boundary = FakeFullDataBoundary()
         let store = FakeFullDataStore(accounts: makeAccounts(count: 5))
@@ -1298,6 +1345,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
         store: FakeFullDataStore,
         localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
         localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring? = nil,
+        localHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring? = nil,
         applier: WalletSyncMasterDataPlanApplying? = nil,
         uploadCap: Int = WalletSyncFullDataRecordValidationPipeline.defaultUploadCap,
         executionOrder: WalletSyncFullDataRecordValidationPipeline.ExecutionOrder = .uploadThenFetch
@@ -1311,6 +1359,7 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
             localState: store,
             localFinancialEventDeletionStore: localFinancialEventDeletionStore ?? FakeFinancialEventDeletionStore(),
             localInstallmentPlanDeletionStore: localInstallmentPlanDeletionStore ?? FakeInstallmentPlanDeletionStore(),
+            localHighRiskRecordDeletionStore: localHighRiskRecordDeletionStore ?? FakeHighRiskRecordDeletionStore(),
             inboxParser: WalletSyncInboxParser(),
             applier: applier ?? FakeFullDataApplier(),
             uploadCap: uploadCap,
@@ -1455,6 +1504,51 @@ private final class FakeInstallmentPlanDeletionStore: WalletSyncLocalInstallment
         deletedAtByID.map { id, deletedAt in
             WalletSyncRecordMappers.dtoForInstallmentPlanDeletion(id: id, deletedAt: deletedAt)
         }
+    }
+}
+
+private final class FakeHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring {
+    var deletedAtByRecord: [String: Date]
+
+    init(deletedAtByRecord: [String: Date] = [:]) {
+        self.deletedAtByRecord = deletedAtByRecord
+    }
+
+    func markHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date) {
+        let recordName = entity.recordName(for: id)
+        let existingDeletedAt = deletedAtByRecord[recordName] ?? .distantPast
+        deletedAtByRecord[recordName] = max(existingDeletedAt, deletedAt)
+    }
+
+    func isHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool {
+        deletedAtByRecord[entity.recordName(for: id)] != nil
+    }
+
+    func locallyDeletedHighRiskRecordDeletedAt(entity: WalletSyncRecordEntity, id: UUID) -> Date? {
+        deletedAtByRecord[entity.recordName(for: id)]
+    }
+
+    func syncableHighRiskRecordDeletionDTOs() -> [WalletSyncRecordDTO] {
+        deletedAtByRecord.compactMap { recordName, deletedAt in
+            guard let identity = identityFromRecordName(recordName) else { return nil }
+            return WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: identity.entity,
+                id: identity.id,
+                deletedAt: deletedAt
+            )
+        }
+    }
+
+    private func identityFromRecordName(_ recordName: String) -> WalletSyncRecordIdentity? {
+        for entity in WalletSyncRecordEntity.allCases {
+            let prefix = "\(entity.recordNamePrefix)_"
+            guard recordName.hasPrefix(prefix) else { continue }
+            let idText = String(recordName.dropFirst(prefix.count))
+            guard let id = UUID(uuidString: idText) else { return nil }
+            return WalletSyncRecordIdentity(entity: entity, id: id)
+        }
+
+        return nil
     }
 }
 

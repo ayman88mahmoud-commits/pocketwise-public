@@ -123,12 +123,16 @@ final class WalletStoreTestabilityTests: XCTestCase {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)
         let purchase = CreditCardPurchase(
+            id: UUID(),
             cardID: UUID(),
             title: "Deleted Purchase",
             amount: 100,
             purchaseDate: Date(),
             categoryName: "Groceries",
-            subCategoryName: "Groceries"
+            subCategoryName: "Groceries",
+            note: nil,
+            createdAt: Date(),
+            updatedAt: Date()
         )
         store.creditCardPurchases = [purchase]
 
@@ -136,7 +140,84 @@ final class WalletStoreTestabilityTests: XCTestCase {
 
         let syncState = WalletSyncStateStore(keyValueStore: defaults)
         XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id))
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id))
+        XCTAssertEqual(syncState.syncableHighRiskRecordDeletionDTOs().first?.entity, .creditCardPurchaseDeletion)
         XCTAssertTrue(store.creditCardPurchases.isEmpty)
+    }
+
+    func testDeleteCreditCardPaymentRecordsSyncableHighRiskDeletionMarker() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let account = Account(name: "Cash", balance: 500, type: .cash)
+        let cardID = UUID()
+        let payment = CreditCardPayment(
+            id: UUID(),
+            cardID: cardID,
+            fromAccountName: account.name,
+            amount: 100,
+            paymentDate: Date(),
+            note: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        store.accounts = [account]
+        store.creditCardPayments = [payment]
+
+        XCTAssertTrue(store.deleteCreditCardPayment(payment))
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .creditCardPayment, id: payment.id))
+        XCTAssertEqual(syncState.syncableHighRiskRecordDeletionDTOs().first?.entity, .creditCardPaymentDeletion)
+        XCTAssertTrue(store.creditCardPayments.isEmpty)
+        XCTAssertEqual(store.accounts.first?.balance, 600)
+    }
+
+    func testDeletePersonDebtRecordsParentAndLinkedEntryDeletionMarkers() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let debt = PersonDebt(personName: "Test Person", kind: .iOwe, originalAmount: 500)
+        let entry = PersonDebtEntry(
+            id: UUID(),
+            debtID: debt.id,
+            entryType: .repaymentPaid,
+            amount: 100,
+            accountName: "Cash",
+            date: Date()
+        )
+        store.personDebts = [debt]
+        store.personDebtEntries = [entry]
+
+        XCTAssertTrue(store.deletePersonDebt(debt))
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .personDebt, id: debt.id))
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .personDebtEntry, id: entry.id))
+        XCTAssertTrue(syncState.syncableHighRiskRecordDeletionDTOs().contains {
+            $0.entity == .personDebtDeletion && $0.id == debt.id
+        })
+        XCTAssertTrue(syncState.syncableHighRiskRecordDeletionDTOs().contains {
+            $0.entity == .personDebtEntryDeletion && $0.id == entry.id
+        })
+        XCTAssertTrue(store.personDebts.isEmpty)
+        XCTAssertTrue(store.personDebtEntries.isEmpty)
+    }
+
+    func testSaveMonthlyBudgetRecordsHighRiskDeletionMarkerForRemovedItems() throws {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let removedItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 100)
+        let existingBudget = WalletMonthlyBudget(year: 2026, month: 6, items: [removedItem])
+        store.monthlyBudgets = [existingBudget]
+
+        store.saveMonthlyBudget(year: 2026, month: 6, plannedAmountsByCategory: [:])
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: removedItem.id))
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .monthlyBudgetItem, id: removedItem.id))
+        let dto = try XCTUnwrap(syncState.syncableHighRiskRecordDeletionDTOs().first)
+        XCTAssertEqual(dto.entity, .monthlyBudgetItemDeletion)
+        XCTAssertEqual(dto.id, removedItem.id)
+        XCTAssertTrue(store.monthlyBudgets.first?.items.isEmpty == true)
     }
 
     func testDeleteInstallmentPlanRecordsSyncableLocalDeletionMarker() {
@@ -505,10 +586,10 @@ final class WalletStoreTestabilityTests: XCTestCase {
     private func makeSuggestionStore() -> WalletStore {
         let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
         store.categories = [
-            PocketWise.Category(name: "Dining & Delivery", subcategories: ["Restaurants"]),
-            PocketWise.Category(name: "Digital & Subscriptions", subcategories: ["Apps & Subscriptions"]),
-            PocketWise.Category(name: "Electronics", subcategories: ["Devices"]),
-            PocketWise.Category(name: "Banking & Fees", subcategories: ["InstaPay Fee"])
+            WalletBoard.Category(name: "Dining & Delivery", subcategories: ["Restaurants"]),
+            WalletBoard.Category(name: "Digital & Subscriptions", subcategories: ["Apps & Subscriptions"]),
+            WalletBoard.Category(name: "Electronics", subcategories: ["Devices"]),
+            WalletBoard.Category(name: "Banking & Fees", subcategories: ["InstaPay Fee"])
         ]
         store.financialEvents = []
         store.creditCardPurchases = []

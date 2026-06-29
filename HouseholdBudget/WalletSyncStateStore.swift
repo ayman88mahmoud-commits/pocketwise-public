@@ -35,6 +35,16 @@ protocol WalletSyncLocalInstallmentPlanDeletionStoring: WalletSyncLocalInstallme
     func syncableInstallmentPlanDeletionDTOs() -> [WalletSyncRecordDTO]
 }
 
+protocol WalletSyncLocalHighRiskRecordDeletionReading {
+    func isHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool
+    func locallyDeletedHighRiskRecordDeletedAt(entity: WalletSyncRecordEntity, id: UUID) -> Date?
+}
+
+protocol WalletSyncLocalHighRiskRecordDeletionStoring: WalletSyncLocalHighRiskRecordDeletionReading {
+    func markHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date)
+    func syncableHighRiskRecordDeletionDTOs() -> [WalletSyncRecordDTO]
+}
+
 protocol WalletSyncLocalRecordTombstoneReading {
     func isRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool
 }
@@ -47,6 +57,7 @@ struct WalletSyncStateStore {
     static let walletSyncZoneChangeTokenKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).changeTokenData"
     static let locallyDeletedFinancialEventIDsKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).locallyDeletedFinancialEventIDs"
     static let locallyDeletedInstallmentPlanIDsKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).locallyDeletedInstallmentPlanIDs"
+    static let locallyDeletedHighRiskRecordIDsKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).locallyDeletedHighRiskRecordIDs"
     static let locallyDeletedRecordIDsKey = "WalletSyncState.\(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName).locallyDeletedRecordIDs"
 
     private let keyValueStore: WalletSyncStateKeyValueStoring
@@ -127,6 +138,45 @@ struct WalletSyncStateStore {
         keyValueStore.removeObject(forKey: Self.locallyDeletedInstallmentPlanIDsKey)
     }
 
+    func markHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date = Date()) {
+        guard WalletSyncRecordMappers.deletionMarkerEntity(for: entity) != nil else {
+            markRecordDeletedLocally(entity: entity, id: id)
+            return
+        }
+
+        var deletions = locallyDeletedHighRiskRecordDeletions()
+        let recordName = entity.recordName(for: id)
+        let existingDeletedAt = deletions[recordName] ?? .distantPast
+        deletions[recordName] = max(existingDeletedAt, deletedAt)
+        saveLocallyDeletedHighRiskRecordDeletions(deletions)
+        markRecordDeletedLocally(entity: entity, id: id)
+    }
+
+    func isHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool {
+        locallyDeletedHighRiskRecordDeletions()[entity.recordName(for: id)] != nil
+    }
+
+    func locallyDeletedHighRiskRecordDeletedAt(entity: WalletSyncRecordEntity, id: UUID) -> Date? {
+        locallyDeletedHighRiskRecordDeletions()[entity.recordName(for: id)]
+    }
+
+    func syncableHighRiskRecordDeletionDTOs() -> [WalletSyncRecordDTO] {
+        locallyDeletedHighRiskRecordDeletions()
+            .compactMap { recordName, deletedAt in
+                guard let identity = Self.identityFromRecordName(recordName) else { return nil }
+                return WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                    entity: identity.entity,
+                    id: identity.id,
+                    deletedAt: deletedAt
+                )
+            }
+            .sorted { $0.recordName < $1.recordName }
+    }
+
+    func clearLocallyDeletedHighRiskRecordIDs() {
+        keyValueStore.removeObject(forKey: Self.locallyDeletedHighRiskRecordIDsKey)
+    }
+
     func markRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) {
         var recordNames = locallyDeletedRecordNames()
         recordNames.insert(entity.recordName(for: id))
@@ -191,6 +241,20 @@ struct WalletSyncStateStore {
         keyValueStore.set(data, forKey: Self.locallyDeletedInstallmentPlanIDsKey)
     }
 
+    private func locallyDeletedHighRiskRecordDeletions() -> [String: Date] {
+        guard let data = keyValueStore.data(forKey: Self.locallyDeletedHighRiskRecordIDsKey),
+              let encodedDeletions = try? JSONDecoder().decode([String: Date].self, from: data) else {
+            return [:]
+        }
+
+        return encodedDeletions
+    }
+
+    private func saveLocallyDeletedHighRiskRecordDeletions(_ deletions: [String: Date]) {
+        guard let data = try? JSONEncoder().encode(deletions) else { return }
+        keyValueStore.set(data, forKey: Self.locallyDeletedHighRiskRecordIDsKey)
+    }
+
     private func locallyDeletedRecordNames() -> Set<String> {
         guard let data = keyValueStore.data(forKey: Self.locallyDeletedRecordIDsKey),
               let recordNames = try? JSONDecoder().decode([String].self, from: data) else {
@@ -204,9 +268,22 @@ struct WalletSyncStateStore {
         guard let data = try? JSONEncoder().encode(recordNames.sorted()) else { return }
         keyValueStore.set(data, forKey: Self.locallyDeletedRecordIDsKey)
     }
+
+    private static func identityFromRecordName(_ recordName: String) -> WalletSyncRecordIdentity? {
+        for entity in WalletSyncRecordEntity.allCases {
+            let prefix = "\(entity.recordNamePrefix)_"
+            guard recordName.hasPrefix(prefix) else { continue }
+            let idText = String(recordName.dropFirst(prefix.count))
+            guard let id = UUID(uuidString: idText) else { return nil }
+            return WalletSyncRecordIdentity(entity: entity, id: id)
+        }
+
+        return nil
+    }
 }
 
 extension WalletSyncStateStore: WalletSyncChangeTokenStoring {}
 extension WalletSyncStateStore: WalletSyncLocalFinancialEventDeletionStoring {}
 extension WalletSyncStateStore: WalletSyncLocalInstallmentPlanDeletionStoring {}
+extension WalletSyncStateStore: WalletSyncLocalHighRiskRecordDeletionStoring {}
 extension WalletSyncStateStore: WalletSyncLocalRecordTombstoneStoring {}

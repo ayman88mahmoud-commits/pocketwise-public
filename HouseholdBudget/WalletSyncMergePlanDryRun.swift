@@ -229,6 +229,12 @@ struct WalletSyncMergePlanDryRun {
             return makeItem(from: item, action: .wouldDelete)
         case .installmentPlanDeletion:
             return makeItem(from: item, action: .wouldDelete)
+        case .creditCardPurchaseDeletion,
+             .creditCardPaymentDeletion,
+             .personDebtDeletion,
+             .personDebtEntryDeletion,
+             .monthlyBudgetItemDeletion:
+            return makeItem(from: item, action: .wouldDelete)
         case .creditCardPurchase:
             return planMasterDataItem(item, exists: localState.containsCreditCardPurchase(id: id))
         case .creditCardPayment:
@@ -247,8 +253,6 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsMonthlyBudgetItem(id: id, inBudget: parentBudgetID))
         case .householdSettings:
             return makeItem(from: item, action: .blocked, blockReason: .householdSettingsNoModel)
-        default:
-            return makeItem(from: item, action: .blocked, blockReason: .pendingApplyImplementation)
         }
     }
 

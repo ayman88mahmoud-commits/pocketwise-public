@@ -1223,6 +1223,11 @@ final class WalletStore: ObservableObject {
             .sorted { $0.categoryName.localizedCaseInsensitiveCompare($1.categoryName) == .orderedAscending }
 
         if let index = monthlyBudgets.firstIndex(where: { $0.year == year && $0.month == month }) {
+            let replacementItemIDs = Set(cleanItems.map(\.id))
+            let removedItems = monthlyBudgets[index].items.filter { !replacementItemIDs.contains($0.id) }
+            for item in removedItems {
+                markHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: item.id, deletedAt: Date())
+            }
             monthlyBudgets[index].items = cleanItems
             monthlyBudgets[index].updatedAt = Date()
             return
@@ -2064,7 +2069,7 @@ final class WalletStore: ObservableObject {
     }
 
     func deleteCreditCardPurchase(_ purchase: CreditCardPurchase) {
-        markSyncRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id)
+        markHighRiskRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id, deletedAt: Date())
         creditCardPurchases.removeAll { $0.id == purchase.id }
     }
 
@@ -2139,7 +2144,7 @@ final class WalletStore: ObservableObject {
 
         accounts[accountIndex].balance += payment.amount
         accounts[accountIndex].updatedAt = Date()
-        markSyncRecordDeletedLocally(entity: .creditCardPayment, id: payment.id)
+        markHighRiskRecordDeletedLocally(entity: .creditCardPayment, id: payment.id, deletedAt: Date())
         creditCardPayments.remove(at: paymentIndex)
         return true
     }
@@ -2704,9 +2709,9 @@ final class WalletStore: ObservableObject {
         }
 
         for entry in linkedEntries {
-            markSyncRecordDeletedLocally(entity: .personDebtEntry, id: entry.id)
+            markHighRiskRecordDeletedLocally(entity: .personDebtEntry, id: entry.id, deletedAt: Date())
         }
-        markSyncRecordDeletedLocally(entity: .personDebt, id: personDebts[index].id)
+        markHighRiskRecordDeletedLocally(entity: .personDebt, id: personDebts[index].id, deletedAt: Date())
         personDebtEntries.removeAll { $0.debtID == personDebts[index].id }
         personDebts.remove(at: index)
         return true
@@ -4502,6 +4507,14 @@ final class WalletStore: ObservableObject {
 
     private func markInstallmentPlanDeletedLocally(id: UUID, deletedAt: Date) {
         WalletSyncStateStore(keyValueStore: userDefaults).markInstallmentPlanDeletedLocally(id: id, deletedAt: deletedAt)
+    }
+
+    private func markHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date) {
+        WalletSyncStateStore(keyValueStore: userDefaults).markHighRiskRecordDeletedLocally(
+            entity: entity,
+            id: id,
+            deletedAt: deletedAt
+        )
     }
 
     private func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date) {

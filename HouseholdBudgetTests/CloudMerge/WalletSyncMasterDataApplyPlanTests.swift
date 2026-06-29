@@ -322,6 +322,254 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         })
     }
 
+    func testHighRiskDeletionMarkerPlansDeleteAction() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_002_000)
+        let dto = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .creditCardPurchase,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDate) = $0.action {
+                return entity == .creditCardPurchase && id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testCreditCardPaymentDeletionMarkerPlansDeleteAction() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_003_000)
+        let dto = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .creditCardPayment,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDate) = $0.action {
+                return entity == .creditCardPayment && id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testPersonDebtDeletionMarkerPlansDeleteAction() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_004_000)
+        let dto = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .personDebt,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDate) = $0.action {
+                return entity == .personDebt && id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testPersonDebtEntryDeletionMarkerPlansDeleteAction() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_005_000)
+        let dto = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .personDebtEntry,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDate) = $0.action {
+                return entity == .personDebtEntry && id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetItemDeletionMarkerPlansDeleteAction() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_006_000)
+        let dto = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .monthlyBudgetItem,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(changedRecords: [record(for: dto)], deletedRecordNames: [])
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDate) = $0.action {
+                return entity == .monthlyBudgetItem && id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testHighRiskDeletionMarkerBlocksOlderRecordInSameBatch() throws {
+        let cardID = UUID()
+        let deletedID = UUID()
+        let purchaseUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_002_000)
+        let marker = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .creditCardPurchase,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState(creditCardIDs: [cardID]))
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: creditCardPurchaseDTO(id: deletedID, cardID: cardID, updatedAt: purchaseUpdatedAt)),
+                record(for: marker)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testCreditCardPaymentDeletionMarkerBlocksOlderPaymentInSameBatch() throws {
+        let cardID = UUID()
+        let deletedID = UUID()
+        let paymentUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_003_000)
+        let marker = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .creditCardPayment,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState(creditCardIDs: [cardID]))
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: creditCardPaymentDTO(id: deletedID, cardID: cardID, updatedAt: paymentUpdatedAt)),
+                record(for: marker)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testPersonDebtDeletionMarkerBlocksOlderDebtInSameBatch() throws {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_900_004_000)
+        let marker = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .personDebt,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: personDebtDTO(id: deletedID)),
+                record(for: marker)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testPersonDebtEntryDeletionMarkerBlocksOlderEntryInSameBatch() throws {
+        let debtID = UUID()
+        let deletedID = UUID()
+        let entryUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_005_000)
+        let marker = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .personDebtEntry,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState(personDebtIDs: [debtID]))
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: personDebtEntryDTO(id: deletedID, debtID: debtID, updatedAt: entryUpdatedAt)),
+                record(for: marker)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testMonthlyBudgetItemDeletionMarkerBlocksOlderItemInSameBatch() throws {
+        let budgetID = UUID()
+        let deletedID = UUID()
+        let itemUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_006_000)
+        let marker = try XCTUnwrap(WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+            entity: .monthlyBudgetItem,
+            id: deletedID,
+            deletedAt: deletedAt
+        ))
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState(monthlyBudgetIDs: [budgetID]))
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: monthlyBudgetItemDTO(id: deletedID, parentBudgetID: budgetID, updatedAt: itemUpdatedAt)),
+                record(for: marker)
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
     func testMonthlyBudgetItemAndHouseholdSettingsAreBlocked() {
         let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
         let records = [

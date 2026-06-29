@@ -519,6 +519,145 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertEqual(deletionStore.deletedAtByID[planID], deletedAt)
     }
 
+    func testRemoteHighRiskDeletionRemovesCreditCardPurchaseAndRecordsLocalTombstone() {
+        let purchaseID = UUID()
+        let cardID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_002_000)
+        let store = FakeApplyingStore()
+        store.creditCards = [makeCreditCard(id: cardID)]
+        store.creditCardPurchases = [makeCreditCardPurchase(id: purchaseID, cardID: cardID)]
+        let deletionStore = FakeHighRiskRecordDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(
+                action: .deleteHighRiskRecord(entity: .creditCardPurchase, id: purchaseID, deletedAt: deletedAt),
+                entity: .creditCardPurchaseDeletion,
+                id: purchaseID
+            )
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localHighRiskRecordDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.creditCardPurchases.isEmpty)
+        XCTAssertEqual(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.creditCardPurchase.recordName(for: purchaseID)], deletedAt)
+    }
+
+    func testRemoteHighRiskDeletionRemovesCreditCardPaymentWithoutMutatingAccounts() {
+        let paymentID = UUID()
+        let cardID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_003_000)
+        let account = makeAccount(name: "Cash", balance: 5_000)
+        let store = FakeApplyingStore(accounts: [account])
+        store.creditCards = [makeCreditCard(id: cardID)]
+        store.creditCardPayments = [makeCreditCardPayment(id: paymentID, cardID: cardID)]
+        let deletionStore = FakeHighRiskRecordDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(
+                action: .deleteHighRiskRecord(entity: .creditCardPayment, id: paymentID, deletedAt: deletedAt),
+                entity: .creditCardPaymentDeletion,
+                id: paymentID
+            )
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localHighRiskRecordDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.creditCardPayments.isEmpty)
+        XCTAssertEqual(store.accounts.first?.balance, 5_000)
+        XCTAssertEqual(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.creditCardPayment.recordName(for: paymentID)], deletedAt)
+    }
+
+    func testRemoteHighRiskDeletionRemovesPersonDebtAndLinkedEntries() {
+        let debtID = UUID()
+        let entryID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_004_000)
+        let store = FakeApplyingStore()
+        store.personDebts = [makePersonDebt(id: debtID)]
+        store.personDebtEntries = [makePersonDebtEntry(id: entryID, debtID: debtID)]
+        let deletionStore = FakeHighRiskRecordDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(
+                action: .deleteHighRiskRecord(entity: .personDebt, id: debtID, deletedAt: deletedAt),
+                entity: .personDebtDeletion,
+                id: debtID
+            )
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localHighRiskRecordDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.personDebts.isEmpty)
+        XCTAssertTrue(store.personDebtEntries.isEmpty)
+        XCTAssertEqual(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.personDebt.recordName(for: debtID)], deletedAt)
+        XCTAssertNotNil(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.personDebtEntry.recordName(for: entryID)])
+    }
+
+    func testRemoteHighRiskDeletionRemovesPersonDebtEntryAndRecordsLocalTombstone() {
+        let debtID = UUID()
+        let entryID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_005_000)
+        let store = FakeApplyingStore(personDebts: [makePersonDebt(id: debtID)])
+        store.personDebtEntries = [makePersonDebtEntry(id: entryID, debtID: debtID)]
+        let deletionStore = FakeHighRiskRecordDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(
+                action: .deleteHighRiskRecord(entity: .personDebtEntry, id: entryID, deletedAt: deletedAt),
+                entity: .personDebtEntryDeletion,
+                id: entryID
+            )
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localHighRiskRecordDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.personDebtEntries.isEmpty)
+        XCTAssertEqual(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.personDebtEntry.recordName(for: entryID)], deletedAt)
+    }
+
+    func testRemoteHighRiskDeletionRemovesMonthlyBudgetItemOnly() {
+        let budgetID = UUID()
+        let deletedItemID = UUID()
+        let survivingItemID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_006_000)
+        var deletedItem = WalletMonthlyBudgetItem(categoryName: "Food", plannedAmount: 500)
+        deletedItem.id = deletedItemID
+        var survivingItem = WalletMonthlyBudgetItem(categoryName: "Transport", plannedAmount: 300)
+        survivingItem.id = survivingItemID
+        var budget = WalletMonthlyBudget(year: 2026, month: 6, items: [deletedItem, survivingItem])
+        budget.id = budgetID
+        let store = FakeApplyingStore(monthlyBudgets: [budget])
+        let deletionStore = FakeHighRiskRecordDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(
+                action: .deleteHighRiskRecord(entity: .monthlyBudgetItem, id: deletedItemID, deletedAt: deletedAt),
+                entity: .monthlyBudgetItemDeletion,
+                id: deletedItemID
+            )
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localHighRiskRecordDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.count, 1)
+        XCTAssertEqual(store.monthlyBudgets.first?.items.first?.id, survivingItemID)
+        XCTAssertEqual(deletionStore.deletedAtByRecord[WalletSyncRecordEntity.monthlyBudgetItem.recordName(for: deletedItemID)], deletedAt)
+    }
+
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
@@ -588,6 +727,62 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
             subCategoryName: "Installment"
         )
     }
+
+    private func makeCreditCard(id: UUID = UUID()) -> CreditCard {
+        CreditCard(
+            id: id,
+            name: "Visa",
+            bankName: "Bank",
+            cardNetwork: .visa,
+            creditLimit: 1000,
+            openingOutstandingBalance: 0,
+            statementClosingDay: 25,
+            paymentDueDay: 15
+        )
+    }
+
+    private func makeCreditCardPurchase(id: UUID = UUID(), cardID: UUID) -> CreditCardPurchase {
+        CreditCardPurchase(
+            id: id,
+            cardID: cardID,
+            title: "Purchase",
+            amount: 100,
+            purchaseDate: Date(),
+            categoryName: "Food",
+            subCategoryName: "Groceries",
+            note: nil,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    }
+
+    private func makeCreditCardPayment(id: UUID = UUID(), cardID: UUID) -> CreditCardPayment {
+        CreditCardPayment(
+            id: id,
+            cardID: cardID,
+            fromAccountName: "Cash",
+            amount: 200,
+            paymentDate: Date(timeIntervalSince1970: 1_800_000_000),
+            note: nil,
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    }
+
+    private func makePersonDebt(id: UUID = UUID()) -> PersonDebt {
+        PersonDebt(id: id, personName: "Test Person", kind: .iOwe, originalAmount: 500)
+    }
+
+    private func makePersonDebtEntry(id: UUID = UUID(), debtID: UUID) -> PersonDebtEntry {
+        PersonDebtEntry(
+            id: id,
+            debtID: debtID,
+            entryType: .repaymentPaid,
+            amount: 100,
+            accountName: "Cash",
+            date: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    }
 }
 
 private final class FakeFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring {
@@ -631,5 +826,26 @@ private final class FakeInstallmentPlanDeletionStore: WalletSyncLocalInstallment
         deletedAtByID.map { id, deletedAt in
             WalletSyncRecordMappers.dtoForInstallmentPlanDeletion(id: id, deletedAt: deletedAt)
         }
+    }
+}
+
+private final class FakeHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring {
+    var deletedAtByRecord: [String: Date] = [:]
+
+    func markHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date) {
+        let recordName = entity.recordName(for: id)
+        deletedAtByRecord[recordName] = max(deletedAtByRecord[recordName] ?? .distantPast, deletedAt)
+    }
+
+    func isHighRiskRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool {
+        deletedAtByRecord[entity.recordName(for: id)] != nil
+    }
+
+    func locallyDeletedHighRiskRecordDeletedAt(entity: WalletSyncRecordEntity, id: UUID) -> Date? {
+        deletedAtByRecord[entity.recordName(for: id)]
+    }
+
+    func syncableHighRiskRecordDeletionDTOs() -> [WalletSyncRecordDTO] {
+        []
     }
 }

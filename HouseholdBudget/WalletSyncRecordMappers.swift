@@ -269,6 +269,75 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dtoForHighRiskRecordDeletion(entity: WalletSyncRecordEntity, id: UUID, deletedAt: Date) -> WalletSyncRecordDTO? {
+        guard let markerEntity = deletionMarkerEntity(for: entity),
+              let deletedIDField = deletionMarkerIDFieldName(for: entity) else {
+            return nil
+        }
+
+        return WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: markerEntity, id: id),
+            updatedAt: deletedAt,
+            deletedAt: deletedAt,
+            isDeleted: true,
+            fields: [
+                "deletedEntity": .string(entity.rawValue),
+                deletedIDField: .uuid(id)
+            ]
+        )
+    }
+
+    static func deletionMarkerEntity(for entity: WalletSyncRecordEntity) -> WalletSyncRecordEntity? {
+        switch entity {
+        case .creditCardPurchase:
+            return .creditCardPurchaseDeletion
+        case .creditCardPayment:
+            return .creditCardPaymentDeletion
+        case .personDebt:
+            return .personDebtDeletion
+        case .personDebtEntry:
+            return .personDebtEntryDeletion
+        case .monthlyBudgetItem:
+            return .monthlyBudgetItemDeletion
+        default:
+            return nil
+        }
+    }
+
+    static func deletionMarkerTargetEntity(for markerEntity: WalletSyncRecordEntity) -> WalletSyncRecordEntity? {
+        switch markerEntity {
+        case .creditCardPurchaseDeletion:
+            return .creditCardPurchase
+        case .creditCardPaymentDeletion:
+            return .creditCardPayment
+        case .personDebtDeletion:
+            return .personDebt
+        case .personDebtEntryDeletion:
+            return .personDebtEntry
+        case .monthlyBudgetItemDeletion:
+            return .monthlyBudgetItem
+        default:
+            return nil
+        }
+    }
+
+    private static func deletionMarkerIDFieldName(for entity: WalletSyncRecordEntity) -> String? {
+        switch entity {
+        case .creditCardPurchase:
+            return "creditCardPurchaseID"
+        case .creditCardPayment:
+            return "creditCardPaymentID"
+        case .personDebt:
+            return "personDebtID"
+        case .personDebtEntry:
+            return "personDebtEntryID"
+        case .monthlyBudgetItem:
+            return "monthlyBudgetItemID"
+        default:
+            return nil
+        }
+    }
+
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

@@ -146,6 +146,48 @@ final class WalletSyncStateStoreTests: XCTestCase {
         )
     }
 
+    func testLocallyDeletedHighRiskRecordsProduceSyncableDeletionDTOs() {
+        let keyValueStore = FakeKeyValueStore()
+        let store = WalletSyncStateStore(keyValueStore: keyValueStore)
+        let purchaseID = UUID()
+        let paymentID = UUID()
+        let debtID = UUID()
+        let entryID = UUID()
+        let budgetItemID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_002_000)
+
+        store.markHighRiskRecordDeletedLocally(entity: .creditCardPurchase, id: purchaseID, deletedAt: deletedAt)
+        store.markHighRiskRecordDeletedLocally(entity: .creditCardPayment, id: paymentID, deletedAt: deletedAt)
+        store.markHighRiskRecordDeletedLocally(entity: .personDebt, id: debtID, deletedAt: deletedAt)
+        store.markHighRiskRecordDeletedLocally(entity: .personDebtEntry, id: entryID, deletedAt: deletedAt)
+        store.markHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: budgetItemID, deletedAt: deletedAt)
+
+        let dtos = store.syncableHighRiskRecordDeletionDTOs()
+        XCTAssertTrue(store.isHighRiskRecordDeletedLocally(entity: .creditCardPayment, id: paymentID))
+        XCTAssertEqual(store.locallyDeletedHighRiskRecordDeletedAt(entity: .creditCardPayment, id: paymentID), deletedAt)
+        XCTAssertEqual(Set(dtos.map(\.entity)), [
+            .creditCardPurchaseDeletion,
+            .creditCardPaymentDeletion,
+            .personDebtDeletion,
+            .personDebtEntryDeletion,
+            .monthlyBudgetItemDeletion
+        ])
+        XCTAssertTrue(dtos.allSatisfy { $0.updatedAt == deletedAt && $0.deletedAt == deletedAt && $0.isDeleted })
+        XCTAssertTrue(dtos.contains { $0.entity == .creditCardPurchaseDeletion && $0.id == purchaseID })
+        XCTAssertTrue(dtos.contains { $0.entity == .creditCardPaymentDeletion && $0.id == paymentID })
+        XCTAssertTrue(dtos.contains { $0.entity == .personDebtDeletion && $0.id == debtID })
+        XCTAssertTrue(dtos.contains { $0.entity == .personDebtEntryDeletion && $0.id == entryID })
+        XCTAssertTrue(dtos.contains { $0.entity == .monthlyBudgetItemDeletion && $0.id == budgetItemID })
+    }
+
+    func testLocallyDeletedHighRiskRecordIDsAreZoneNamespaced() {
+        XCTAssertTrue(WalletSyncStateStore.locallyDeletedHighRiskRecordIDsKey.contains(WalletSyncRealCloudKitPrivateDatabaseBoundary.syncZoneName))
+        XCTAssertNotEqual(
+            WalletSyncStateStore.locallyDeletedHighRiskRecordIDsKey,
+            "WalletSyncState.WalletSyncZone.locallyDeletedHighRiskRecordIDs"
+        )
+    }
+
     func testLocallyDeletedRecordIDsPersistThroughStore() {
         let keyValueStore = FakeKeyValueStore()
         let store = WalletSyncStateStore(keyValueStore: keyValueStore)

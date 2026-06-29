@@ -17,13 +17,20 @@ struct WalletSyncDryRunUploadPlanner {
 
     @MainActor
     func plan(from store: WalletStore) -> WalletSyncDryRunUploadSummary {
+        let syncStateStore = WalletSyncStateStore()
+        let highRiskDeletionDTOs = syncStateStore.syncableHighRiskRecordDeletionDTOs()
         let entityGroups: [(WalletSyncRecordEntity, [WalletSyncRecordDTO])] = [
             (.account,                  store.accounts.map(WalletSyncRecordMappers.dto(for:))),
             (.category,                 store.categories.map(WalletSyncRecordMappers.dto(for:))),
             (.walletEvent,              store.walletEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.merchantMemory,           store.merchantMemories.map(WalletSyncRecordMappers.dto(for:))),
             (.installmentPlan,          store.installmentPlans.map(WalletSyncRecordMappers.dto(for:))),
-            (.installmentPlanDeletion,  WalletSyncStateStore().syncableInstallmentPlanDeletionDTOs()),
+            (.installmentPlanDeletion,  syncStateStore.syncableInstallmentPlanDeletionDTOs()),
+            (.creditCardPurchaseDeletion, highRiskDeletionDTOs.filter { $0.entity == .creditCardPurchaseDeletion }),
+            (.creditCardPaymentDeletion, highRiskDeletionDTOs.filter { $0.entity == .creditCardPaymentDeletion }),
+            (.personDebtDeletion, highRiskDeletionDTOs.filter { $0.entity == .personDebtDeletion }),
+            (.personDebtEntryDeletion, highRiskDeletionDTOs.filter { $0.entity == .personDebtEntryDeletion }),
+            (.monthlyBudgetItemDeletion, highRiskDeletionDTOs.filter { $0.entity == .monthlyBudgetItemDeletion }),
             (.financialEvent,           store.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudget,            store.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
             (.personDebt,               store.personDebts.map(WalletSyncRecordMappers.dto(for:))),

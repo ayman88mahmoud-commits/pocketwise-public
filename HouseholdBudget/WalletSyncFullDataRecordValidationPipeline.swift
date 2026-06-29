@@ -68,6 +68,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
     private let localState: WalletSyncMergePlanLocalStateReading
     private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring
     private let localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring
+    private let localHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring
     private let localRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading
     private let inboxParser: WalletSyncInboxParser
     private let applier: WalletSyncMasterDataPlanApplying
@@ -83,6 +84,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
         localState: WalletSyncMergePlanLocalStateReading,
         localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
         localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring? = nil,
+        localHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring? = nil,
         localRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading? = nil,
         inboxParser: WalletSyncInboxParser,
         applier: WalletSyncMasterDataPlanApplying,
@@ -97,6 +99,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
         self.localState = localState
         self.localFinancialEventDeletionStore = localFinancialEventDeletionStore ?? WalletSyncStateStore()
         self.localInstallmentPlanDeletionStore = localInstallmentPlanDeletionStore ?? WalletSyncStateStore()
+        self.localHighRiskRecordDeletionStore = localHighRiskRecordDeletionStore ?? WalletSyncStateStore()
         self.localRecordTombstoneStore = localRecordTombstoneStore ?? WalletSyncStateStore()
         self.inboxParser = inboxParser
         self.applier = applier
@@ -290,6 +293,7 @@ struct WalletSyncFullDataRecordValidationPipeline {
             localState: localState,
             localFinancialEventDeletionStore: localFinancialEventDeletionStore,
             localInstallmentPlanDeletionStore: localInstallmentPlanDeletionStore,
+            localHighRiskRecordDeletionStore: localHighRiskRecordDeletionStore,
             localRecordTombstoneStore: localRecordTombstoneStore
         ).makePlan(
             changedRecords: nonEchoRecords,
@@ -322,6 +326,11 @@ struct WalletSyncFullDataRecordValidationPipeline {
             (.financialEvent, source.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.financialEventDeletion, localFinancialEventDeletionStore.syncableFinancialEventDeletionDTOs()),
             (.installmentPlanDeletion, localInstallmentPlanDeletionStore.syncableInstallmentPlanDeletionDTOs()),
+            (.creditCardPurchaseDeletion, localHighRiskRecordDeletionStore.syncableHighRiskRecordDeletionDTOs().filter { $0.entity == .creditCardPurchaseDeletion }),
+            (.creditCardPaymentDeletion, localHighRiskRecordDeletionStore.syncableHighRiskRecordDeletionDTOs().filter { $0.entity == .creditCardPaymentDeletion }),
+            (.personDebtDeletion, localHighRiskRecordDeletionStore.syncableHighRiskRecordDeletionDTOs().filter { $0.entity == .personDebtDeletion }),
+            (.personDebtEntryDeletion, localHighRiskRecordDeletionStore.syncableHighRiskRecordDeletionDTOs().filter { $0.entity == .personDebtEntryDeletion }),
+            (.monthlyBudgetItemDeletion, localHighRiskRecordDeletionStore.syncableHighRiskRecordDeletionDTOs().filter { $0.entity == .monthlyBudgetItemDeletion }),
             (.monthlyBudget, source.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudgetItem, source.monthlyBudgets.flatMap { budget in
                 budget.items.map { WalletSyncRecordMappers.dto(for: $0, parentBudgetID: budget.id) }

@@ -32,15 +32,18 @@ struct WalletSyncMasterDataApplier {
     private let store: WalletSyncMasterDataApplyingStore
     private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring
     private let localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring
+    private let localHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring
 
     init(
         store: WalletSyncMasterDataApplyingStore,
         localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
-        localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring? = nil
+        localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring? = nil,
+        localHighRiskRecordDeletionStore: WalletSyncLocalHighRiskRecordDeletionStoring? = nil
     ) {
         self.store = store
         self.localFinancialEventDeletionStore = localFinancialEventDeletionStore ?? WalletSyncStateStore()
         self.localInstallmentPlanDeletionStore = localInstallmentPlanDeletionStore ?? WalletSyncStateStore()
+        self.localHighRiskRecordDeletionStore = localHighRiskRecordDeletionStore ?? WalletSyncStateStore()
     }
 
     func apply(_ plan: WalletSyncMasterDataApplyPlanSummary) -> WalletSyncMasterDataApplyResult {
@@ -89,6 +92,8 @@ struct WalletSyncMasterDataApplier {
                 applyUpdateInstallmentPlan(plan, result: &result)
             case .deleteInstallmentPlan(let id, let deletedAt):
                 applyDeleteInstallmentPlan(id: id, deletedAt: deletedAt, result: &result)
+            case .deleteHighRiskRecord(let entity, let id, let deletedAt):
+                applyDeleteHighRiskRecord(entity: entity, id: id, deletedAt: deletedAt, result: &result)
             case .createFinancialEvent(let event):
                 applyCreateFinancialEvent(event, result: &result)
             case .updateFinancialEvent(let event):
@@ -127,7 +132,7 @@ struct WalletSyncMasterDataApplier {
 
     private func applyPriority(for action: WalletSyncMasterDataApplyAction) -> Int {
         switch action {
-        case .deleteFinancialEvent, .deleteInstallmentPlan:
+        case .deleteFinancialEvent, .deleteInstallmentPlan, .deleteHighRiskRecord:
             return 0
         case .createCreditCard, .updateCreditCard,
              .createPersonDebt, .updatePersonDebt,
@@ -407,6 +412,68 @@ struct WalletSyncMasterDataApplier {
 
         store.financialEvents.remove(at: index)
         result.disabledCount += 1
+    }
+
+    private func applyDeleteHighRiskRecord(
+        entity: WalletSyncRecordEntity,
+        id: UUID,
+        deletedAt: Date,
+        result: inout WalletSyncMasterDataApplyResult
+    ) {
+        localHighRiskRecordDeletionStore.markHighRiskRecordDeletedLocally(entity: entity, id: id, deletedAt: deletedAt)
+
+        switch entity {
+        case .creditCardPurchase:
+            guard let index = store.creditCardPurchases.firstIndex(where: { $0.id == id }) else {
+                result.skippedCount += 1
+                return
+            }
+            store.creditCardPurchases.remove(at: index)
+            result.disabledCount += 1
+        case .creditCardPayment:
+            guard let index = store.creditCardPayments.firstIndex(where: { $0.id == id }) else {
+                result.skippedCount += 1
+                return
+            }
+            store.creditCardPayments.remove(at: index)
+            result.disabledCount += 1
+        case .personDebt:
+            guard let index = store.personDebts.firstIndex(where: { $0.id == id }) else {
+                result.skippedCount += 1
+                return
+            }
+            let linkedEntryIDs = store.personDebtEntries
+                .filter { $0.debtID == id }
+                .map(\.id)
+            for entryID in linkedEntryIDs {
+                localHighRiskRecordDeletionStore.markHighRiskRecordDeletedLocally(
+                    entity: .personDebtEntry,
+                    id: entryID,
+                    deletedAt: deletedAt
+                )
+            }
+            store.personDebtEntries.removeAll { $0.debtID == id }
+            store.personDebts.remove(at: index)
+            result.disabledCount += 1
+        case .personDebtEntry:
+            guard let index = store.personDebtEntries.firstIndex(where: { $0.id == id }) else {
+                result.skippedCount += 1
+                return
+            }
+            store.personDebtEntries.remove(at: index)
+            result.disabledCount += 1
+        case .monthlyBudgetItem:
+            for budgetIndex in store.monthlyBudgets.indices {
+                if let itemIndex = store.monthlyBudgets[budgetIndex].items.firstIndex(where: { $0.id == id }) {
+                    store.monthlyBudgets[budgetIndex].items.remove(at: itemIndex)
+                    result.disabledCount += 1
+                    return
+                }
+            }
+            result.skippedCount += 1
+        default:
+            result.skippedCount += 1
+        }
     }
 
     private func applyCreateCreditCardPurchase(_ purchase: CreditCardPurchase, result: inout WalletSyncMasterDataApplyResult) {
