@@ -1,6 +1,7 @@
 import XCTest
 @testable import WalletBoard
 
+@MainActor
 final class WalletSyncDryRunUploadPlannerTests: XCTestCase {
 
     private var store: WalletStore!

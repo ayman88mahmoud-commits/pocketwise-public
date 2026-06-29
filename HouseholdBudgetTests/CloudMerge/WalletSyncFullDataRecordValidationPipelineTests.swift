@@ -571,25 +571,124 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     }
 
     func testPlannerAllowsOnlyMasterDataDirectUpdatePaths() {
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let remoteDate = baseDate.addingTimeInterval(10)
+        var localAccount = makeAccount()
+        localAccount.updatedAt = baseDate
+        var remoteAccount = makeAccount()
+        remoteAccount.updatedAt = remoteDate
+        let merchantMemoryID = deterministicID(index: 260)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_000_500)
+        let purchaseDeletionID = deterministicID(index: 261)
+        let paymentDeletionID = deterministicID(index: 262)
+        let debtDeletionID = deterministicID(index: 263)
+        let debtEntryDeletionID = deterministicID(index: 264)
+        let budgetItemDeletionID = deterministicID(index: 265)
         let store = FakeFullDataStore(
-            accounts: [makeAccount()],
+            accounts: [localAccount],
             categories: [makeCategory()],
             walletEvents: [makeWalletEvent()],
-            merchantMemories: [makeMerchantMemory()]
+            merchantMemories: [makeMerchantMemory(id: merchantMemoryID)]
         )
         let records = [
-            WalletSyncRecordMappers.dto(for: makeAccount()),
+            WalletSyncRecordMappers.dto(for: remoteAccount),
             WalletSyncRecordMappers.dto(for: makeCategory()),
             WalletSyncRecordMappers.dto(for: makeWalletEvent()),
-            WalletSyncRecordMappers.dto(for: makeMerchantMemory())
+            WalletSyncRecordMappers.dto(for: makeMerchantMemory(id: merchantMemoryID)),
+            WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: .creditCardPurchase,
+                id: purchaseDeletionID,
+                deletedAt: deletedAt
+            )!,
+            WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: .creditCardPayment,
+                id: paymentDeletionID,
+                deletedAt: deletedAt
+            )!,
+            WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: .personDebt,
+                id: debtDeletionID,
+                deletedAt: deletedAt
+            )!,
+            WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: .personDebtEntry,
+                id: debtEntryDeletionID,
+                deletedAt: deletedAt
+            )!,
+            WalletSyncRecordMappers.dtoForHighRiskRecordDeletion(
+                entity: .monthlyBudgetItem,
+                id: budgetItemDeletionID,
+                deletedAt: deletedAt
+            )!
         ].map(WalletSyncCKRecordAdapter.ckRecord(from:))
 
         let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store)
             .makePlan(changedRecords: records, deletedRecordNames: [])
 
+        XCTAssertEqual(
+            Set(plan.items.map(\.entity)),
+            Set<WalletSyncRecordEntity>([
+                .account,
+                .category,
+                .walletEvent,
+                .merchantMemory,
+                .creditCardPurchaseDeletion,
+                .creditCardPaymentDeletion,
+                .personDebtDeletion,
+                .personDebtEntryDeletion,
+                .monthlyBudgetItemDeletion
+            ])
+        )
         XCTAssertEqual(plan.plannedUpdateCount, 4)
+        XCTAssertEqual(plan.plannedDisableCount, 5)
         XCTAssertEqual(plan.plannedCreateCount, 0)
         XCTAssertEqual(plan.blockedCount, 0)
+        XCTAssertTrue(plan.items.contains {
+            if case .updateAccount = $0.action { return $0.entity == .account }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .updateCategory = $0.action { return $0.entity == .category }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .updateWalletEvent = $0.action { return $0.entity == .walletEvent }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .updateMerchantMemory = $0.action { return $0.entity == .merchantMemory }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDeletedAt) = $0.action {
+                return entity == .creditCardPurchase && id == purchaseDeletionID && markerDeletedAt == deletedAt
+            }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDeletedAt) = $0.action {
+                return entity == .creditCardPayment && id == paymentDeletionID && markerDeletedAt == deletedAt
+            }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDeletedAt) = $0.action {
+                return entity == .personDebt && id == debtDeletionID && markerDeletedAt == deletedAt
+            }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDeletedAt) = $0.action {
+                return entity == .personDebtEntry && id == debtEntryDeletionID && markerDeletedAt == deletedAt
+            }
+            return false
+        })
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteHighRiskRecord(let entity, let id, let markerDeletedAt) = $0.action {
+                return entity == .monthlyBudgetItem && id == budgetItemDeletionID && markerDeletedAt == deletedAt
+            }
+            return false
+        })
     }
 
     func testMerchantMemoryCreateAndUpdateApplyIsSafe() async throws {
@@ -774,12 +873,20 @@ final class WalletSyncFullDataRecordValidationPipelineTests: XCTestCase {
     }
 
     func testRecurringAndFutureEventsAreNotMarkedPaidAndFutureIncomeIsNotReceived() async throws {
-        var recurring = makeFinancialEvent(status: .unpaid, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        var recurring = makeFinancialEvent(
+            id: deterministicID(index: 270),
+            status: .unpaid,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
         recurring.repeatRule = .monthly
         recurring.sourceRecurringEventID = UUID()
         recurring.recurringOccurrenceYear = 2026
         recurring.recurringOccurrenceMonth = 7
-        var income = makeFinancialEvent(status: .unpaid, updatedAt: Date(timeIntervalSince1970: 1_800_000_100))
+        var income = makeFinancialEvent(
+            id: deterministicID(index: 271),
+            status: .unpaid,
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_100)
+        )
         income.type = .income
         income.date = Date(timeIntervalSince1970: 1_900_000_000)
         let records = [

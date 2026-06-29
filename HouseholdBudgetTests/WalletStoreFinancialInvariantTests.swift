@@ -876,8 +876,8 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         let store = WalletStore(userDefaults: defaults)
         store.accounts = accounts
         store.categories = [
-            PocketWise.Category(name: "Groceries", subcategories: ["Groceries"]),
-            PocketWise.Category(name: "Rent", subcategories: ["Rent"])
+            WalletBoard.Category(name: "Groceries", subcategories: ["Groceries"]),
+            WalletBoard.Category(name: "Rent", subcategories: ["Rent"])
         ]
         store.financialEvents = []
         store.creditCards = []
@@ -1022,7 +1022,7 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
 
     private func makeSnapshot(
         accounts: [Account],
-        categories: [PocketWise.Category],
+        categories: [WalletBoard.Category],
         installmentPlans: [InstallmentPlan],
         financialEvents: [FinancialEvent],
         creditCards: [CreditCard]

@@ -259,7 +259,7 @@ final class BudgetIncomeWiringTests: XCTestCase {
         let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
         store.accounts = [Account(name: accountName, balance: startingCash, type: .cash)]
         store.categories = [
-            PocketWise.Category(name: "Rent", subcategories: ["Rent"])
+            WalletBoard.Category(name: "Rent", subcategories: ["Rent"])
         ]
         store.financialEvents = []
         store.creditCards = []

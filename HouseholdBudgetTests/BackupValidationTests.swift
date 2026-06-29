@@ -185,7 +185,7 @@ final class BackupValidationTests: XCTestCase {
             Account(name: accountName, balance: 10_000, type: .cash)
         ]
         store.categories = [
-            PocketWise.Category(name: "Groceries", subcategories: ["Groceries"])
+            WalletBoard.Category(name: "Groceries", subcategories: ["Groceries"])
         ]
         store.walletEvents = []
         store.installmentPlans = []
@@ -230,7 +230,7 @@ final class BackupValidationTests: XCTestCase {
 
     private func makeSnapshot(
         accounts: [Account],
-        categories: [PocketWise.Category],
+        categories: [WalletBoard.Category],
         installmentPlans: [InstallmentPlan] = [],
         financialEvents: [FinancialEvent] = [],
         creditCardPurchases: [CreditCardPurchase] = [],

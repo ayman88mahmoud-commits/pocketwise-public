@@ -878,7 +878,7 @@ final class WalletSyncRecordMapperTests: XCTestCase {
     func testMonthlyBudgetItemMapsToMonthlyBudgetItemEntity() {
         let item = makeMonthlyBudgetItem()
 
-        let dto = WalletSyncRecordMappers.dto(for: item)
+        let dto = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
         XCTAssertEqual(dto.entity, .monthlyBudgetItem)
     }
@@ -886,7 +886,7 @@ final class WalletSyncRecordMapperTests: XCTestCase {
     func testMonthlyBudgetItemRecordNameIsStable() {
         let item = makeMonthlyBudgetItem()
 
-        let dto = WalletSyncRecordMappers.dto(for: item)
+        let dto = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
         XCTAssertEqual(dto.recordName, "MonthlyBudgetItem_cccccccc-cccc-cccc-cccc-cccccccccccc")
         XCTAssertEqual(dto.recordName, WalletSyncRecordIdentity(entity: .monthlyBudgetItem, id: item.id).recordName)
@@ -895,7 +895,7 @@ final class WalletSyncRecordMapperTests: XCTestCase {
     func testMonthlyBudgetItemIDIsPreserved() {
         let item = makeMonthlyBudgetItem()
 
-        let dto = WalletSyncRecordMappers.dto(for: item)
+        let dto = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
         XCTAssertEqual(dto.id, item.id)
     }
@@ -903,8 +903,9 @@ final class WalletSyncRecordMapperTests: XCTestCase {
     func testMonthlyBudgetItemImportantFieldsArePresent() {
         let item = makeMonthlyBudgetItem()
 
-        let dto = WalletSyncRecordMappers.dto(for: item)
+        let dto = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
+        XCTAssertEqual(dto.fields["parentBudgetID"], .uuid(monthlyBudgetID))
         XCTAssertEqual(dto.fields["categoryName"], .string("Food"))
         XCTAssertEqual(dto.fields["plannedAmount"], .double(800.00))
         XCTAssertEqual(dto.fields["createdAt"], .date(item.createdAt))
@@ -914,7 +915,7 @@ final class WalletSyncRecordMapperTests: XCTestCase {
         let deletedAt = Date(timeIntervalSince1970: 1_800_020_000)
         let item = makeMonthlyBudgetItem(isDeleted: true, deletedAt: deletedAt)
 
-        let dto = WalletSyncRecordMappers.dto(for: item)
+        let dto = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
         XCTAssertTrue(dto.isDeleted)
         XCTAssertEqual(dto.deletedAt, deletedAt)
@@ -924,8 +925,8 @@ final class WalletSyncRecordMapperTests: XCTestCase {
     func testMonthlyBudgetItemMapperIsDeterministic() {
         let item = makeMonthlyBudgetItem()
 
-        let first = WalletSyncRecordMappers.dto(for: item)
-        let second = WalletSyncRecordMappers.dto(for: item)
+        let first = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
+        let second = WalletSyncRecordMappers.dto(for: item, parentBudgetID: monthlyBudgetID)
 
         XCTAssertEqual(first.recordName, second.recordName)
         XCTAssertEqual(first.entity, second.entity)
@@ -950,6 +951,10 @@ final class WalletSyncRecordMapperTests: XCTestCase {
         item.isDeleted = isDeleted
         item.deletedAt = deletedAt
         return item
+    }
+
+    private var monthlyBudgetID: UUID {
+        UUID(uuidString: "bbbbcccc-bbbb-cccc-bbbb-ccccbbbbcccc")!
     }
 
     // MARK: - PersonDebtEntry mapper tests
