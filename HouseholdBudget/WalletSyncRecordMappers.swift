@@ -257,6 +257,18 @@ enum WalletSyncRecordMappers {
         )
     }
 
+    static func dtoForInstallmentPlanDeletion(id: UUID, deletedAt: Date) -> WalletSyncRecordDTO {
+        WalletSyncRecordDTO(
+            identity: WalletSyncRecordIdentity(entity: .installmentPlanDeletion, id: id),
+            updatedAt: deletedAt,
+            deletedAt: deletedAt,
+            isDeleted: true,
+            fields: [
+                "installmentPlanID": .uuid(id)
+            ]
+        )
+    }
+
     static func dto(for event: FinancialEvent) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             identity: WalletSyncRecordIdentity(entity: .financialEvent, id: event.id),

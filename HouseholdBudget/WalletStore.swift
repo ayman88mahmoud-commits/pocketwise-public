@@ -796,6 +796,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
+        markSyncRecordDeletedLocally(entity: .account, id: account.id)
         accounts.removeAll { $0.id == account.id }
 
         for index in walletEvents.indices where walletEvents[index].defaultAccountName == account.name {
@@ -1065,6 +1066,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
+        markSyncRecordDeletedLocally(entity: .category, id: category.id)
         categories.removeAll { $0.id == category.id }
     }
 
@@ -1705,6 +1707,7 @@ final class WalletStore: ObservableObject {
     }
 
     func deleteHistoricalMonthlySummary(_ entry: HistoricalMonthlySummaryEntry) {
+        markSyncRecordDeletedLocally(entity: .historicalMonthlySummary, id: entry.id)
         historicalMonthlySummaries.removeAll { $0.id == entry.id }
     }
 
@@ -2061,6 +2064,7 @@ final class WalletStore: ObservableObject {
     }
 
     func deleteCreditCardPurchase(_ purchase: CreditCardPurchase) {
+        markSyncRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id)
         creditCardPurchases.removeAll { $0.id == purchase.id }
     }
 
@@ -2134,6 +2138,8 @@ final class WalletStore: ObservableObject {
         }
 
         accounts[accountIndex].balance += payment.amount
+        accounts[accountIndex].updatedAt = Date()
+        markSyncRecordDeletedLocally(entity: .creditCardPayment, id: payment.id)
         creditCardPayments.remove(at: paymentIndex)
         return true
     }
@@ -2697,6 +2703,10 @@ final class WalletStore: ObservableObject {
             applyPersonDebtEntryImpact(entry, multiplier: -1)
         }
 
+        for entry in linkedEntries {
+            markSyncRecordDeletedLocally(entity: .personDebtEntry, id: entry.id)
+        }
+        markSyncRecordDeletedLocally(entity: .personDebt, id: personDebts[index].id)
         personDebtEntries.removeAll { $0.debtID == personDebts[index].id }
         personDebts.remove(at: index)
         return true
@@ -2730,9 +2740,7 @@ final class WalletStore: ObservableObject {
             accounts[index].balance += entry.amount * multiplier
         }
 
-        if multiplier > 0 {
-            accounts[index].updatedAt = Date()
-        }
+        accounts[index].updatedAt = Date()
     }
 
     // MARK: - Backup
@@ -3454,7 +3462,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
-        WalletSyncStateStore(keyValueStore: userDefaults).markFinancialEventDeletedLocally(id: financialEvents[index].id, deletedAt: Date())
+        markFinancialEventDeletedLocally(id: financialEvents[index].id, deletedAt: Date())
         reverseAccountImpactIfNeeded(financialEvents[index])
         financialEvents.remove(at: index)
     }
@@ -3951,6 +3959,7 @@ final class WalletStore: ObservableObject {
     }
 
     func deleteMerchantMemory(_ memory: MerchantMemory) {
+        markSyncRecordDeletedLocally(entity: .merchantMemory, id: memory.id)
         merchantMemories.removeAll { $0.id == memory.id }
     }
 
@@ -4089,12 +4098,19 @@ final class WalletStore: ObservableObject {
     }
 
     func deleteInstallmentPlanAndFutureEvents(_ plan: InstallmentPlan) {
+        markInstallmentPlanDeletedLocally(id: plan.id, deletedAt: Date())
         installmentPlans.removeAll { $0.id == plan.id }
 
-        financialEvents.removeAll { event in
+        let futureEvents = financialEvents.filter { event in
             event.sourceInstallmentPlanID == plan.id &&
             event.type == .installment &&
             event.status != .paid
+        }
+        for event in futureEvents {
+            markFinancialEventDeletedLocally(id: event.id, deletedAt: Date())
+        }
+        financialEvents.removeAll { event in
+            futureEvents.contains { $0.id == event.id }
         }
     }
 
@@ -4478,6 +4494,18 @@ final class WalletStore: ObservableObject {
 
     private func markLocalDataChanged() {
         localDataUpdatedAt = Date()
+    }
+
+    private func markSyncRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) {
+        WalletSyncStateStore(keyValueStore: userDefaults).markRecordDeletedLocally(entity: entity, id: id)
+    }
+
+    private func markInstallmentPlanDeletedLocally(id: UUID, deletedAt: Date) {
+        WalletSyncStateStore(keyValueStore: userDefaults).markInstallmentPlanDeletedLocally(id: id, deletedAt: deletedAt)
+    }
+
+    private func markFinancialEventDeletedLocally(id: UUID, deletedAt: Date) {
+        WalletSyncStateStore(keyValueStore: userDefaults).markFinancialEventDeletedLocally(id: id, deletedAt: deletedAt)
     }
 
     private func saveLocalDataUpdatedAt() {

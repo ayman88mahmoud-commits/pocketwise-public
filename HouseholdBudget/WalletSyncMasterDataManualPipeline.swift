@@ -123,7 +123,12 @@ struct WalletSyncMasterDataManualPipeline {
             changedRecords: nonEchoRecords,
             deletedRecordNames: fetchResult.deletedRecordNames
         )
-        let plan = WalletSyncMasterDataApplyPlanBuilder(localState: localState).makePlan(
+        let stateStore = WalletSyncStateStore()
+        let plan = WalletSyncMasterDataApplyPlanBuilder(
+            localState: localState,
+            localFinancialEventDeletionStore: stateStore,
+            localRecordTombstoneStore: stateStore
+        ).makePlan(
             changedRecords: nonEchoRecords,
             deletedRecordNames: fetchResult.deletedRecordNames
         )

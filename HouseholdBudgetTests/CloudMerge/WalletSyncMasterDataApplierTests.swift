@@ -499,6 +499,26 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         XCTAssertEqual(deletionStore.deletedAtByID[eventID], deletedAt)
     }
 
+    func testRemoteInstallmentPlanDeletionRemovesPlanAndRecordsLocalTombstone() {
+        let planID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_500)
+        let store = FakeApplyingStore()
+        store.installmentPlans = [makeInstallmentPlan(id: planID)]
+        let deletionStore = FakeInstallmentPlanDeletionStore()
+        let plan = WalletSyncMasterDataApplyPlanSummary(items: [
+            makeItem(action: .deleteInstallmentPlan(id: planID, deletedAt: deletedAt), entity: .installmentPlanDeletion, id: planID)
+        ])
+
+        let result = WalletSyncMasterDataApplier(
+            store: store,
+            localInstallmentPlanDeletionStore: deletionStore
+        ).apply(plan)
+
+        XCTAssertEqual(result.disabledCount, 1)
+        XCTAssertTrue(store.installmentPlans.isEmpty)
+        XCTAssertEqual(deletionStore.deletedAtByID[planID], deletedAt)
+    }
+
     private final class FakeApplyingStore: WalletSyncMasterDataApplyingStore {
         var accounts: [Account]
         var categories: [WalletBoard.Category]
@@ -556,6 +576,18 @@ final class WalletSyncMasterDataApplierTests: XCTestCase {
         event.id = id
         return event
     }
+
+    private func makeInstallmentPlan(id: UUID = UUID()) -> InstallmentPlan {
+        InstallmentPlan(
+            id: id,
+            purchaseName: "Valu test",
+            totalAmount: 1000,
+            installmentCount: 4,
+            firstDueDate: Date(timeIntervalSince1970: 1_800_000_000),
+            categoryName: "Debt",
+            subCategoryName: "Installment"
+        )
+    }
 }
 
 private final class FakeFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring {
@@ -576,6 +608,28 @@ private final class FakeFinancialEventDeletionStore: WalletSyncLocalFinancialEve
     func syncableFinancialEventDeletionDTOs() -> [WalletSyncRecordDTO] {
         deletedAtByID.map { id, deletedAt in
             WalletSyncRecordMappers.dtoForFinancialEventDeletion(id: id, deletedAt: deletedAt)
+        }
+    }
+}
+
+private final class FakeInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring {
+    var deletedAtByID: [UUID: Date] = [:]
+
+    func markInstallmentPlanDeletedLocally(id: UUID, deletedAt: Date) {
+        deletedAtByID[id] = max(deletedAtByID[id] ?? .distantPast, deletedAt)
+    }
+
+    func isInstallmentPlanDeletedLocally(id: UUID) -> Bool {
+        deletedAtByID[id] != nil
+    }
+
+    func locallyDeletedInstallmentPlanDeletedAt(id: UUID) -> Date? {
+        deletedAtByID[id]
+    }
+
+    func syncableInstallmentPlanDeletionDTOs() -> [WalletSyncRecordDTO] {
+        deletedAtByID.map { id, deletedAt in
+            WalletSyncRecordMappers.dtoForInstallmentPlanDeletion(id: id, deletedAt: deletedAt)
         }
     }
 }

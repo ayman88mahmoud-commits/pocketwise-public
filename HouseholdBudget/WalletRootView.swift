@@ -1939,7 +1939,12 @@ struct ICloudSnapshotSyncView: View {
                 tokenStore: WalletSyncStateStore()
             )
             let output = try await controller.runDryRunLoopWithResult()
-            let plan = WalletSyncMasterDataApplyPlanBuilder(localState: store).makePlan(
+            let stateStore = WalletSyncStateStore()
+            let plan = WalletSyncMasterDataApplyPlanBuilder(
+                localState: store,
+                localFinancialEventDeletionStore: stateStore,
+                localRecordTombstoneStore: stateStore
+            ).makePlan(
                 changedRecords: output.fetchResult.records,
                 deletedRecordNames: output.fetchResult.deletedRecordNames
             )

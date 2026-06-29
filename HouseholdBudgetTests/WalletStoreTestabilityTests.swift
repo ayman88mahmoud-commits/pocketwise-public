@@ -114,8 +114,51 @@ final class WalletStoreTestabilityTests: XCTestCase {
 
         let syncState = WalletSyncStateStore(keyValueStore: defaults)
         XCTAssertTrue(syncState.isFinancialEventDeletedLocally(id: event.id))
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .financialEvent, id: event.id))
         XCTAssertEqual(syncState.syncableFinancialEventDeletionDTOs().first?.id, event.id)
         XCTAssertTrue(store.financialEvents.isEmpty)
+    }
+
+    func testDeleteCreditCardPurchaseRecordsLocalTombstone() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let purchase = CreditCardPurchase(
+            cardID: UUID(),
+            title: "Deleted Purchase",
+            amount: 100,
+            purchaseDate: Date(),
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        store.creditCardPurchases = [purchase]
+
+        store.deleteCreditCardPurchase(purchase)
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .creditCardPurchase, id: purchase.id))
+        XCTAssertTrue(store.creditCardPurchases.isEmpty)
+    }
+
+    func testDeleteInstallmentPlanRecordsSyncableLocalDeletionMarker() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let plan = InstallmentPlan(
+            purchaseName: "Valu test",
+            totalAmount: 1000,
+            installmentCount: 4,
+            firstDueDate: Date(),
+            categoryName: "Debt",
+            subCategoryName: "Installment"
+        )
+        store.installmentPlans = [plan]
+
+        store.deleteInstallmentPlanAndFutureEvents(plan)
+
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isInstallmentPlanDeletedLocally(id: plan.id))
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .installmentPlan, id: plan.id))
+        XCTAssertEqual(syncState.syncableInstallmentPlanDeletionDTOs().first?.id, plan.id)
+        XCTAssertTrue(store.installmentPlans.isEmpty)
     }
 
     func testClearingIsolatedSuiteGivesCleanWalletStore() {

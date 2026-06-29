@@ -227,6 +227,8 @@ struct WalletSyncMergePlanDryRun {
             return planMasterDataItem(item, exists: localState.containsFinancialEvent(id: id))
         case .financialEventDeletion:
             return makeItem(from: item, action: .wouldDelete)
+        case .installmentPlanDeletion:
+            return makeItem(from: item, action: .wouldDelete)
         case .creditCardPurchase:
             return planMasterDataItem(item, exists: localState.containsCreditCardPurchase(id: id))
         case .creditCardPayment:

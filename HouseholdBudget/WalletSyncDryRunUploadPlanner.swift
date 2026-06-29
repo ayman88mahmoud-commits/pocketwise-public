@@ -23,6 +23,7 @@ struct WalletSyncDryRunUploadPlanner {
             (.walletEvent,              store.walletEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.merchantMemory,           store.merchantMemories.map(WalletSyncRecordMappers.dto(for:))),
             (.installmentPlan,          store.installmentPlans.map(WalletSyncRecordMappers.dto(for:))),
+            (.installmentPlanDeletion,  WalletSyncStateStore().syncableInstallmentPlanDeletionDTOs()),
             (.financialEvent,           store.financialEvents.map(WalletSyncRecordMappers.dto(for:))),
             (.monthlyBudget,            store.monthlyBudgets.map(WalletSyncRecordMappers.dto(for:))),
             (.personDebt,               store.personDebts.map(WalletSyncRecordMappers.dto(for:))),

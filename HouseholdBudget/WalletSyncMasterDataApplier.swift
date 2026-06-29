@@ -31,13 +31,16 @@ struct WalletSyncMasterDataApplyResult: Equatable {
 struct WalletSyncMasterDataApplier {
     private let store: WalletSyncMasterDataApplyingStore
     private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring
+    private let localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring
 
     init(
         store: WalletSyncMasterDataApplyingStore,
-        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionStoring? = nil,
+        localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionStoring? = nil
     ) {
         self.store = store
         self.localFinancialEventDeletionStore = localFinancialEventDeletionStore ?? WalletSyncStateStore()
+        self.localInstallmentPlanDeletionStore = localInstallmentPlanDeletionStore ?? WalletSyncStateStore()
     }
 
     func apply(_ plan: WalletSyncMasterDataApplyPlanSummary) -> WalletSyncMasterDataApplyResult {
@@ -84,6 +87,8 @@ struct WalletSyncMasterDataApplier {
                 applyCreateInstallmentPlan(plan, result: &result)
             case .updateInstallmentPlan(let plan):
                 applyUpdateInstallmentPlan(plan, result: &result)
+            case .deleteInstallmentPlan(let id, let deletedAt):
+                applyDeleteInstallmentPlan(id: id, deletedAt: deletedAt, result: &result)
             case .createFinancialEvent(let event):
                 applyCreateFinancialEvent(event, result: &result)
             case .updateFinancialEvent(let event):
@@ -122,7 +127,7 @@ struct WalletSyncMasterDataApplier {
 
     private func applyPriority(for action: WalletSyncMasterDataApplyAction) -> Int {
         switch action {
-        case .deleteFinancialEvent:
+        case .deleteFinancialEvent, .deleteInstallmentPlan:
             return 0
         case .createCreditCard, .updateCreditCard,
              .createPersonDebt, .updatePersonDebt,
@@ -358,6 +363,18 @@ struct WalletSyncMasterDataApplier {
 
         store.installmentPlans[index] = remote
         result.updatedCount += 1
+    }
+
+    private func applyDeleteInstallmentPlan(id: UUID, deletedAt: Date, result: inout WalletSyncMasterDataApplyResult) {
+        localInstallmentPlanDeletionStore.markInstallmentPlanDeletedLocally(id: id, deletedAt: deletedAt)
+
+        guard let index = store.installmentPlans.firstIndex(where: { $0.id == id }) else {
+            result.skippedCount += 1
+            return
+        }
+
+        store.installmentPlans.remove(at: index)
+        result.disabledCount += 1
     }
 
     private func applyCreateFinancialEvent(_ event: FinancialEvent, result: inout WalletSyncMasterDataApplyResult) {

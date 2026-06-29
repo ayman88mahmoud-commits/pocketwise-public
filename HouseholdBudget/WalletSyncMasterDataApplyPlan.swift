@@ -62,6 +62,7 @@ enum WalletSyncMasterDataApplyAction: Equatable {
     case updateCreditCard(CreditCard)
     case createInstallmentPlan(InstallmentPlan)
     case updateInstallmentPlan(InstallmentPlan)
+    case deleteInstallmentPlan(id: UUID, deletedAt: Date)
     case createFinancialEvent(FinancialEvent)
     case updateFinancialEvent(FinancialEvent)
     case deleteFinancialEvent(id: UUID, deletedAt: Date)
@@ -91,6 +92,7 @@ enum WalletSyncMasterDataApplyBlockReason: Equatable {
     case localFinancialEventNewer
     case ambiguousFinancialEventTimestamp
     case locallyDeletedFinancialEvent
+    case locallyDeletedRecord
     case localAccountNewer
     case ambiguousAccountTimestamp
     case missingParentRecord
@@ -153,6 +155,7 @@ struct WalletSyncMasterDataApplyPlanSummary: Equatable {
             if case .deleteAccountSoftOrDisableOnly = $0.action { return true }
             if case .deleteCategorySoftOrDisableOnly = $0.action { return true }
             if case .deleteWalletEventSoftOrDisableOnly = $0.action { return true }
+            if case .deleteInstallmentPlan = $0.action { return true }
             if case .deleteFinancialEvent = $0.action { return true }
             return false
         }.count
@@ -179,18 +182,31 @@ private struct WalletSyncBatchParentAvailability {
     var personDebtIDs: Set<UUID> = []
     var monthlyBudgetIDs: Set<UUID> = []
     var financialEventDeletionDeletedAtByID: [UUID: Date] = [:]
+    var installmentPlanDeletionDeletedAtByID: [UUID: Date] = [:]
+}
+
+struct WalletSyncEmptyLocalRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading {
+    func isRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool {
+        false
+    }
 }
 
 struct WalletSyncMasterDataApplyPlanBuilder {
     private let localState: WalletSyncMergePlanLocalStateReading
     private let localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading
+    private let localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionReading
+    private let localRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading
 
     init(
         localState: WalletSyncMergePlanLocalStateReading,
-        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading = WalletSyncStateStore()
+        localFinancialEventDeletionStore: WalletSyncLocalFinancialEventDeletionReading = WalletSyncStateStore(),
+        localInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionReading = WalletSyncStateStore(),
+        localRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading = WalletSyncEmptyLocalRecordTombstoneStore()
     ) {
         self.localState = localState
         self.localFinancialEventDeletionStore = localFinancialEventDeletionStore
+        self.localInstallmentPlanDeletionStore = localInstallmentPlanDeletionStore
+        self.localRecordTombstoneStore = localRecordTombstoneStore
     }
 
     func makePlan(
@@ -207,7 +223,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
         var availability = WalletSyncBatchParentAvailability()
         for record in changedRecords {
             guard let dto = try? WalletSyncCKRecordAdapter.dto(from: record) else { continue }
-            guard !dto.isDeleted || dto.entity == .financialEventDeletion else { continue }
+            guard !dto.isDeleted || dto.entity == .financialEventDeletion || dto.entity == .installmentPlanDeletion else { continue }
             switch dto.entity {
             case .creditCard:
                 if creditCard(from: dto) != nil { availability.creditCardIDs.insert(dto.id) }
@@ -218,6 +234,10 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             case .financialEventDeletion:
                 if let deletedAt = financialEventDeletionDeletedAt(from: dto) {
                     availability.financialEventDeletionDeletedAtByID[dto.id] = deletedAt
+                }
+            case .installmentPlanDeletion:
+                if let deletedAt = deletionMarkerDeletedAt(from: dto) {
+                    availability.installmentPlanDeletionDeletedAtByID[dto.id] = deletedAt
                 }
             default:
                 break
@@ -280,8 +300,14 @@ struct WalletSyncMasterDataApplyPlanBuilder {
     }
 
     private func planDTO(_ dto: WalletSyncRecordDTO, batchParents: WalletSyncBatchParentAvailability) -> WalletSyncMasterDataApplyPlanItem {
-        if dto.isDeleted && dto.entity != .financialEventDeletion {
+        if dto.isDeleted && dto.entity != .financialEventDeletion && dto.entity != .installmentPlanDeletion {
             return planDeletedRecordName(dto.recordName)
+        }
+
+        if dto.entity != .financialEventDeletion,
+           dto.entity != .installmentPlanDeletion,
+           localRecordTombstoneStore.isRecordDeletedLocally(entity: dto.entity, id: dto.id) {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .locallyDeletedRecord)
         }
 
         switch dto.entity {
@@ -359,6 +385,13 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             guard let plan = installmentPlan(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
             }
+            if localInstallmentPlanDeletionStore.isInstallmentPlanDeletedLocally(id: dto.id) {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .locallyDeletedRecord)
+            }
+            if let batchDeletedAt = batchParents.installmentPlanDeletionDeletedAtByID[dto.id],
+               (dto.updatedAt ?? .distantPast) <= batchDeletedAt.addingTimeInterval(1) {
+                return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .locallyDeletedRecord)
+            }
             return WalletSyncMasterDataApplyPlanItem(
                 recordName: dto.recordName,
                 entity: .installmentPlan,
@@ -372,6 +405,8 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             return planFinancialEvent(dto: dto, event: event, batchParents: batchParents)
         case .financialEventDeletion:
             return planFinancialEventDeletion(dto: dto)
+        case .installmentPlanDeletion:
+            return planInstallmentPlanDeletion(dto: dto)
         case .creditCardPurchase:
             guard let purchase = creditCardPurchase(from: dto) else {
                 return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .missingRequiredField)
@@ -427,8 +462,7 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .ambiguousFinancialEventTimestamp)
         }
 
-        if let localDeletedAt = localFinancialEventDeletionStore.locallyDeletedFinancialEventDeletedAt(id: dto.id),
-           remoteUpdatedAt <= localDeletedAt.addingTimeInterval(1) {
+        if localFinancialEventDeletionStore.isFinancialEventDeletedLocally(id: dto.id) {
             return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .locallyDeletedFinancialEvent)
         }
 
@@ -472,6 +506,19 @@ struct WalletSyncMasterDataApplyPlanBuilder {
             entity: .financialEventDeletion,
             id: dto.id,
             action: .deleteFinancialEvent(id: dto.id, deletedAt: deletedAt)
+        )
+    }
+
+    private func planInstallmentPlanDeletion(dto: WalletSyncRecordDTO) -> WalletSyncMasterDataApplyPlanItem {
+        guard let deletedAt = deletionMarkerDeletedAt(from: dto) else {
+            return blockedItem(recordName: dto.recordName, entity: dto.entity, id: dto.id, reason: .invalidFieldValue)
+        }
+
+        return WalletSyncMasterDataApplyPlanItem(
+            recordName: dto.recordName,
+            entity: .installmentPlanDeletion,
+            id: dto.id,
+            action: .deleteInstallmentPlan(id: dto.id, deletedAt: deletedAt)
         )
     }
 
@@ -850,6 +897,11 @@ struct WalletSyncMasterDataApplyPlanBuilder {
     }
 
     private func financialEventDeletionDeletedAt(from dto: WalletSyncRecordDTO) -> Date? {
+        guard dto.isDeleted else { return nil }
+        return dto.deletedAt ?? dto.updatedAt
+    }
+
+    private func deletionMarkerDeletedAt(from dto: WalletSyncRecordDTO) -> Date? {
         guard dto.isDeleted else { return nil }
         return dto.deletedAt ?? dto.updatedAt
     }

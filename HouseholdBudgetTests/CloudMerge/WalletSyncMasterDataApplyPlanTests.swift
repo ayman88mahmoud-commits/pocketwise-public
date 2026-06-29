@@ -97,6 +97,84 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.plannedUpdateCount, 1)
     }
 
+    func testLocallyTombstonedSyncedRecordDoesNotPlanCreateFromRemoteRecord() {
+        let deletedID = UUID()
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(),
+            localRecordTombstoneStore: FakeLocalRecordTombstoneStore(deletedRecords: [.installmentPlan: [deletedID]])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: WalletSyncRecordDTO(
+                    recordName: WalletSyncRecordEntity.installmentPlan.recordName(for: deletedID),
+                    entity: .installmentPlan,
+                    id: deletedID,
+                    updatedAt: Date()
+                ))
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testLocallyTombstonedCreditCardPurchaseAndPaymentDoNotPlanCreate() {
+        let cardID = UUID()
+        let purchaseID = UUID()
+        let paymentID = UUID()
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(creditCardIDs: [cardID]),
+            localRecordTombstoneStore: FakeLocalRecordTombstoneStore(
+                deletedRecords: [
+                    .creditCardPurchase: [purchaseID],
+                    .creditCardPayment: [paymentID]
+                ]
+            )
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: creditCardPurchaseDTO(id: purchaseID, cardID: cardID, updatedAt: Date())),
+                record(for: creditCardPaymentDTO(id: paymentID, cardID: cardID, updatedAt: Date()))
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 2)
+        XCTAssertTrue(plan.items.allSatisfy {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testLocallyTombstonedPersonDebtEntryDoesNotPlanCreate() {
+        let debtID = UUID()
+        let entryID = UUID()
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(personDebtIDs: [debtID]),
+            localRecordTombstoneStore: FakeLocalRecordTombstoneStore(deletedRecords: [.personDebtEntry: [entryID]])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: personDebtEntryDTO(id: entryID, debtID: debtID, updatedAt: Date()))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
     func testLocallyDeletedFinancialEventDoesNotPlanCreateFromRemoteRecord() {
         let deletedID = UUID()
         let remoteUpdatedAt = Date(timeIntervalSince1970: 1_800_000_100)
@@ -178,6 +256,68 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         XCTAssertEqual(plan.blockedCount, 1)
         XCTAssertTrue(plan.items.contains {
             if case .blocked(.locallyDeletedFinancialEvent) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testInstallmentPlanDeletionMarkerPlansDeleteAction() {
+        let deletedID = UUID()
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_500)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: WalletSyncRecordMappers.dtoForInstallmentPlanDeletion(id: deletedID, deletedAt: deletedAt))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .deleteInstallmentPlan(let id, let markerDate) = $0.action {
+                return id == deletedID && markerDate == deletedAt
+            }
+            return false
+        })
+    }
+
+    func testInstallmentPlanDeletionMarkerBlocksOlderPlanInSameBatch() {
+        let deletedID = UUID()
+        let planUpdatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let deletedAt = Date(timeIntervalSince1970: 1_800_001_500)
+        let planner = WalletSyncMasterDataApplyPlanBuilder(localState: FakeLocalState())
+
+        let plan = planner.makePlan(
+            changedRecords: [
+                record(for: WalletSyncRecordMappers.dto(for: makeInstallmentPlan(id: deletedID, updatedAt: planUpdatedAt))),
+                record(for: WalletSyncRecordMappers.dtoForInstallmentPlanDeletion(id: deletedID, deletedAt: deletedAt))
+            ],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.plannedDisableCount, 1)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
+            return false
+        })
+    }
+
+    func testLocallyDeletedInstallmentPlanDoesNotPlanCreateFromRemoteRecord() {
+        let deletedID = UUID()
+        let planner = WalletSyncMasterDataApplyPlanBuilder(
+            localState: FakeLocalState(),
+            localInstallmentPlanDeletionStore: FakeLocalInstallmentPlanDeletionStore(deletedIDs: [deletedID])
+        )
+
+        let plan = planner.makePlan(
+            changedRecords: [record(for: WalletSyncRecordMappers.dto(for: makeInstallmentPlan(id: deletedID)))],
+            deletedRecordNames: []
+        )
+
+        XCTAssertEqual(plan.plannedCreateCount, 0)
+        XCTAssertEqual(plan.blockedCount, 1)
+        XCTAssertTrue(plan.items.contains {
+            if case .blocked(.locallyDeletedRecord) = $0.action { return true }
             return false
         })
     }
@@ -532,6 +672,19 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
         WalletSyncCKRecordAdapter.ckRecord(from: dto)
     }
 
+    private func makeInstallmentPlan(id: UUID = UUID(), updatedAt: Date = Date()) -> InstallmentPlan {
+        InstallmentPlan(
+            id: id,
+            purchaseName: "Valu test",
+            totalAmount: 1000,
+            installmentCount: 4,
+            firstDueDate: Date(timeIntervalSince1970: 1_800_000_000),
+            categoryName: "Debt",
+            subCategoryName: "Installment",
+            updatedAt: updatedAt
+        )
+    }
+
     private func creditCardDTO(id: UUID) -> WalletSyncRecordDTO {
         WalletSyncRecordDTO(
             recordName: WalletSyncRecordEntity.creditCard.recordName(for: id),
@@ -795,6 +948,30 @@ final class WalletSyncMasterDataApplyPlanTests: XCTestCase {
 
         func locallyDeletedFinancialEventDeletedAt(id: UUID) -> Date? {
             deletedAtByID[id]
+        }
+    }
+
+    private struct FakeLocalInstallmentPlanDeletionStore: WalletSyncLocalInstallmentPlanDeletionReading {
+        var deletedAtByID: [UUID: Date]
+
+        init(deletedIDs: Set<UUID>) {
+            self.deletedAtByID = Dictionary(uniqueKeysWithValues: deletedIDs.map { ($0, .distantFuture) })
+        }
+
+        func isInstallmentPlanDeletedLocally(id: UUID) -> Bool {
+            deletedAtByID[id] != nil
+        }
+
+        func locallyDeletedInstallmentPlanDeletedAt(id: UUID) -> Date? {
+            deletedAtByID[id]
+        }
+    }
+
+    private struct FakeLocalRecordTombstoneStore: WalletSyncLocalRecordTombstoneReading {
+        var deletedRecords: [WalletSyncRecordEntity: Set<UUID>]
+
+        func isRecordDeletedLocally(entity: WalletSyncRecordEntity, id: UUID) -> Bool {
+            deletedRecords[entity]?.contains(id) == true
         }
     }
 }
