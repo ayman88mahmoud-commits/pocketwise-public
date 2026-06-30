@@ -48,6 +48,43 @@ CloudKit automatic sync remains disabled. `WalletSyncFeatureFlags.isAutomaticClo
 
 ---
 
+## Manual Restore Blocking Gate — Implementation Status
+
+Implemented in commit: Block restore on backup validation errors  
+Date: 2026-06-30
+
+### What was implemented
+
+- **`importPendingBackup()` in `DataBackupView`**: added early guard that checks `validationReport.hasErrors` before calling `importBackupSnapshotFromJSON`. If errors are present, `errorMessage` is set to the first blocking error's detail text, the pending data is cleared, and the function returns without mutating the store.
+- **`BackupRestorePreviewSheet` in `DataBackupView`**: added a distinct "Restore Blocked" error section (red text) that appears instead of the "Compatibility Warnings" section when `hasErrors` is true. Error details are shown per issue.
+- **Restore button in `BackupRestorePreviewSheet`**: disabled (`.disabled(preview.validationReport.hasErrors)`) when the report contains blocking errors.
+
+### What now blocks restore
+
+| Condition | How blocked |
+|---|---|
+| `snapshot.schemaVersion > WalletDataSnapshot.currentSchemaVersion` | UI layer: `importPendingBackup` returns early, sets `errorMessage`. Preview sheet: restore button disabled, blocking error section shown. WalletStore layer: `validateBackupSnapshot` throws `unsupportedSchemaVersion` (defense-in-depth). |
+
+### What remains warning-only (non-blocking)
+
+| Condition | Behavior |
+|---|---|
+| Paid event referencing a non-existent account name | `.warning` in report — restore still proceeds |
+| Duplicate financial event IDs | `.warning` in report — blocked at `validateBackupSnapshot` level but NOT flagged as `.error` in the report |
+| Installment paid count exceeds total | `.warning` in report — restore proceeds |
+| Future-dated paid events | `.warning` in report — restore proceeds |
+| Credit card reference missing (purchase/payment with no card) | `.warning` in report — blocked at `validateBackupSnapshot` level |
+
+### No broad restore redesign
+
+The restore flow (`handleImportResult` → preview sheet → `importPendingBackup` → `importBackupSnapshotFromJSON`) was not restructured. Only targeted additions: one early-exit guard in `importPendingBackup`, one `if/else` split in the preview section, and one `.disabled` modifier on the restore button.
+
+### Confirmation
+
+CloudKit automatic sync remains disabled. `WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled` is `false`. Backup file format was not changed. No financial behavior was changed.
+
+---
+
 ## 1. Executive Summary
 
 The app has an existing `makeBackupValidationReport(for:)` function that performs structural backup validation — checking referential integrity, value ranges, and required fields across the current snapshot. That validator uses `.warning` and `.info` severities only; there is no blocking `.error` severity in the current model.

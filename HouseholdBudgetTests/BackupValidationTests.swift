@@ -405,6 +405,97 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertFalse(report.hasErrors)
     }
 
+    // MARK: - Restore blocking gate
+
+    func testRestoreIsBlockedAtStoreForFutureSchemaVersion() throws {
+        let store = makeStore()
+        let futureVersion = WalletDataSnapshot.currentSchemaVersion + 1
+        let snapshot = makeSnapshot(
+            schemaVersion: futureVersion,
+            accounts: store.accounts,
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        XCTAssertTrue(report.hasErrors, "Future schema version must produce a blocking error")
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot)) { error in
+            guard let backupError = error as? WalletBackupError,
+                  case .unsupportedSchemaVersion = backupError else {
+                XCTFail("Expected WalletBackupError.unsupportedSchemaVersion, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testRestoreDoesNotMutateStoreWhenBlockedBySchemaVersion() throws {
+        let store = makeStore()
+        let originalAccounts = store.accounts
+        let originalFinancialEvents = store.financialEvents
+        let futureVersion = WalletDataSnapshot.currentSchemaVersion + 1
+        let snapshot = makeSnapshot(
+            schemaVersion: futureVersion,
+            accounts: [Account(name: "Replacement Account", balance: 99_999, type: .cash)],
+            categories: store.categories
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+
+        XCTAssertEqual(store.accounts.map(\.name), originalAccounts.map(\.name),
+                       "Store accounts must be unchanged after a blocked restore")
+        XCTAssertEqual(store.financialEvents.count, originalFinancialEvents.count,
+                       "Store financial events must be unchanged after a blocked restore")
+    }
+
+    func testRestoreSucceedsForCurrentSchemaVersion() throws {
+        let store = makeStore()
+        let snapshot = makeSnapshot(
+            schemaVersion: WalletDataSnapshot.currentSchemaVersion,
+            accounts: [Account(name: "Restored Account", balance: 5_000, type: .cash)],
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        XCTAssertFalse(report.hasErrors, "Current schema version must not produce blocking errors")
+
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+        XCTAssertEqual(store.accounts.first?.name, "Restored Account",
+                       "Store must reflect the restored snapshot after a successful restore")
+    }
+
+    func testWarningOnlyReportDoesNotBlockRestoreAtStoreLevel() throws {
+        let store = makeStore()
+        // A paid non-transfer event referencing a non-existent account name produces .warning
+        // in makeBackupValidationReport but does NOT cause validateBackupSnapshot to throw
+        // (validateBackupSnapshot only enforces account names on transfer events).
+        let paidEventWithMissingAccount = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Paid With Missing Account",
+            amount: 100,
+            date: startDate,
+            accountName: "Non-Existent Account",
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let snapshot = makeSnapshot(
+            schemaVersion: WalletDataSnapshot.currentSchemaVersion,
+            accounts: store.accounts,
+            categories: store.categories,
+            financialEvents: [paidEventWithMissingAccount]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        XCTAssertFalse(report.hasErrors, "Missing account on paid event must be a .warning, not a blocking .error")
+        XCTAssertTrue(report.warningCount > 0, "Missing account on paid event must produce a warning")
+
+        XCTAssertNoThrow(
+            try store.restoreFromBackupSnapshot(snapshot),
+            "Warning-only report must not block restore at the store level"
+        )
+    }
+
     func testValidationDoesNotFlagUniqueMonthlyBudgetItemIDs() {
         let store = makeStore()
         let budget = WalletMonthlyBudget(

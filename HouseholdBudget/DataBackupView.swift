@@ -222,6 +222,15 @@ struct DataBackupView: View {
             return
         }
 
+        if let validationReport = pendingRestorePreview?.validationReport, validationReport.hasErrors {
+            let firstErrorDetail = validationReport.issues.first(where: { $0.severity == .error })?.detail ?? "Validation failed."
+            errorMessage = "Restore blocked: \(firstErrorDetail)"
+            statusMessage = nil
+            self.pendingImportData = nil
+            pendingRestorePreview = nil
+            return
+        }
+
         do {
             let validationReport = pendingRestorePreview?.validationReport
             try store.importBackupSnapshotFromJSON(pendingImportData)
@@ -334,7 +343,25 @@ private struct BackupRestorePreviewSheet: View {
                     detailRow(isArabic ? "أحدث معاملة حالية" : "Current latest transaction", metadataDateText(currentSummary.latestTransactionDate))
                 }
 
-                if preview.validationReport.hasIssues {
+                if preview.validationReport.hasErrors {
+                    Section(isArabic ? "خطأ — الاسترجاع محظور" : "Restore Blocked") {
+                        Text(isArabic ? "مش ممكن استرجاع النسخة دي. في مشكلة بتمنع الاسترجاع الآمن." : "This backup cannot be restored. A blocking error was detected that prevents safe restore.")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+
+                        ForEach(preview.validationReport.issues.filter { $0.severity == .error }) { issue in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(issue.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.red)
+                                Text(issue.detail)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                } else if preview.validationReport.hasIssues {
                     Section(isArabic ? "تحذيرات التوافق" : "Compatibility Warnings") {
                         Text(isArabic ? "الاسترجاع لسه مسموح. التحذيرات دي للمراجعة فقط ومش بتعدل بيانات النسخة." : "Restore is still allowed. These warnings are review-only and do not change the backup data.")
                             .font(.footnote)
@@ -385,6 +412,7 @@ private struct BackupRestorePreviewSheet: View {
                         onRestore()
                         dismiss()
                     }
+                    .disabled(preview.validationReport.hasErrors)
                 }
             }
         }
