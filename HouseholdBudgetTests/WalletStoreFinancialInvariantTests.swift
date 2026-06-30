@@ -589,6 +589,40 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         XCTAssertEqual(store.availableCash, 10_000, accuracy: 0.001)
     }
 
+    func testDeletePersonDebtReversesLinkedEntryBalanceImpact() {
+        let store = makeStore(startingCash: 1_000)
+
+        // Lending 200 (owedToMe) reduces cash by 200 via initialLending entry impact.
+        let didAdd = store.addPersonDebt(
+            kind: .owedToMe,
+            personName: "Test Borrower",
+            amount: 200,
+            accountName: accountName,
+            date: startDate,
+            dueDate: nil,
+            note: nil
+        )
+
+        XCTAssertTrue(didAdd)
+        XCTAssertEqual(store.availableCash, 800, accuracy: 0.001,
+            "Lending must decrease cash by the lent amount.")
+
+        guard let debt = store.personDebts.first else {
+            XCTFail("Expected a person debt record after addPersonDebt.")
+            return
+        }
+
+        let didDelete = store.deletePersonDebt(debt)
+
+        XCTAssertTrue(didDelete)
+        XCTAssertEqual(store.availableCash, 1_000, accuracy: 0.001,
+            "Deleting a debt must reverse all linked entry balance impacts and restore original cash.")
+        XCTAssertTrue(store.personDebts.isEmpty,
+            "Deleted debt must be removed from personDebts.")
+        XCTAssertTrue(store.personDebtEntries.isEmpty,
+            "All child entries must be removed when parent debt is deleted.")
+    }
+
     func testDeletingRecurringIncomeSeriesRemovesFutureGeneratedOccurrences() {
         let store = makeStore(startingCash: 10_000)
         let salary = makeVariableRecurringIncomeSeries(

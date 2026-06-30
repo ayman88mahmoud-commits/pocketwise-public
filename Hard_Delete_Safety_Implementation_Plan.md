@@ -358,7 +358,55 @@ Subcategories currently have no UUID, tombstone, or sync identity. They cannot p
 
 ---
 
-## 10. Recommendation
+## 10. Delete Behavior Baseline Tests Added
+
+### Tests Added
+
+Three new tests were added as part of the Phase 1 baseline. They are in `HouseholdBudgetTests/WalletStoreFinancialInvariantTests.swift` and `HouseholdBudgetTests/WalletStoreTestabilityTests.swift`.
+
+| Test | File | What It Asserts |
+|---|---|---|
+| `testDeletePersonDebtReversesLinkedEntryBalanceImpact` | `WalletStoreFinancialInvariantTests` | Lending 200 decreases cash; deleting the debt restores cash to original; parent and child entries are removed. |
+| `testDeleteSubcategoryIfUnusedRemovesSubcategoryAndWritesNoTombstone` | `WalletStoreTestabilityTests` | The subcategory is removed from the category; other subcategories are unaffected; no parent-category tombstone is written; financial events are untouched. |
+| `testResetToSampleDataWritesNoTombstonesForClearedRecords` | `WalletStoreTestabilityTests` | After `resetToSampleData`, cleared financial events and credit card payments are absent from the store; no financial event tombstone or high-risk tombstone is written for any cleared record. |
+
+### Delete Paths Covered by Existing Tests (Before This Change)
+
+The following paths were already covered before this task:
+
+- `deleteFinancialEvent` — tombstone written, event removed, balance reversed, `updatedAt` advanced (`WalletStoreTestabilityTests`, `WalletStoreFinancialInvariantTests`)
+- `deleteCreditCardPurchase` — high-risk tombstone written, purchase removed (`WalletStoreTestabilityTests`)
+- `deleteCreditCardPayment` — high-risk tombstone written, payment removed, source account balance restored (`WalletStoreTestabilityTests`)
+- `deletePersonDebt` — tombstones for parent and child entries written, arrays cleared (`WalletStoreTestabilityTests`)
+- `saveMonthlyBudget` removed-item path — high-risk tombstone written per removed item, ID not reused (`WalletStoreTestabilityTests`)
+- `deleteInstallmentPlanAndFutureEvents` — plan deletion marker written, plan removed (`WalletStoreTestabilityTests`)
+- `deleteFinancialEvent` on recurring income series — future occurrences removed, cash unchanged (`WalletStoreFinancialInvariantTests`)
+
+### Delete Paths Still Not Covered by Tests
+
+| Path | Why Not Yet |
+|---|---|
+| `deleteCategoryIfUnused` | Requires additional setup: a used/unused guard must be satisfied (category may have no financial events, wallet events, installment plans, or summaries referencing it). The tombstone path is structurally identical to `deleteAccountIfUnused` and can be covered later. |
+| `deleteAccountIfUnused` | Same as above — guard requires no existing transactions. Test setup is straightforward but was not a gap for the current phase. |
+| `deletePersonDebt` with mismatched account name | Account resolution is string-based. Testing the silent-failure path (account renamed before delete) requires a specific setup; deferred to Phase 2 validation tests. |
+| `deleteInstallmentPlanAndFutureEvents` leaving paid events intact | Requires first marking installment events as paid, then deleting the plan. The paid-event survival assertion is documented but not yet tested in isolation. |
+| `removeSeedDataBeforeInitialCloudAdoptionIfSafe` | Requires the store to contain exactly the sample seed data; no writes tombstones. The behavior is documented and guarded; deferred to sync adoption design phase. |
+| `clearLocallyDeleted*` methods in `WalletSyncStateStore` | These clear tombstone markers and are dangerous before CloudKit delivery is confirmed. Tests require the sync pipeline design to be settled first. |
+| Restore/import bringing back a deleted record | Requires a backup encode/decode round-trip combined with a delete. Deferred to the backup integration test phase. |
+
+### Why No Deletion Behavior Was Changed
+
+All three new tests assert the existing behavior exactly as it is. No production Swift code was modified. The tests serve as regression baselines: if any future soft-delete or tombstone policy change inadvertently alters the behavior documented here, these tests will catch it before release.
+
+### Remaining Risks
+
+- `deletePersonDebt` when the source account has been renamed still silently fails to reverse the balance impact. The existing tombstones are still written, but balance state is incorrect. This must be addressed before any balance-affecting sync path is enabled.
+- `resetToSampleData` writes no tombstones and leaves the sync tombstone store in whatever state it was in before the call. If the store ever had active tombstones from a prior sync session and `resetToSampleData` is called, those tombstones persist in UserDefaults without any matching live records. The call-ordering risk during sync is now documented with a test proving the no-tombstone gap.
+- Subcategory deletion still has no identity, no tombstone, and no sync strategy. The new baseline test explicitly documents and asserts the current tombstone gap.
+
+---
+
+## 11. Recommendation
 
 The smallest safe next implementation step is a focused test suite that documents the current hard-delete and tombstone behavior for each high-risk path without modifying any Swift code.
 

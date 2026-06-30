@@ -401,6 +401,76 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertEqual(restoredBudget.items.first { $0.id == transportID }?.updatedAt, updatedAt)
     }
 
+    func testDeleteSubcategoryIfUnusedRemovesSubcategoryAndWritesNoTombstone() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let category = WalletBoard.Category(name: "Food", subcategories: ["Groceries", "Restaurants"])
+        store.categories = [category]
+
+        store.deleteSubcategoryIfUnused("Groceries", in: category)
+
+        let updatedCategory = store.categories.first { $0.id == category.id }
+        XCTAssertFalse(updatedCategory?.subcategories.contains("Groceries") == true,
+            "The deleted subcategory must be removed from the category.")
+        XCTAssertTrue(updatedCategory?.subcategories.contains("Restaurants") == true,
+            "Other subcategories must not be affected.")
+        XCTAssertEqual(store.categories.count, 1,
+            "The parent category must not be removed.")
+        XCTAssertTrue(store.financialEvents.isEmpty,
+            "Deleting a subcategory must not affect financial events.")
+
+        // Subcategories have no sync identity — no tombstone must be written.
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertFalse(syncState.isRecordDeletedLocally(entity: .category, id: category.id),
+            "Deleting a subcategory must not write a tombstone for the parent category.")
+    }
+
+    func testResetToSampleDataWritesNoTombstonesForClearedRecords() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+
+        let event = FinancialEvent(
+            type: .expense,
+            status: .unpaid,
+            title: "Pre-Reset Expense",
+            amount: 100,
+            date: Date(),
+            accountName: nil,
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let payment = CreditCardPayment(
+            id: UUID(),
+            cardID: UUID(),
+            fromAccountName: "Cash",
+            amount: 500,
+            paymentDate: Date(),
+            note: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let eventID = event.id
+        let paymentID = payment.id
+        store.financialEvents = [event]
+        store.creditCardPayments = [payment]
+
+        store.resetToSampleData()
+
+        XCTAssertFalse(store.financialEvents.contains { $0.id == eventID },
+            "The pre-reset event must not appear after resetToSampleData.")
+        XCTAssertFalse(store.creditCardPayments.contains { $0.id == paymentID },
+            "The pre-reset payment must not appear after resetToSampleData.")
+
+        // resetToSampleData silently wipes arrays — it must not write tombstones.
+        // A future sync engine must never treat this as a deletion event.
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertFalse(syncState.isFinancialEventDeletedLocally(id: eventID),
+            "resetToSampleData must not write a financial event tombstone for cleared records.")
+        XCTAssertFalse(syncState.isHighRiskRecordDeletedLocally(entity: .creditCardPayment, id: paymentID),
+            "resetToSampleData must not write a high-risk tombstone for cleared credit card payments.")
+    }
+
     func testDeleteInstallmentPlanRecordsSyncableLocalDeletionMarker() {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)
