@@ -33,6 +33,7 @@ protocol WalletSyncCurrentDateProviding {
 }
 
 struct WalletSyncSystemDateProvider: WalletSyncCurrentDateProviding {
+    nonisolated init() {}
     var now: Date { Date() }
 }
 
