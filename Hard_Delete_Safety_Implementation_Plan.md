@@ -382,6 +382,37 @@ The following paths were already covered before this task:
 - `deleteInstallmentPlanAndFutureEvents` — plan deletion marker written, plan removed (`WalletStoreTestabilityTests`)
 - `deleteFinancialEvent` on recurring income series — future occurrences removed, cash unchanged (`WalletStoreFinancialInvariantTests`)
 
+### Installment Plan Delete Baseline Coverage
+
+**Test added:** `testDeleteInstallmentPlanRemovesUnpaidEventsAndPreservesPaidEvents` in `WalletStoreFinancialInvariantTests.swift`
+
+**What behavior is now protected:**
+
+- A 3-installment plan ($3,000 total) is created and its events generated via `addInstallmentPlanAndGenerateEvents`.
+- The first installment is marked paid using `markAsPaid`, reducing cash from $10,000 to $9,000.
+- `deleteInstallmentPlanAndFutureEvents` is called.
+- The test asserts that the installment plan is removed from `installmentPlans`.
+- The test asserts that both remaining unpaid installment events are removed from `financialEvents`.
+- The test asserts that the paid installment event is preserved in `financialEvents` — it represents a settled financial record and must not be erased by plan deletion.
+- The test asserts that available cash remains $9,000 after plan deletion, confirming the paid event's balance impact stays in the ledger.
+- The test asserts that an unrelated financial event added before deletion is not touched.
+- The test asserts that an installment plan tombstone is written via `markInstallmentPlanDeletedLocally`.
+- The test asserts that a financial event tombstone is written for each removed unpaid event.
+- The test asserts that no tombstone is written for the preserved paid event.
+
+**Whether paid/actual related events are preserved:** Yes — the production code filters by `status != .paid` when selecting events to remove. The test now documents and protects this behavior. Paid installment events survive plan deletion and their balance impact remains in the account ledger.
+
+**What remains uncovered:**
+
+- The case where paid installment events survive plan deletion but their `sourceInstallmentPlanID` now references a non-existent plan. No validation currently detects orphaned paid installment events. This is a known gap documented in Section 3.4 of this plan.
+- Plan deletion when no events were ever generated (edge case for malformed data).
+- Plan deletion when all installments have been paid (all events preserved, no unpaid events to tombstone).
+- Backup round-trip: a backup taken after plan deletion followed by restore should not regenerate unpaid events. Not yet tested.
+
+**Confirmation no deletion behavior was changed:** The production implementation of `deleteInstallmentPlanAndFutureEvents` was not modified. The test asserts existing behavior only.
+
+---
+
 ### Delete Paths Still Not Covered by Tests
 
 | Path | Why Not Yet |

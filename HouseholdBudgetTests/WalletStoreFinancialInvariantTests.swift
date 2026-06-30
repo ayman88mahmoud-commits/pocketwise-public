@@ -589,6 +589,86 @@ final class WalletStoreFinancialInvariantTests: XCTestCase {
         XCTAssertEqual(store.availableCash, 10_000, accuracy: 0.001)
     }
 
+    func testDeleteInstallmentPlanRemovesUnpaidEventsAndPreservesPaidEvents() throws {
+        let defaults = makeIsolatedUserDefaults()
+        let store = makeStore(startingCash: 10_000, userDefaults: defaults)
+        let plan = makeInstallmentPlan(
+            totalAmount: 3_000,
+            installmentCount: 3,
+            firstDueDate: startDate
+        )
+        store.addInstallmentPlanAndGenerateEvents(plan)
+
+        // Sort generated events by date so the earliest is first.
+        let generatedEvents = store.financialEvents
+            .filter { $0.sourceInstallmentPlanID == plan.id && $0.type == .installment }
+            .sorted { $0.date < $1.date }
+        XCTAssertEqual(generatedEvents.count, 3,
+            "Expected 3 generated installment events.")
+
+        // Mark the first installment paid — applies balance impact.
+        let firstInstallment = try XCTUnwrap(generatedEvents.first)
+        store.markAsPaid(firstInstallment)
+        XCTAssertEqual(store.availableCash, 9_000, accuracy: 0.001,
+            "Paying the first installment must reduce cash by the installment amount.")
+
+        let paidEventID = firstInstallment.id
+        let unpaidEventIDs = generatedEvents.dropFirst().map(\.id)
+
+        // Add an unrelated event to prove it is not touched by the delete.
+        let unrelatedEvent = FinancialEvent(
+            type: .expense,
+            status: .unpaid,
+            title: "Unrelated Expense",
+            amount: 50,
+            date: startDate,
+            accountName: nil,
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        store.financialEvents.append(unrelatedEvent)
+
+        store.deleteInstallmentPlanAndFutureEvents(plan)
+
+        // Plan must be removed.
+        XCTAssertFalse(store.installmentPlans.contains { $0.id == plan.id },
+            "The installment plan must be removed from installmentPlans.")
+
+        // Paid event must be preserved — it represents a settled financial record.
+        XCTAssertTrue(store.financialEvents.contains { $0.id == paidEventID },
+            "A paid installment event must not be removed when the plan is deleted.")
+
+        // Cash must still reflect the paid installment — the paid event remains in the ledger.
+        XCTAssertEqual(store.availableCash, 9_000, accuracy: 0.001,
+            "Available cash must remain reduced by the paid installment after plan deletion.")
+
+        // Unpaid (future/generated) events must be removed.
+        for id in unpaidEventIDs {
+            XCTAssertFalse(store.financialEvents.contains { $0.id == id },
+                "Unpaid installment event must be removed when the plan is deleted.")
+        }
+
+        // Unrelated event must not be touched.
+        XCTAssertTrue(store.financialEvents.contains { $0.id == unrelatedEvent.id },
+            "Unrelated financial events must not be affected by plan deletion.")
+
+        // Plan tombstone must be written.
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isInstallmentPlanDeletedLocally(id: plan.id),
+            "Plan deletion must write an installment plan tombstone.")
+
+        // Each removed unpaid event must have a financial event tombstone.
+        for id in unpaidEventIDs {
+            XCTAssertTrue(syncState.isFinancialEventDeletedLocally(id: id),
+                "Each removed unpaid event must have a financial event tombstone.")
+        }
+
+        // The preserved paid event must NOT have a tombstone.
+        XCTAssertFalse(syncState.isFinancialEventDeletedLocally(id: paidEventID),
+            "The preserved paid event must not have a tombstone written on plan deletion.")
+    }
+
     func testDeletePersonDebtReversesLinkedEntryBalanceImpact() {
         let store = makeStore(startingCash: 1_000)
 
