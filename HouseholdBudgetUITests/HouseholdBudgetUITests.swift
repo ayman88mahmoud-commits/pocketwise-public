@@ -41,7 +41,7 @@ final class HouseholdBudgetUITests: XCTestCase {
 
         tapButton(identifier: "button.settingsCreditCards", fallbackLabel: "Credit Cards", in: app)
         XCTAssertTrue(waitForIdentifier("screen.creditCards", in: app), "Credit Cards screen did not appear.")
-        XCTAssertTrue(app.staticTexts["PocketWise Demo Card"].waitForExistence(timeout: 5), "Demo credit card label did not appear.")
+        XCTAssertTrue(app.staticTexts["WalletBoard Demo Card"].waitForExistence(timeout: 5), "Demo credit card label did not appear.")
         navigateBack(in: app)
 
         tapButton(identifier: "button.settingsDataBackup", fallbackLabel: "Data Backup", in: app)
