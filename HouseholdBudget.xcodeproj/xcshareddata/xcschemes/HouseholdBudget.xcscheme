@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DF0F356B2FC8D38E00BA4BC7"
-               BuildableName = "PocketWise.app"
+               BuildableName = "WalletBoard.app"
                BlueprintName = "PocketWise"
                ReferencedContainer = "container:HouseholdBudget.xcodeproj">
             </BuildableReference>
@@ -30,7 +30,8 @@
       shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
          <TestPlanReference
-            reference = "container:HouseholdBudget.xctestplan">
+            reference = "container:HouseholdBudget.xctestplan"
+            default = "YES">
          </TestPlanReference>
       </TestPlans>
       <Testables>
@@ -74,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DF0F356B2FC8D38E00BA4BC7"
-            BuildableName = "PocketWise.app"
+            BuildableName = "WalletBoard.app"
             BlueprintName = "PocketWise"
             ReferencedContainer = "container:HouseholdBudget.xcodeproj">
          </BuildableReference>
@@ -91,7 +92,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DF0F356B2FC8D38E00BA4BC7"
-            BuildableName = "PocketWise.app"
+            BuildableName = "WalletBoard.app"
             BlueprintName = "PocketWise"
             ReferencedContainer = "container:HouseholdBudget.xcodeproj">
          </BuildableReference>
