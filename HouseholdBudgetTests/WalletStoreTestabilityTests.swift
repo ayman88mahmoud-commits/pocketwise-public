@@ -401,6 +401,103 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertEqual(restoredBudget.items.first { $0.id == transportID }?.updatedAt, updatedAt)
     }
 
+    func testDeleteCategoryIfUnusedIsBlockedWhenReferencedByFinancialEvent() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let category = WalletBoard.Category(name: "Groceries", subcategories: ["Groceries"])
+        store.categories = [category]
+        // Reference is name-based — the guard checks categoryName string equality.
+        let event = FinancialEvent(
+            type: .expense,
+            status: .unpaid,
+            title: "Supermarket",
+            amount: 200,
+            date: Date(),
+            accountName: nil,
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        store.financialEvents = [event]
+
+        store.deleteCategoryIfUnused(category)
+
+        XCTAssertTrue(store.categories.contains { $0.id == category.id },
+            "A category referenced by a financial event must not be deleted.")
+        XCTAssertTrue(store.financialEvents.contains { $0.id == event.id },
+            "The referencing financial event must not be touched.")
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertFalse(syncState.isRecordDeletedLocally(entity: .category, id: category.id),
+            "No category tombstone must be written when deletion is blocked by a reference.")
+    }
+
+    func testDeleteCategoryIfUnusedRemovesUnusedCategoryAndWritesTombstone() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let category = WalletBoard.Category(name: "Unused Category", subcategories: [])
+        store.categories = [category]
+
+        store.deleteCategoryIfUnused(category)
+
+        XCTAssertFalse(store.categories.contains { $0.id == category.id },
+            "An unused category must be removed from categories.")
+        XCTAssertTrue(store.financialEvents.isEmpty,
+            "Deleting an unused category must not affect financial events.")
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .category, id: category.id),
+            "Deleting an unused category must write a sync tombstone.")
+    }
+
+    func testDeleteAccountIfUnusedIsBlockedWhenReferencedByFinancialEvent() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let account = Account(name: "Main Cash", balance: 1_000, type: .cash)
+        store.accounts = [account]
+        let startingBalance = account.balance
+        // Reference is name-based — the guard checks accountName string equality.
+        let event = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Supermarket",
+            amount: 200,
+            date: Date(),
+            accountName: "Main Cash",
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        store.financialEvents = [event]
+
+        store.deleteAccountIfUnused(account)
+
+        XCTAssertTrue(store.accounts.contains { $0.id == account.id },
+            "An account referenced by a financial event must not be deleted.")
+        XCTAssertTrue(store.financialEvents.contains { $0.id == event.id },
+            "The referencing financial event must not be touched.")
+        XCTAssertEqual(store.accounts.first?.balance ?? 0, startingBalance, accuracy: 0.001,
+            "Account balance must not be mutated when deletion is blocked.")
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertFalse(syncState.isRecordDeletedLocally(entity: .account, id: account.id),
+            "No account tombstone must be written when deletion is blocked by a reference.")
+    }
+
+    func testDeleteAccountIfUnusedRemovesUnusedAccountAndWritesTombstone() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let account = Account(name: "Unused Account", balance: 0, type: .cash)
+        store.accounts = [account]
+
+        store.deleteAccountIfUnused(account)
+
+        XCTAssertFalse(store.accounts.contains { $0.id == account.id },
+            "An unused account must be removed from accounts.")
+        XCTAssertTrue(store.financialEvents.isEmpty,
+            "Deleting an unused account must not affect financial events.")
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .account, id: account.id),
+            "Deleting an unused account must write a sync tombstone.")
+    }
+
     func testDeleteSubcategoryIfUnusedRemovesSubcategoryAndWritesNoTombstone() {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)

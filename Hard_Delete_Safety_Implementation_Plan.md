@@ -382,6 +382,40 @@ The following paths were already covered before this task:
 - `deleteInstallmentPlanAndFutureEvents` — plan deletion marker written, plan removed (`WalletStoreTestabilityTests`)
 - `deleteFinancialEvent` on recurring income series — future occurrences removed, cash unchanged (`WalletStoreFinancialInvariantTests`)
 
+### Account and Category Delete Guard Baseline Coverage
+
+**Tests added** (all in `WalletStoreTestabilityTests.swift`):
+
+| Test | What It Asserts |
+|---|---|
+| `testDeleteCategoryIfUnusedIsBlockedWhenReferencedByFinancialEvent` | A category whose name matches a financial event's `categoryName` is not deleted; no tombstone is written; the referencing event is untouched. |
+| `testDeleteCategoryIfUnusedRemovesUnusedCategoryAndWritesTombstone` | A category with no references is removed from `categories` and a generic sync tombstone is written via `markSyncRecordDeletedLocally`. |
+| `testDeleteAccountIfUnusedIsBlockedWhenReferencedByFinancialEvent` | An account whose name matches a financial event's `accountName` is not deleted; no tombstone is written; account balance is not mutated; the referencing event is untouched. |
+| `testDeleteAccountIfUnusedRemovesUnusedAccountAndWritesTombstone` | An account with no referencing financial events or debt entries is removed from `accounts` and a generic sync tombstone is written. |
+
+**Delete paths covered:** `deleteCategoryIfUnused`, `deleteAccountIfUnused`
+
+**Used category behavior:** Protected. `categoryHasReferences` checks all of `financialEvents`, `walletEvents`, `installmentPlans`, `monthlyBudgets` items, and `historicalMonthlySummaries` by category name. If any reference exists the function silently no-ops and writes no tombstone.
+
+**Unused category behavior:** Category removed from `categories` array and a generic tombstone written via `markSyncRecordDeletedLocally`. `deleteCategoryIfUnused` returns `Void` — callers cannot distinguish a blocked delete from a successful one at the call site.
+
+**Used account behavior:** Protected. `accountHasTransactions` checks `financialEvents` by `accountName` and `destinationAccountName`, and `personDebtEntries` by `accountName`. If any reference exists the function silently no-ops and writes no tombstone. Account balance is not mutated.
+
+**Unused account behavior:** Account removed from `accounts` array, any wallet event `defaultAccountName` referencing the deleted account name is nulled out, any installment plan `accountName` referencing it is nulled out, and a generic tombstone is written.
+
+**Tombstone behavior observed:**
+- Both guard-blocked calls write no tombstone.
+- Both successful deletions write a tombstone via the generic `markSyncRecordDeletedLocally(entity:id:)` path, which writes an ID-only marker with no `deletedAt` timestamp. This is a gap relative to high-risk deletion paths (which use `markHighRiskRecordDeletedLocally` and include a `deletedAt`). Before sync, generic tombstones need a timestamp added to support delete-wins conflict resolution.
+
+**Remaining limitations:**
+
+- Both guards are name-based. If an account is renamed after a financial event is recorded against its old name, `accountHasTransactions` may return `false` for the renamed account even though historical transactions exist under the old name. The account could then be deleted, leaving tombstone references orphaned. This is the core name-based identity risk documented in Section 2 of this plan.
+- `categoryHasReferences` does not check merchant memories or bank SMS drafts. A category used only in merchant memory defaults could be incorrectly treated as unused.
+- Generic tombstones written on successful deletion do not include a `deletedAt` timestamp. This limits future delete-wins sync logic for master data records.
+- `deleteCategoryIfUnused` and `deleteAccountIfUnused` both return `Void`. There is no way for call sites (views) to distinguish a blocked delete from a successful one without re-querying the store.
+
+---
+
 ### Installment Plan Delete Baseline Coverage
 
 **Test added:** `testDeleteInstallmentPlanRemovesUnpaidEventsAndPreservesPaidEvents` in `WalletStoreFinancialInvariantTests.swift`
