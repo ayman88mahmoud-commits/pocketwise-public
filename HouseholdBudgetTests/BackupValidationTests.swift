@@ -268,6 +268,143 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertTrue(issue?.detail.contains("2026-07") == true)
     }
 
+    // MARK: - Error severity and blocking flag
+
+    func testErrorSeverityCanBeRepresentedInReport() {
+        var report = BackupValidationReport()
+        report.issues = [
+            BackupValidationIssue(
+                severity: .error,
+                title: "Test blocking error",
+                detail: "A test error issue.",
+                recordID: nil
+            )
+        ]
+
+        XCTAssertEqual(report.errorCount, 1)
+        XCTAssertTrue(report.hasErrors)
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertEqual(report.warningCount, 0)
+        XCTAssertEqual(report.infoCount, 0)
+    }
+
+    func testReportHasErrorsIsFalseWhenNoErrors() {
+        let store = makeStore()
+        let duplicateID = UUID()
+        var firstEvent = makeUnpaidExpense(title: "First Event")
+        var secondEvent = makeUnpaidExpense(title: "Second Event")
+        firstEvent.id = duplicateID
+        secondEvent.id = duplicateID
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            financialEvents: [firstEvent, secondEvent]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.hasErrors, "Duplicate financial event ID should be a warning, not a blocking error")
+        XCTAssertTrue(report.warningCount > 0)
+    }
+
+    // MARK: - Schema version gate
+
+    func testSchemaVersionGateFlagsNewerVersionAsError() {
+        let store = makeStore()
+        let futureVersion = WalletDataSnapshot.currentSchemaVersion + 1
+        let snapshot = makeSnapshot(
+            schemaVersion: futureVersion,
+            accounts: store.accounts,
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.hasErrors, "A snapshot from a newer schema version must produce a blocking error")
+        XCTAssertTrue(
+            report.containsIssue(titled: "Unsupported schema version"),
+            "Expected 'Unsupported schema version' error but got: \(report.issues.map { $0.title })"
+        )
+        let issue = report.issues.first { $0.title == "Unsupported schema version" }
+        XCTAssertEqual(issue?.severity, .error)
+        XCTAssertTrue(issue?.detail.contains("\(futureVersion)") == true)
+        XCTAssertTrue(issue?.detail.contains("\(WalletDataSnapshot.currentSchemaVersion)") == true)
+    }
+
+    func testCurrentSchemaVersionProducesNoSchemaError() {
+        let store = makeStore()
+        let snapshot = makeSnapshot(
+            schemaVersion: WalletDataSnapshot.currentSchemaVersion,
+            accounts: store.accounts,
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.containsIssue(titled: "Unsupported schema version"))
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testPreviousSchemaVersionProducesNoSchemaError() {
+        let store = makeStore()
+        let previousVersion = max(1, WalletDataSnapshot.currentSchemaVersion - 1)
+        let snapshot = makeSnapshot(
+            schemaVersion: previousVersion,
+            accounts: store.accounts,
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(
+            report.containsIssue(titled: "Unsupported schema version"),
+            "Older supported schema versions must not produce a blocking error"
+        )
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testDuplicateMonthlyBudgetItemIDsRemainWarningNotError() {
+        let store = makeStore()
+        let duplicateID = UUID()
+        let budget = WalletMonthlyBudget(
+            year: 2026,
+            month: 6,
+            items: [
+                WalletMonthlyBudgetItem(
+                    id: duplicateID,
+                    categoryName: "Groceries",
+                    plannedAmount: 100,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                ),
+                WalletMonthlyBudgetItem(
+                    id: duplicateID,
+                    categoryName: "Transport",
+                    plannedAmount: 200,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                )
+            ],
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyBudgets: [budget]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        let issue = report.issue(titled: "Duplicate monthly budget item ID", recordID: duplicateID)
+
+        XCTAssertNotNil(issue, "Duplicate budget item ID must still produce an issue")
+        XCTAssertEqual(
+            issue?.severity, .warning,
+            "Duplicate monthly budget item IDs are a .warning, not a blocking .error — they do not prevent restore"
+        )
+        XCTAssertFalse(report.hasErrors)
+    }
+
     func testValidationDoesNotFlagUniqueMonthlyBudgetItemIDs() {
         let store = makeStore()
         let budget = WalletMonthlyBudget(
@@ -354,6 +491,7 @@ final class BackupValidationTests: XCTestCase {
     }
 
     private func makeSnapshot(
+        schemaVersion: Int = WalletDataSnapshot.currentSchemaVersion,
         accounts: [Account],
         categories: [WalletBoard.Category],
         installmentPlans: [InstallmentPlan] = [],
@@ -363,6 +501,7 @@ final class BackupValidationTests: XCTestCase {
         creditCardPayments: [CreditCardPayment] = []
     ) -> WalletDataSnapshot {
         WalletDataSnapshot(
+            schemaVersion: schemaVersion,
             exportedAt: startDate,
             accounts: accounts,
             categories: categories,

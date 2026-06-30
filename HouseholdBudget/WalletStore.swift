@@ -2914,6 +2914,18 @@ final class WalletStore: ObservableObject {
 
     func makeBackupValidationReport(for snapshot: WalletDataSnapshot) -> BackupValidationReport {
         var issues: [BackupValidationIssue] = []
+
+        if snapshot.schemaVersion > WalletDataSnapshot.currentSchemaVersion {
+            issues.append(
+                BackupValidationIssue(
+                    severity: .error,
+                    title: "Unsupported schema version",
+                    detail: "This backup was created with schema version \(snapshot.schemaVersion), but this app only supports up to version \(WalletDataSnapshot.currentSchemaVersion). Restore is unsafe until the app is updated.",
+                    recordID: nil
+                )
+            )
+        }
+
         let accountNames = Set(snapshot.accounts.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) })
         let creditCardIDs = Set(snapshot.creditCards.map(\.id))
         let installmentPlanIDs = Set(snapshot.installmentPlans.map(\.id))

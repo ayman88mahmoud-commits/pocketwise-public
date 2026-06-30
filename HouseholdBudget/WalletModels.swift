@@ -1330,6 +1330,7 @@ struct WalletBackupMetadata: Codable, Hashable {
 }
 
 enum BackupValidationSeverity: String, Codable, Hashable {
+    case error
     case warning
     case info
 }
@@ -1349,6 +1350,14 @@ struct BackupValidationReport: Codable, Hashable {
         !issues.isEmpty
     }
 
+    var errorCount: Int {
+        issues.filter { $0.severity == .error }.count
+    }
+
+    var hasErrors: Bool {
+        errorCount > 0
+    }
+
     var warningCount: Int {
         issues.filter { $0.severity == .warning }.count
     }
@@ -1359,7 +1368,14 @@ struct BackupValidationReport: Codable, Hashable {
 
     var summaryText: String {
         guard hasIssues else {
-            return "No backup compatibility warnings found."
+            return "No backup compatibility issues found."
+        }
+
+        if errorCount > 0 {
+            if errorCount == 1 {
+                return "1 blocking backup error found."
+            }
+            return "\(errorCount) blocking backup errors found."
         }
 
         if warningCount == 0 {

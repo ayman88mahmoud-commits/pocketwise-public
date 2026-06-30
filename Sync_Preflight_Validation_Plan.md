@@ -5,6 +5,49 @@ Scope: documentation-only plan for future sync, import, and restore preflight va
 
 ---
 
+## Schema Version Gate — Implementation Status
+
+Implemented in commit: Add blocking backup validation severity  
+Date: 2026-06-30
+
+### What was implemented
+
+- Added `case error` to `BackupValidationSeverity` in `WalletModels.swift`. The three severities are now: `.error`, `.warning`, `.info`.
+- Added `errorCount: Int` and `hasErrors: Bool` computed properties to `BackupValidationReport`.
+- Updated `summaryText` in `BackupValidationReport` to surface blocking error count when `hasErrors` is true.
+- Added schema version gate at the start of `makeBackupValidationReport(for:)` in `WalletStore.swift`: if `snapshot.schemaVersion > WalletDataSnapshot.currentSchemaVersion`, an `.error` issue titled "Unsupported schema version" is appended.
+
+### Severities now in effect
+
+| Severity | Meaning | Examples |
+|---|---|---|
+| `.error` | Blocking — restore is unsafe until resolved | Schema version from a newer app than is installed |
+| `.warning` | Non-blocking — restore proceeds with caution | Duplicate event IDs, paid events missing account, duplicate budget item IDs |
+| `.info` | Diagnostic only | (none currently emitted) |
+
+### What currently blocks validation
+
+A `BackupValidationReport` with `hasErrors == true` (i.e., `errorCount > 0`) indicates that restore is unsafe. The only condition currently emitting `.error` is:
+
+> `snapshot.schemaVersion > WalletDataSnapshot.currentSchemaVersion`
+
+The restore UI (`DataBackupView`) does not yet gate on `hasErrors` — wiring `canRestore` into the restore flow is the next step (Phase 1 of Section 9 is partially complete).
+
+### What remains future work
+
+- Wire `hasErrors` into `DataBackupView` to block the restore action when `canRestore == false`.
+- Add orphaned account/category name reference checks as `.error` severity (Phase 1 remainder).
+- Add tombstone coherence checks (Phase 2).
+- Build `SyncPreflightReport` model (Phase 3).
+- Extend validator to master data, planning data, and financial data (Phases 4–6).
+- Wire validator into sync applier gate (Phase 7).
+
+### Confirmation
+
+CloudKit automatic sync remains disabled. `WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled` is `false`. No financial behavior was changed. Manual backup, export, and import workflows were not redesigned.
+
+---
+
 ## 1. Executive Summary
 
 The app has an existing `makeBackupValidationReport(for:)` function that performs structural backup validation — checking referential integrity, value ranges, and required fields across the current snapshot. That validator uses `.warning` and `.info` severities only; there is no blocking `.error` severity in the current model.
