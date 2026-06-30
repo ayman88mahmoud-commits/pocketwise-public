@@ -130,7 +130,7 @@ struct CreditCardEditorView: View {
                             lastFourDigits = String(newValue.filter(\.isNumber).prefix(4))
                         }
 
-                    Text(isArabic ? "بيستخدم لمطابقة رسائل البنك. ما تدخلش رقم الحساب أو الكارت كامل." : "Used to match bank SMS messages. Do not enter full account/card number.")
+                    Text(isArabic ? "بيستخدم لمطابقة إشعارات البنك. ما تدخلش رقم الحساب أو الكارت كامل." : "Used to match bank notification messages. Do not enter full account/card number.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 

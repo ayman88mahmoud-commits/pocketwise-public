@@ -231,7 +231,7 @@ struct AccountEditorView: View {
                     )
                 }
 
-                Section(isArabic ? "آخر ٤ أرقام لمطابقة رسائل البنك" : "SMS Matching Last 4 Digits") {
+                Section(isArabic ? "آخر ٤ أرقام لمطابقة إشعارات البنك" : "Bank Notification Matching Last 4 Digits") {
                     HStack {
                         TextField(isArabic ? "أضف آخر الأرقام" : "Add ending", text: $newSMSEnding)
                             .keyboardType(.numberPad)
@@ -262,7 +262,7 @@ struct AccountEditorView: View {
                         }
                     }
 
-                    Text(isArabic ? "أضف آخر ٤ أرقام الظاهرة في رسائل البنك للحساب ده، بما فيها كروت الخصم المرتبطة. ما تدخلش رقم حساب أو كارت كامل." : "Add the last 4 digits shown in bank SMS messages for this account, including linked debit cards. Do not enter full account or card numbers.")
+                    Text(isArabic ? "أضف آخر ٤ أرقام الظاهرة في إشعارات البنك للحساب ده، بما فيها كروت الخصم المرتبطة. ما تدخلش رقم حساب أو كارت كامل." : "Add the last 4 digits shown in bank notification messages for this account, including linked debit cards. Do not enter full account or card numbers.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
