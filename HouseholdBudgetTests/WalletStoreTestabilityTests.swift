@@ -401,6 +401,106 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertEqual(restoredBudget.items.first { $0.id == transportID }?.updatedAt, updatedAt)
     }
 
+    // MARK: - Known Limitation Baselines: Name-Based Guard Weakness After Rename
+
+    // These tests document that deleteAccountIfUnused and deleteCategoryIfUnused
+    // use the account/category's *current* name to check for references.
+    // If a name change reaches the model without cascading the rename to all
+    // referencing records (e.g. a partial CloudKit update or mismatched backup
+    // restore), the guard can miss stale references and allow deletion of a
+    // record that historical financial events still depend on by name.
+
+    func testDeleteAccountIfUnusedCanMissOldNameReferencesAfterRename_currentLimitation() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+
+        // Establish account under its original name and a financial event referencing it.
+        let originalName = "Savings Account"
+        let renamedName = "Emergency Fund"
+        let account = Account(name: originalName, balance: 5_000, type: .bank)
+        let event = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Old Transfer",
+            amount: 100,
+            date: Date(),
+            accountName: originalName,
+            paymentMethodName: nil,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        store.accounts = [account]
+        store.financialEvents = [event]
+
+        // Simulate a rename that arrives without cascading references — e.g. a
+        // partial CloudKit record update or mismatched backup restore. The store's
+        // updateAccount API cascades the rename to financial events; bypassing it
+        // leaves financial events referencing the old name while the account itself
+        // carries the new name.
+        var renamedAccount = account
+        renamedAccount.name = renamedName
+        store.accounts = [renamedAccount]
+
+        store.deleteAccountIfUnused(renamedAccount)
+
+        // CURRENT BEHAVIOR (known limitation): the guard checks for renamedName in
+        // financial events and finds nothing, so it treats the account as unused and
+        // deletes it — even though a financial event still references originalName.
+        XCTAssertFalse(store.accounts.contains { $0.id == account.id },
+            "Known limitation: renamed account is deleted despite stale reference under the original name.")
+        XCTAssertEqual(store.financialEvents.first?.accountName, originalName,
+            "The financial event still holds the original account name — the reference is now orphaned.")
+
+        // Tombstone is written per current deletion behavior.
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .account, id: account.id),
+            "A tombstone is written for the deleted account even when old-name references remain.")
+    }
+
+    func testDeleteCategoryIfUnusedCanMissOldNameReferencesAfterRename_currentLimitation() {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+
+        // Establish category under its original name and a financial event referencing it.
+        let originalName = "Food"
+        let renamedName = "Groceries & Food"
+        let category = WalletBoard.Category(name: originalName, subcategories: ["Groceries"])
+        let event = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Supermarket",
+            amount: 200,
+            date: Date(),
+            accountName: nil,
+            paymentMethodName: nil,
+            categoryName: originalName,
+            subCategoryName: "Groceries"
+        )
+        store.categories = [category]
+        store.financialEvents = [event]
+
+        // Simulate a rename that arrives without cascading references — e.g. a
+        // partial CloudKit record update or mismatched backup restore.
+        var renamedCategory = category
+        renamedCategory.name = renamedName
+        store.categories = [renamedCategory]
+
+        store.deleteCategoryIfUnused(renamedCategory)
+
+        // CURRENT BEHAVIOR (known limitation): the guard checks for renamedName in
+        // financial events and finds nothing, so it treats the category as unused and
+        // deletes it — even though a financial event still references originalName.
+        XCTAssertFalse(store.categories.contains { $0.id == category.id },
+            "Known limitation: renamed category is deleted despite stale reference under the original name.")
+        XCTAssertEqual(store.financialEvents.first?.categoryName, originalName,
+            "The financial event still holds the original category name — the reference is now orphaned.")
+
+        // Tombstone is written per current deletion behavior.
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isRecordDeletedLocally(entity: .category, id: category.id),
+            "A tombstone is written for the deleted category even when old-name references remain.")
+    }
+
     func testDeleteCategoryIfUnusedIsBlockedWhenReferencedByFinancialEvent() {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)

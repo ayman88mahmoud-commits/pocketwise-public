@@ -382,6 +382,46 @@ The following paths were already covered before this task:
 - `deleteInstallmentPlanAndFutureEvents` — plan deletion marker written, plan removed (`WalletStoreTestabilityTests`)
 - `deleteFinancialEvent` on recurring income series — future occurrences removed, cash unchanged (`WalletStoreFinancialInvariantTests`)
 
+### Renamed Master Data Guard Limitation Baseline
+
+**Tests added** (both in `WalletStoreTestabilityTests.swift`):
+
+| Test | What It Asserts |
+|---|---|
+| `testDeleteAccountIfUnusedCanMissOldNameReferencesAfterRename_currentLimitation` | An account renamed without cascading references is deleted by `deleteAccountIfUnused` even though a financial event still holds the original name. The reference is left orphaned. A tombstone is written. |
+| `testDeleteCategoryIfUnusedCanMissOldNameReferencesAfterRename_currentLimitation` | A category renamed without cascading references is deleted by `deleteCategoryIfUnused` even though a financial event still holds the original name. The reference is left orphaned. A tombstone is written. |
+
+**What weakness is documented:**
+
+Both `deleteAccountIfUnused` and `deleteCategoryIfUnused` check for references using the record's **current name** at the time of the delete call. If the record's name has changed and that change was not cascaded to all referencing records — for example, because a CloudKit record update was applied to the account/category without applying the corresponding financial event updates, or because a backup restore reconstructed accounts and financial events from different points in time — the guard will find no references under the new name and allow deletion.
+
+The deleted record's tombstone is then delivered to CloudKit. On the next sync cycle, remote devices that still hold financial events referencing the old name would have those events preserved, but the local device has already deleted the account or category and declared it deleted to CloudKit. Any future sync logic that respects delete-wins semantics would propagate the deletion to those remote devices, silently orphaning their financial event references.
+
+**Account rename behavior observed:**
+
+When `store.accounts[0].name` is changed directly without calling `updateAccount` (which would cascade via `renameAccountReferences`), the financial event retains `accountName: "Old Name"`. Calling `deleteAccountIfUnused` with the renamed account checks `financialEvents.contains { $0.accountName == "New Name" }` — returns `false` — and proceeds to delete the account and write a tombstone. The financial event is left with a reference to a name that no longer has a corresponding account.
+
+**Category rename behavior observed:**
+
+Identical structure. When `categories[0].name` is changed directly without calling `updateCategory` (which would cascade via `renameCategoryReferences`), the financial event retains `categoryName: "Old Name"`. `deleteCategoryIfUnused` with the renamed category finds no references and deletes it.
+
+**Tombstone behavior observed:**
+
+In both weakness scenarios, the full deletion path runs: the record is removed from its array and `markSyncRecordDeletedLocally` writes a generic tombstone (ID-only, no `deletedAt` timestamp). This means the weakness is not just a local data corruption risk — it also produces a tombstone that would propagate the incorrect deletion to future sync peers.
+
+**Why this must be fixed by stable ID relationships rather than improved name-based guards:**
+
+A name-based guard can only check whether the current name appears in current in-memory records. It cannot detect:
+- References to historical names that were never cascaded to all records
+- References that exist on other devices but have not been synced yet
+- References in backup snapshots taken before a rename
+
+The correct long-term fix is to have every financial event, wallet event, installment plan, debt entry, and budget item reference its parent account or category by a stable UUID, not by display name. Then `accountHasTransactions` and `categoryHasReferences` would check `$0.accountID == account.id` — a comparison that survives any number of renames without cascade, on any device, in any backup. This is the ID relationship migration described in Section 4 (Recommended Identity Policy) of this plan and in `Sync_Identity_Deletion_Policy.md`.
+
+**Confirmation no production behavior was changed:** The two tests assert current behavior exactly as the production code executes it. No Swift source file was modified.
+
+---
+
 ### Account and Category Delete Guard Baseline Coverage
 
 **Tests added** (all in `WalletStoreTestabilityTests.swift`):
