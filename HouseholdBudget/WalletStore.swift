@@ -2915,6 +2915,7 @@ final class WalletStore: ObservableObject {
     func makeBackupValidationReport(for snapshot: WalletDataSnapshot) -> BackupValidationReport {
         var issues: [BackupValidationIssue] = []
 
+        // Schema version — blocks restore
         if snapshot.schemaVersion > WalletDataSnapshot.currentSchemaVersion {
             issues.append(
                 BackupValidationIssue(
@@ -2926,26 +2927,36 @@ final class WalletStore: ObservableObject {
             )
         }
 
+        // Duplicate ID checks — all block restore via validateUniqueIDs
+        appendDuplicateIDIssues(ids: snapshot.accounts.map(\.id), label: "account", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.categories.map(\.id), label: "category", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.walletEvents.map(\.id), label: "quick event", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.merchantMemories.map(\.id), label: "merchant memory", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.installmentPlans.map(\.id), label: "installment plan", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.financialEvents.map(\.id), label: "financial event", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.personDebts.map(\.id), label: "person debt", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.personDebtEntries.map(\.id), label: "person debt entry", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.monthlyBudgets.map(\.id), label: "monthly budget", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.historicalMonthlySummaries.map(\.id), label: "historical summary", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.creditCards.map(\.id), label: "credit card", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.creditCardPurchases.map(\.id), label: "credit card purchase", issues: &issues)
+        appendDuplicateIDIssues(ids: snapshot.creditCardPayments.map(\.id), label: "credit card payment", issues: &issues)
+
+        // Duplicate monthly budget item IDs — blocks restore
+        appendDuplicateMonthlyBudgetItemIDIssues(monthlyBudgets: snapshot.monthlyBudgets, issues: &issues)
+
         let accountNames = Set(snapshot.accounts.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) })
         let creditCardIDs = Set(snapshot.creditCards.map(\.id))
         let installmentPlanIDs = Set(snapshot.installmentPlans.map(\.id))
+        let personDebtIDs = Set(snapshot.personDebts.map(\.id))
         let today = Calendar.current.startOfDay(for: Date())
 
-        appendDuplicateIDIssues(
-            ids: snapshot.financialEvents.map(\.id),
-            label: "financial event",
-            issues: &issues
-        )
-        appendDuplicateMonthlyBudgetItemIDIssues(
-            monthlyBudgets: snapshot.monthlyBudgets,
-            issues: &issues
-        )
-
         for event in snapshot.financialEvents {
+            // Blocked by validateBackupSnapshot — .error
             if event.amount <= 0 {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Invalid financial event amount",
                         detail: "\(event.title) has an amount that should not be zero or negative.",
                         recordID: event.id
@@ -2953,6 +2964,7 @@ final class WalletStore: ObservableObject {
                 )
             }
 
+            // Non-blocking compatibility warning — .warning
             if event.status == .paid && event.type != .transfer {
                 let accountName = event.accountName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if accountName.isEmpty || !accountNames.contains(accountName) {
@@ -2971,7 +2983,17 @@ final class WalletStore: ObservableObject {
                 let source = event.accountName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let destination = event.destinationAccountName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-                if source.isEmpty || !accountNames.contains(source) {
+                // Empty source/destination and same-account transfers block restore — .error
+                if source.isEmpty {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .error,
+                            title: "Transfer missing source account",
+                            detail: "\(event.title) does not have a source account.",
+                            recordID: event.id
+                        )
+                    )
+                } else if !accountNames.contains(source) {
                     issues.append(
                         BackupValidationIssue(
                             severity: .warning,
@@ -2982,7 +3004,16 @@ final class WalletStore: ObservableObject {
                     )
                 }
 
-                if destination.isEmpty || !accountNames.contains(destination) {
+                if destination.isEmpty {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .error,
+                            title: "Transfer missing destination account",
+                            detail: "\(event.title) does not have a destination account.",
+                            recordID: event.id
+                        )
+                    )
+                } else if !accountNames.contains(destination) {
                     issues.append(
                         BackupValidationIssue(
                             severity: .warning,
@@ -2992,8 +3023,20 @@ final class WalletStore: ObservableObject {
                         )
                     )
                 }
+
+                if !source.isEmpty && !destination.isEmpty && source == destination {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .error,
+                            title: "Transfer source and destination are the same",
+                            detail: "\(event.title) has the same account as both source and destination.",
+                            recordID: event.id
+                        )
+                    )
+                }
             }
 
+            // Non-blocking — .info
             if event.status == .paid && Calendar.current.startOfDay(for: event.date) > today {
                 issues.append(
                     BackupValidationIssue(
@@ -3005,6 +3048,7 @@ final class WalletStore: ObservableObject {
                 )
             }
 
+            // Non-blocking — .warning
             if let planID = event.sourceInstallmentPlanID,
                !installmentPlanIDs.contains(planID) {
                 issues.append(
@@ -3019,10 +3063,11 @@ final class WalletStore: ObservableObject {
         }
 
         for purchase in snapshot.creditCardPurchases {
+            // Blocked by validateBackupSnapshot — .error
             if purchase.amount <= 0 {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Invalid credit card purchase amount",
                         detail: "\(purchase.title) has an amount that should not be zero or negative.",
                         recordID: purchase.id
@@ -3030,10 +3075,11 @@ final class WalletStore: ObservableObject {
                 )
             }
 
+            // Blocked by validateBackupSnapshot — .error
             if !creditCardIDs.contains(purchase.cardID) {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Credit card purchase missing card",
                         detail: "\(purchase.title) references a credit card that is not in the backup.",
                         recordID: purchase.id
@@ -3043,10 +3089,11 @@ final class WalletStore: ObservableObject {
         }
 
         for payment in snapshot.creditCardPayments {
+            // Blocked by validateBackupSnapshot — .error
             if payment.amount <= 0 {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Invalid credit card payment amount",
                         detail: "A credit card payment has an amount that should not be zero or negative.",
                         recordID: payment.id
@@ -3054,10 +3101,11 @@ final class WalletStore: ObservableObject {
                 )
             }
 
+            // Blocked by validateBackupSnapshot — .error
             if !creditCardIDs.contains(payment.cardID) {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Credit card payment missing card",
                         detail: "A credit card payment references a credit card that is not in the backup.",
                         recordID: payment.id
@@ -3065,8 +3113,19 @@ final class WalletStore: ObservableObject {
                 )
             }
 
-            let accountName = payment.fromAccountName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if accountName.isEmpty || !accountNames.contains(accountName) {
+            let paymentAccountName = payment.fromAccountName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if paymentAccountName.isEmpty {
+                // Empty fromAccountName is blocked by validateBackupSnapshot — .error
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Credit card payment missing account",
+                        detail: "A credit card payment has no source account name.",
+                        recordID: payment.id
+                    )
+                )
+            } else if !accountNames.contains(paymentAccountName) {
+                // Non-empty but not in accounts list — not blocked by validateBackupSnapshot — .warning
                 issues.append(
                     BackupValidationIssue(
                         severity: .warning,
@@ -3078,6 +3137,7 @@ final class WalletStore: ObservableObject {
             }
         }
 
+        // Non-blocking installment plan checks — validateBackupSnapshot does not enforce these
         for plan in snapshot.installmentPlans {
             if plan.totalAmount <= 0 || plan.installmentCount <= 0 {
                 issues.append(
@@ -3133,6 +3193,7 @@ final class WalletStore: ObservableObject {
             }
         }
 
+        // Non-blocking — validateBackupSnapshot does not check card default payment account
         for card in snapshot.creditCards {
             if let accountName = card.defaultPaymentAccountName?.trimmingCharacters(in: .whitespacesAndNewlines),
                !accountName.isEmpty,
@@ -3149,10 +3210,23 @@ final class WalletStore: ObservableObject {
         }
 
         for entry in snapshot.personDebtEntries {
+            // Blocked by validateBackupSnapshot — .error
+            if !personDebtIDs.contains(entry.debtID) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Debt entry missing parent debt",
+                        detail: "A people/debts entry references a debt record that is not in the backup.",
+                        recordID: entry.id
+                    )
+                )
+            }
+
+            // Blocked by validateBackupSnapshot — .error
             if entry.amount <= 0 {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Invalid debt entry amount",
                         detail: "A people/debts entry has an amount that should not be zero or negative.",
                         recordID: entry.id
@@ -3160,8 +3234,19 @@ final class WalletStore: ObservableObject {
                 )
             }
 
-            let accountName = entry.accountName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if accountName.isEmpty || !accountNames.contains(accountName) {
+            let entryAccountName = entry.accountName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if entryAccountName.isEmpty {
+                // Empty accountName is blocked by validateBackupSnapshot — .error
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Debt entry missing account",
+                        detail: "A people/debts entry has no account name.",
+                        recordID: entry.id
+                    )
+                )
+            } else if !accountNames.contains(entryAccountName) {
+                // Non-empty but not in accounts list — not blocked by validateBackupSnapshot — .warning
                 issues.append(
                     BackupValidationIssue(
                         severity: .warning,
@@ -3188,9 +3273,9 @@ final class WalletStore: ObservableObject {
             if seen.contains(id), !reported.contains(id) {
                 issues.append(
                     BackupValidationIssue(
-                        severity: .warning,
+                        severity: .error,
                         title: "Duplicate \(label) ID",
-                        detail: "The backup contains more than one \(label) with the same ID.",
+                        detail: "The backup contains more than one \(label) with the same ID. Restore is blocked until duplicates are resolved.",
                         recordID: id
                     )
                 )
@@ -3216,7 +3301,7 @@ final class WalletStore: ObservableObject {
                    !reported.contains(item.id) {
                     issues.append(
                         BackupValidationIssue(
-                            severity: .warning,
+                            severity: .error,
                             title: "Duplicate monthly budget item ID",
                             detail: "The backup contains more than one monthly budget item with ID \(item.id). Duplicate found in \(budgetContext); first seen in \(firstBudgetContext).",
                             recordID: item.id

@@ -290,6 +290,35 @@ final class BackupValidationTests: XCTestCase {
 
     func testReportHasErrorsIsFalseWhenNoErrors() {
         let store = makeStore()
+        // Paid non-transfer event referencing a non-existent account produces .warning,
+        // not .error — validateBackupSnapshot does not check non-transfer account references.
+        let paidWithMissingAccount = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Paid Warning-Only Event",
+            amount: 100,
+            date: startDate,
+            accountName: "Non-Existent Account",
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            financialEvents: [paidWithMissingAccount]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.hasErrors, "Paid event missing account should be .warning, not a blocking .error")
+        XCTAssertTrue(report.warningCount > 0)
+    }
+
+    // MARK: - Severity alignment: conditions that block restore must report .error
+
+    func testDuplicateFinancialEventIDsReportedAsError() {
+        let store = makeStore()
         let duplicateID = UUID()
         var firstEvent = makeUnpaidExpense(title: "First Event")
         var secondEvent = makeUnpaidExpense(title: "Second Event")
@@ -302,9 +331,131 @@ final class BackupValidationTests: XCTestCase {
         )
 
         let report = store.makeBackupValidationReport(for: snapshot)
+        let issue = report.issues.first { $0.title == "Duplicate financial event ID" && $0.recordID == duplicateID }
 
-        XCTAssertFalse(report.hasErrors, "Duplicate financial event ID should be a warning, not a blocking error")
+        XCTAssertNotNil(issue, "Duplicate financial event ID must produce an issue")
+        XCTAssertEqual(issue?.severity, .error, "Duplicate financial event IDs block restore — must be .error")
+        XCTAssertTrue(report.hasErrors)
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot),
+                             "Store must throw when restoring a snapshot with duplicate financial event IDs")
+    }
+
+    func testMissingCreditCardPurchaseReferenceReportedAsError() {
+        let store = makeStore()
+        let missingCardID = UUID()
+        let purchase = CreditCardPurchase(
+            id: UUID(),
+            cardID: missingCardID,
+            title: "Orphaned Purchase",
+            amount: 500,
+            purchaseDate: startDate,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries",
+            note: nil,
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            creditCardPurchases: [purchase]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        let issue = report.issues.first { $0.title == "Credit card purchase missing card" && $0.recordID == purchase.id }
+
+        XCTAssertNotNil(issue, "Credit card purchase with missing card must produce an issue")
+        XCTAssertEqual(issue?.severity, .error, "Missing credit card on purchase blocks restore — must be .error")
+        XCTAssertTrue(report.hasErrors)
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot),
+                             "Store must throw when restoring a snapshot with a purchase referencing a missing credit card")
+    }
+
+    func testMissingCreditCardPaymentReferenceReportedAsError() {
+        let store = makeStore()
+        let missingCardID = UUID()
+        let payment = CreditCardPayment(
+            id: UUID(),
+            cardID: missingCardID,
+            fromAccountName: accountName,
+            amount: 300,
+            paymentDate: startDate,
+            note: nil,
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            creditCardPayments: [payment]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        let issue = report.issues.first { $0.title == "Credit card payment missing card" && $0.recordID == payment.id }
+
+        XCTAssertNotNil(issue, "Credit card payment with missing card must produce an issue")
+        XCTAssertEqual(issue?.severity, .error, "Missing credit card on payment blocks restore — must be .error")
+        XCTAssertTrue(report.hasErrors)
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot),
+                             "Store must throw when restoring a snapshot with a payment referencing a missing credit card")
+    }
+
+    func testInvalidFinancialEventAmountReportedAsError() {
+        let store = makeStore()
+        let zeroAmountEvent = FinancialEvent(
+            type: .expense,
+            status: .unpaid,
+            title: "Zero Amount Event",
+            amount: 0,
+            date: startDate,
+            accountName: accountName,
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            financialEvents: [zeroAmountEvent]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+        let issue = report.issues.first { $0.title == "Invalid financial event amount" && $0.recordID == zeroAmountEvent.id }
+
+        XCTAssertNotNil(issue, "Zero amount financial event must produce an issue")
+        XCTAssertEqual(issue?.severity, .error, "Invalid financial event amount blocks restore — must be .error")
+        XCTAssertTrue(report.hasErrors)
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot),
+                             "Store must throw when restoring a snapshot with a zero-amount event")
+    }
+
+    func testWarningOnlyConditionsDoNotSetHasErrors() {
+        let store = makeStore()
+        // "Paid event missing account" is the canonical .warning case:
+        // validateBackupSnapshot does NOT throw for non-transfer events with missing accounts.
+        let paidWithMissingAccount = FinancialEvent(
+            type: .expense,
+            status: .paid,
+            title: "Warning Only Event",
+            amount: 100,
+            date: startDate,
+            accountName: "Non-Existent Account",
+            paymentMethodName: "Cash",
+            categoryName: "Groceries",
+            subCategoryName: "Groceries"
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            financialEvents: [paidWithMissingAccount]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.hasErrors, "Paid event missing account must remain .warning, not .error")
         XCTAssertTrue(report.warningCount > 0)
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot),
+                         "Warning-only report must not block restore at store level")
     }
 
     // MARK: - Schema version gate
@@ -363,7 +514,7 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertFalse(report.hasErrors)
     }
 
-    func testDuplicateMonthlyBudgetItemIDsRemainWarningNotError() {
+    func testDuplicateMonthlyBudgetItemIDsAreReportedAsBlockingError() {
         let store = makeStore()
         let duplicateID = UUID()
         let budget = WalletMonthlyBudget(
@@ -397,12 +548,12 @@ final class BackupValidationTests: XCTestCase {
         let report = store.makeBackupValidationReport(for: snapshot)
         let issue = report.issue(titled: "Duplicate monthly budget item ID", recordID: duplicateID)
 
-        XCTAssertNotNil(issue, "Duplicate budget item ID must still produce an issue")
+        XCTAssertNotNil(issue, "Duplicate budget item ID must produce an issue")
         XCTAssertEqual(
-            issue?.severity, .warning,
-            "Duplicate monthly budget item IDs are a .warning, not a blocking .error — they do not prevent restore"
+            issue?.severity, .error,
+            "Duplicate monthly budget item IDs are now .error because validateBackupSnapshot throws for them"
         )
-        XCTAssertFalse(report.hasErrors)
+        XCTAssertTrue(report.hasErrors, "hasErrors must be true when duplicate budget item IDs are present")
     }
 
     // MARK: - Restore blocking gate

@@ -85,6 +85,60 @@ CloudKit automatic sync remains disabled. `WalletSyncFeatureFlags.isAutomaticClo
 
 ---
 
+## Backup Report and Restore Blocking Alignment — Implementation Status
+
+Implemented in commit: Align backup report errors with restore blocking  
+Date: 2026-06-30
+
+### Severities aligned
+
+The following conditions were misaligned — `validateBackupSnapshot` throws and blocks restore, but `makeBackupValidationReport` reported them as `.warning`. All are now `.error`:
+
+| Condition | Previous severity | New severity |
+|---|---|---|
+| Duplicate financial event IDs | `.warning` | `.error` |
+| Duplicate account/category/walletEvent/merchantMemory/installmentPlan/personDebt/personDebtEntry/monthlyBudget/historicalSummary/creditCard/creditCardPurchase/creditCardPayment IDs | not reported | `.error` (added) |
+| Duplicate monthly budget item IDs | `.warning` | `.error` |
+| Financial event amount ≤ 0 | `.warning` | `.error` |
+| Transfer source nil or empty | `.warning` (combined) | `.error` (split from not-in-accounts) |
+| Transfer destination nil or empty | `.warning` (combined) | `.error` (split from not-in-accounts) |
+| Transfer source == destination | not reported | `.error` (added) |
+| Credit card purchase missing card | `.warning` | `.error` |
+| Credit card purchase amount ≤ 0 | `.warning` | `.error` |
+| Credit card payment missing card | `.warning` | `.error` |
+| Credit card payment amount ≤ 0 | `.warning` | `.error` |
+| Credit card payment `fromAccountName` empty | `.warning` (combined) | `.error` (split from not-in-accounts) |
+| Debt entry `debtID` not in debts | not reported | `.error` (added) |
+| Debt entry amount ≤ 0 | `.warning` | `.error` |
+| Debt entry `accountName` empty | `.warning` (combined) | `.error` (split from not-in-accounts) |
+
+### Conditions that remain warning-only
+
+These conditions are checked in the report but do **not** cause `validateBackupSnapshot` to throw:
+
+| Condition | Severity |
+|---|---|
+| Paid non-transfer event referencing a non-existent account name | `.warning` |
+| Transfer source/destination non-empty but not in accounts list | `.warning` |
+| Credit card payment `fromAccountName` non-empty but not in accounts | `.warning` |
+| Debt entry `accountName` non-empty but not in accounts | `.warning` |
+| Installment event referencing a missing plan ID | `.warning` |
+| Installment plan with invalid values | `.warning` |
+| Installment plan referencing missing account or credit card | `.warning` |
+| Installment paid count exceeds total | `.warning` |
+| Credit card default payment account missing | `.warning` |
+| Future-dated paid event | `.info` |
+
+### Restore strictness not changed
+
+`validateBackupSnapshot` was not modified. Its throw behavior is unchanged. The alignment only updated `makeBackupValidationReport` to match the existing throw behavior.
+
+### Confirmation
+
+CloudKit automatic sync remains disabled. Backup file format was not changed. No financial behavior was changed.
+
+---
+
 ## 1. Executive Summary
 
 The app has an existing `makeBackupValidationReport(for:)` function that performs structural backup validation — checking referential integrity, value ranges, and required fields across the current snapshot. That validator uses `.warning` and `.info` severities only; there is no blocking `.error` severity in the current model.
