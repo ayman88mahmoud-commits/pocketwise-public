@@ -9,6 +9,23 @@ protocol WalletSyncMasterDataAutoSyncGateKeyValueStoring {
 
 extension UserDefaults: WalletSyncMasterDataAutoSyncGateKeyValueStoring {}
 
+enum WalletSyncFeatureFlags {
+    // True CloudKit record sync is intentionally disabled for production.
+    // The safe active workflow is manual iCloud backup via WalletICloudSyncService.
+    // Do not enable record sync until stable IDs, tombstones, conflict policy,
+    // dry-run validation, and financial balance safety foundations are complete.
+    nonisolated static let isAutomaticCloudKitSyncEnabled = false
+
+    // Developer record-sync tools remain compiled for future validation, but
+    // require a separate local override so hidden debug UI cannot upload,
+    // download, apply, or mutate sync records by accident.
+    nonisolated static let isDeveloperCloudKitRecordSyncOverrideEnabled = false
+
+    nonisolated static var canRunDeveloperCloudKitRecordSync: Bool {
+        isAutomaticCloudKitSyncEnabled && isDeveloperCloudKitRecordSyncOverrideEnabled
+    }
+}
+
 protocol WalletSyncMasterDataAutoSyncGateReading {
     var isEnabled: Bool { get }
 }
@@ -88,6 +105,11 @@ final class WalletSyncMasterDataAutoSyncLifecycleTrigger {
 
     func handleScenePhase(_ phase: ScenePhase) async {
         guard phase == .active else { return }
+
+        guard WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled else {
+            status.recordAttempt(result: .skipped(reason: .disabled))
+            return
+        }
 
         guard gate.isEnabled else {
             status.recordAttempt(result: .skipped(reason: .disabled))

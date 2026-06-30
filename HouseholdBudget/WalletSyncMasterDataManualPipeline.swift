@@ -96,6 +96,38 @@ struct WalletSyncMasterDataManualPipeline {
     }
 
     func run() async throws -> WalletSyncMasterDataManualPipelineSummary {
+        guard WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled else {
+            return WalletSyncMasterDataManualPipelineSummary(
+                zoneEnsured: false,
+                uploadedCount: 0,
+                uploadedAccountCount: 0,
+                uploadedCategoryCount: 0,
+                uploadedWalletEventCount: 0,
+                uploadCap: uploadCap,
+                uploadCappedCount: 0,
+                usedSavedToken: false,
+                changedRecordCount: 0,
+                deletedRecordCount: 0,
+                skippedLocalEchoCount: 0,
+                skippedLocalEchoRecordNames: [],
+                parsedValidCount: 0,
+                blockedCount: 0,
+                failedCount: 0,
+                plannedCreateCount: 0,
+                plannedUpdateCount: 0,
+                plannedDisableCount: 0,
+                appliedCreatedCount: 0,
+                appliedUpdatedCount: 0,
+                appliedDisabledCount: 0,
+                appliedBlockedCount: 0,
+                appliedFailedCount: 0,
+                tokenReturned: false,
+                tokenSaved: false,
+                moreComing: false,
+                sampleRecordNames: []
+            )
+        }
+
         try await zoneEnsurer.ensureSyncZone()
 
         let uploadPlan = makeUploadPlan()

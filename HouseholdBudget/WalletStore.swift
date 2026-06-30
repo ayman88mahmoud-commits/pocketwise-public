@@ -1212,17 +1212,11 @@ final class WalletStore: ObservableObject {
     }
 
     func saveMonthlyBudget(year: Int, month: Int, plannedAmountsByCategory: [String: Double]) {
-        let cleanItems = plannedAmountsByCategory
-            .map { key, value in
-                WalletMonthlyBudgetItem(
-                    categoryName: key.trimmingCharacters(in: .whitespacesAndNewlines),
-                    plannedAmount: max(value, 0)
-                )
-            }
-            .filter { !$0.categoryName.isEmpty }
-            .sorted { $0.categoryName.localizedCaseInsensitiveCompare($1.categoryName) == .orderedAscending }
-
         if let index = monthlyBudgets.firstIndex(where: { $0.year == year && $0.month == month }) {
+            let cleanItems = mergedMonthlyBudgetItems(
+                existingItems: monthlyBudgets[index].items,
+                plannedAmountsByCategory: plannedAmountsByCategory
+            )
             let replacementItemIDs = Set(cleanItems.map(\.id))
             let removedItems = monthlyBudgets[index].items.filter { !replacementItemIDs.contains($0.id) }
             for item in removedItems {
@@ -1233,6 +1227,7 @@ final class WalletStore: ObservableObject {
             return
         }
 
+        let cleanItems = newMonthlyBudgetItems(plannedAmountsByCategory: plannedAmountsByCategory)
         monthlyBudgets.append(
             WalletMonthlyBudget(
                 year: year,
@@ -1242,6 +1237,64 @@ final class WalletStore: ObservableObject {
                 updatedAt: Date()
             )
         )
+    }
+
+    private func mergedMonthlyBudgetItems(
+        existingItems: [WalletMonthlyBudgetItem],
+        plannedAmountsByCategory: [String: Double]
+    ) -> [WalletMonthlyBudgetItem] {
+        var reusableItemsByKey = Dictionary(grouping: existingItems) { monthlyBudgetItemLogicalKey(for: $0.categoryName) }
+
+        return sanitizedMonthlyBudgetInputs(plannedAmountsByCategory)
+            .map { categoryName, plannedAmount in
+                let key = monthlyBudgetItemLogicalKey(for: categoryName)
+                guard var existingItem = reusableItemsByKey[key]?.first else {
+                    return WalletMonthlyBudgetItem(
+                        categoryName: categoryName,
+                        plannedAmount: plannedAmount
+                    )
+                }
+
+                reusableItemsByKey[key]?.removeFirst()
+                if reusableItemsByKey[key]?.isEmpty == true {
+                    reusableItemsByKey[key] = nil
+                }
+
+                if existingItem.categoryName != categoryName || existingItem.plannedAmount != plannedAmount {
+                    existingItem.categoryName = categoryName
+                    existingItem.plannedAmount = plannedAmount
+                    existingItem.updatedAt = Date()
+                }
+
+                return existingItem
+            }
+            .sorted { $0.categoryName.localizedCaseInsensitiveCompare($1.categoryName) == .orderedAscending }
+    }
+
+    private func newMonthlyBudgetItems(plannedAmountsByCategory: [String: Double]) -> [WalletMonthlyBudgetItem] {
+        sanitizedMonthlyBudgetInputs(plannedAmountsByCategory)
+            .map { categoryName, plannedAmount in
+                WalletMonthlyBudgetItem(
+                    categoryName: categoryName,
+                    plannedAmount: plannedAmount
+                )
+            }
+            .sorted { $0.categoryName.localizedCaseInsensitiveCompare($1.categoryName) == .orderedAscending }
+    }
+
+    private func sanitizedMonthlyBudgetInputs(_ plannedAmountsByCategory: [String: Double]) -> [(categoryName: String, plannedAmount: Double)] {
+        plannedAmountsByCategory
+            .map { key, value in
+                (
+                    categoryName: key.trimmingCharacters(in: .whitespacesAndNewlines),
+                    plannedAmount: max(value, 0)
+                )
+            }
+            .filter { !$0.categoryName.isEmpty }
+    }
+
+    private func monthlyBudgetItemLogicalKey(for categoryName: String) -> String {
+        categoryName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     func copyMonthlyBudget(from sourceYear: Int, sourceMonth: Int, to targetYear: Int, targetMonth: Int) {
@@ -2871,6 +2924,10 @@ final class WalletStore: ObservableObject {
             label: "financial event",
             issues: &issues
         )
+        appendDuplicateMonthlyBudgetItemIDIssues(
+            monthlyBudgets: snapshot.monthlyBudgets,
+            issues: &issues
+        )
 
         for event in snapshot.financialEvents {
             if event.amount <= 0 {
@@ -3132,6 +3189,39 @@ final class WalletStore: ObservableObject {
         }
     }
 
+    private func appendDuplicateMonthlyBudgetItemIDIssues(
+        monthlyBudgets: [WalletMonthlyBudget],
+        issues: inout [BackupValidationIssue]
+    ) {
+        var firstBudgetContextByID: [UUID: String] = [:]
+        var reported: Set<UUID> = []
+
+        for budget in monthlyBudgets {
+            let budgetContext = monthlyBudgetValidationContext(for: budget)
+
+            for item in budget.items {
+                if let firstBudgetContext = firstBudgetContextByID[item.id],
+                   !reported.contains(item.id) {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .warning,
+                            title: "Duplicate monthly budget item ID",
+                            detail: "The backup contains more than one monthly budget item with ID \(item.id). Duplicate found in \(budgetContext); first seen in \(firstBudgetContext).",
+                            recordID: item.id
+                        )
+                    )
+                    reported.insert(item.id)
+                } else if firstBudgetContextByID[item.id] == nil {
+                    firstBudgetContextByID[item.id] = budgetContext
+                }
+            }
+        }
+    }
+
+    private func monthlyBudgetValidationContext(for budget: WalletMonthlyBudget) -> String {
+        "monthly budget \(budget.year)-\(String(format: "%02d", budget.month))"
+    }
+
     private func validateBackupSnapshot(_ snapshot: WalletDataSnapshot) throws {
         guard snapshot.schemaVersion > 0,
               snapshot.schemaVersion <= WalletDataSnapshot.currentSchemaVersion else {
@@ -3147,6 +3237,7 @@ final class WalletStore: ObservableObject {
         try validateUniqueIDs(snapshot.personDebts.map { $0.id }, label: "people debts")
         try validateUniqueIDs(snapshot.personDebtEntries.map { $0.id }, label: "people debt entries")
         try validateUniqueIDs(snapshot.monthlyBudgets.map { $0.id }, label: "monthly budgets")
+        try validateUniqueMonthlyBudgetItemIDs(snapshot.monthlyBudgets)
         try validateUniqueIDs(snapshot.historicalMonthlySummaries.map { $0.id }, label: "historical summaries")
         try validateUniqueIDs(snapshot.creditCards.map { $0.id }, label: "credit cards")
         try validateUniqueIDs(snapshot.creditCardPurchases.map { $0.id }, label: "credit card purchases")
@@ -3276,6 +3367,24 @@ final class WalletStore: ObservableObject {
     private func validateUniqueIDs(_ ids: [UUID], label: String) throws {
         guard Set(ids).count == ids.count else {
             throw WalletBackupError.invalidData("Backup contains duplicate \(label).")
+        }
+    }
+
+    private func validateUniqueMonthlyBudgetItemIDs(_ monthlyBudgets: [WalletMonthlyBudget]) throws {
+        var firstBudgetContextByID: [UUID: String] = [:]
+
+        for budget in monthlyBudgets {
+            let budgetContext = monthlyBudgetValidationContext(for: budget)
+
+            for item in budget.items {
+                if let firstBudgetContext = firstBudgetContextByID[item.id] {
+                    throw WalletBackupError.invalidData(
+                        "Backup contains duplicate monthly budget item ID \(item.id) in \(budgetContext); first seen in \(firstBudgetContext)."
+                    )
+                }
+
+                firstBudgetContextByID[item.id] = budgetContext
+            }
         }
     }
 

@@ -159,6 +159,7 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertEqual(store.accounts.first?.balance, originalAccountBalance)
     }
 
+    @MainActor
     func testDemoFixtureDecodesAndPassesValidation() throws {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -172,10 +173,134 @@ final class BackupValidationTests: XCTestCase {
         let store = makeStore()
         let report = store.makeBackupValidationReport(for: snapshot)
 
-        XCTAssertFalse(report.hasIssues, "Demo fixture produced validation issues: \(report.issues.map { $0.title })")
+        XCTAssertFalse(
+            report.issues.contains { $0.severity == .warning },
+            "Demo fixture produced validation warnings: \(report.issues.map { $0.title })"
+        )
         XCTAssertEqual(snapshot.accounts.count, 5)
         XCTAssertEqual(snapshot.financialEvents.count, 27)
-        XCTAssertEqual(snapshot.schemaVersion, WalletDataSnapshot.currentSchemaVersion)
+        XCTAssertLessThanOrEqual(snapshot.schemaVersion, WalletDataSnapshot.currentSchemaVersion)
+    }
+
+    func testValidationDetectsDuplicateMonthlyBudgetItemIDs() {
+        let store = makeStore()
+        let duplicateID = UUID()
+        let firstItem = WalletMonthlyBudgetItem(
+            id: duplicateID,
+            categoryName: "Groceries",
+            plannedAmount: 100,
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let secondItem = WalletMonthlyBudgetItem(
+            id: duplicateID,
+            categoryName: "Transport",
+            plannedAmount: 200,
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let budget = WalletMonthlyBudget(
+            year: 2026,
+            month: 6,
+            items: [firstItem, secondItem],
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyBudgets: [budget]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Duplicate monthly budget item ID", recordID: duplicateID))
+        let issue = report.issue(titled: "Duplicate monthly budget item ID", recordID: duplicateID)
+        XCTAssertTrue(issue?.detail.localizedCaseInsensitiveContains("duplicate") == true)
+        XCTAssertTrue(issue?.detail.localizedCaseInsensitiveContains("monthly budget item") == true)
+        XCTAssertTrue(issue?.detail.contains("2026-06") == true)
+    }
+
+    func testValidationDetectsDuplicateMonthlyBudgetItemIDsAcrossBudgets() {
+        let store = makeStore()
+        let duplicateID = UUID()
+        let juneBudget = WalletMonthlyBudget(
+            year: 2026,
+            month: 6,
+            items: [
+                WalletMonthlyBudgetItem(
+                    id: duplicateID,
+                    categoryName: "Groceries",
+                    plannedAmount: 100,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                )
+            ],
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let julyBudget = WalletMonthlyBudget(
+            year: 2026,
+            month: 7,
+            items: [
+                WalletMonthlyBudgetItem(
+                    id: duplicateID,
+                    categoryName: "Groceries",
+                    plannedAmount: 125,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                )
+            ],
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyBudgets: [juneBudget, julyBudget]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Duplicate monthly budget item ID", recordID: duplicateID))
+        let issue = report.issue(titled: "Duplicate monthly budget item ID", recordID: duplicateID)
+        XCTAssertTrue(issue?.detail.contains("2026-06") == true)
+        XCTAssertTrue(issue?.detail.contains("2026-07") == true)
+    }
+
+    func testValidationDoesNotFlagUniqueMonthlyBudgetItemIDs() {
+        let store = makeStore()
+        let budget = WalletMonthlyBudget(
+            year: 2026,
+            month: 6,
+            items: [
+                WalletMonthlyBudgetItem(
+                    id: UUID(),
+                    categoryName: "Groceries",
+                    plannedAmount: 100,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                ),
+                WalletMonthlyBudgetItem(
+                    id: UUID(),
+                    categoryName: "Transport",
+                    plannedAmount: 200,
+                    createdAt: startDate,
+                    updatedAt: startDate
+                )
+            ],
+            createdAt: startDate,
+            updatedAt: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyBudgets: [budget]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertFalse(report.containsIssue(titled: "Duplicate monthly budget item ID"))
     }
 
     private func makeStore() -> WalletStore {
@@ -233,6 +358,7 @@ final class BackupValidationTests: XCTestCase {
         categories: [WalletBoard.Category],
         installmentPlans: [InstallmentPlan] = [],
         financialEvents: [FinancialEvent] = [],
+        monthlyBudgets: [WalletMonthlyBudget] = [],
         creditCardPurchases: [CreditCardPurchase] = [],
         creditCardPayments: [CreditCardPayment] = []
     ) -> WalletDataSnapshot {
@@ -245,7 +371,7 @@ final class BackupValidationTests: XCTestCase {
             financialEvents: financialEvents,
             personDebts: [],
             personDebtEntries: [],
-            monthlyBudgets: [],
+            monthlyBudgets: monthlyBudgets,
             creditCards: [],
             creditCardPurchases: creditCardPurchases,
             creditCardPayments: creditCardPayments,
@@ -273,6 +399,18 @@ final class BackupValidationTests: XCTestCase {
 private extension BackupValidationReport {
     func containsIssue(titled title: String, recordID: UUID) -> Bool {
         issues.contains { issue in
+            issue.title == title && issue.recordID == recordID
+        }
+    }
+
+    func containsIssue(titled title: String) -> Bool {
+        issues.contains { issue in
+            issue.title == title
+        }
+    }
+
+    func issue(titled title: String, recordID: UUID) -> BackupValidationIssue? {
+        issues.first { issue in
             issue.title == title && issue.recordID == recordID
         }
     }

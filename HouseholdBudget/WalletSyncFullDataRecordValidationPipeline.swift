@@ -108,6 +108,38 @@ struct WalletSyncFullDataRecordValidationPipeline {
     }
 
     func run() async throws -> WalletSyncFullDataRecordValidationPipelineSummary {
+        guard WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled else {
+            return WalletSyncFullDataRecordValidationPipelineSummary(
+                zoneEnsured: false,
+                totalEligibleCount: 0,
+                uploadedCount: 0,
+                batchCount: 0,
+                uploadedCountsByBatch: [],
+                uploadedCountsByEntity: [:],
+                excludedEntities: [],
+                uploadCap: uploadCap,
+                uploadCappedCount: 0,
+                usedSavedToken: false,
+                changedRecordCount: 0,
+                deletedRecordCount: 0,
+                skippedLocalEchoCount: 0,
+                parsedValidCount: 0,
+                blockedCount: 0,
+                failedCount: 0,
+                plannedCreateCount: 0,
+                plannedUpdateCount: 0,
+                plannedDisableCount: 0,
+                appliedCreatedCount: 0,
+                appliedUpdatedCount: 0,
+                appliedDisabledCount: 0,
+                appliedBlockedCount: 0,
+                appliedFailedCount: 0,
+                tokenReturned: false,
+                tokenSaved: false,
+                moreComing: false
+            )
+        }
+
         try await ensureSyncZoneForBootstrap()
 
         let savedTokenData = tokenStore.loadWalletSyncZoneChangeTokenData()
@@ -457,6 +489,10 @@ final class WalletSyncFullDataAutomaticSyncRunner {
         trigger: Trigger,
         operation: @escaping @MainActor () async -> Void
     ) {
+        guard WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled else {
+            return
+        }
+
         guard !isRunning else {
             queuedRunRequested = true
             return
@@ -475,6 +511,10 @@ final class WalletSyncFullDataAutomaticSyncRunner {
     }
 
     func runUserInitiatedSync(operation: @escaping @MainActor () async -> Void) async {
+        guard WalletSyncFeatureFlags.canRunDeveloperCloudKitRecordSync else {
+            return
+        }
+
         scheduledTask?.cancel()
         await runWhenAllowed(operation, enforceMinimumInterval: false)
     }
@@ -483,6 +523,10 @@ final class WalletSyncFullDataAutomaticSyncRunner {
         _ operation: @escaping @MainActor () async -> Void,
         enforceMinimumInterval: Bool
     ) async {
+        guard WalletSyncFeatureFlags.isAutomaticCloudKitSyncEnabled else {
+            return
+        }
+
         guard !isRunning else {
             queuedRunRequested = true
             return

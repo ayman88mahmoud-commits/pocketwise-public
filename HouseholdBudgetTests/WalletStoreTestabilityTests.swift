@@ -220,6 +220,187 @@ final class WalletStoreTestabilityTests: XCTestCase {
         XCTAssertTrue(store.monthlyBudgets.first?.items.isEmpty == true)
     }
 
+    func testSaveMonthlyBudgetPreservesExistingItemIdentityByCategory() throws {
+        let defaults = makeIsolatedUserDefaults()
+        let store = WalletStore(userDefaults: defaults)
+        let oldCreatedAt = Date(timeIntervalSince1970: 1_000)
+        let oldUpdatedAt = Date(timeIntervalSince1970: 2_000)
+        let unchangedItem = WalletMonthlyBudgetItem(
+            id: UUID(),
+            categoryName: "Food",
+            plannedAmount: 100,
+            createdAt: oldCreatedAt,
+            updatedAt: oldUpdatedAt
+        )
+        let editedItem = WalletMonthlyBudgetItem(
+            id: UUID(),
+            categoryName: "Transport",
+            plannedAmount: 200,
+            createdAt: oldCreatedAt,
+            updatedAt: oldUpdatedAt
+        )
+        let removedItem = WalletMonthlyBudgetItem(
+            id: UUID(),
+            categoryName: "Subscriptions",
+            plannedAmount: 300,
+            createdAt: oldCreatedAt,
+            updatedAt: oldUpdatedAt
+        )
+        let existingBudget = WalletMonthlyBudget(
+            id: UUID(),
+            year: 2026,
+            month: 6,
+            items: [unchangedItem, editedItem, removedItem],
+            createdAt: oldCreatedAt,
+            updatedAt: oldUpdatedAt
+        )
+        store.monthlyBudgets = [existingBudget]
+
+        store.saveMonthlyBudget(
+            year: 2026,
+            month: 6,
+            plannedAmountsByCategory: [
+                "Food": 100,
+                "Transport": 250,
+                "Utilities": 400
+            ]
+        )
+
+        let savedBudget = try XCTUnwrap(store.monthlyBudget(year: 2026, month: 6))
+        XCTAssertEqual(savedBudget.id, existingBudget.id)
+
+        let savedFood = try XCTUnwrap(savedBudget.items.first { $0.categoryName == "Food" })
+        XCTAssertEqual(savedFood.id, unchangedItem.id)
+        XCTAssertEqual(savedFood.createdAt, unchangedItem.createdAt)
+        XCTAssertEqual(savedFood.updatedAt, unchangedItem.updatedAt)
+
+        let savedTransport = try XCTUnwrap(savedBudget.items.first { $0.categoryName == "Transport" })
+        XCTAssertEqual(savedTransport.id, editedItem.id)
+        XCTAssertEqual(savedTransport.createdAt, editedItem.createdAt)
+        XCTAssertGreaterThan(savedTransport.updatedAt, editedItem.updatedAt)
+        XCTAssertEqual(savedTransport.plannedAmount, 250, accuracy: 0.001)
+
+        let savedUtilities = try XCTUnwrap(savedBudget.items.first { $0.categoryName == "Utilities" })
+        XCTAssertNotEqual(savedUtilities.id, unchangedItem.id)
+        XCTAssertNotEqual(savedUtilities.id, editedItem.id)
+        XCTAssertNotEqual(savedUtilities.id, removedItem.id)
+
+        XCTAssertFalse(savedBudget.items.contains { $0.id == removedItem.id })
+        let syncState = WalletSyncStateStore(keyValueStore: defaults)
+        XCTAssertTrue(syncState.isHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: removedItem.id))
+        XCTAssertFalse(syncState.isHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: unchangedItem.id))
+        XCTAssertFalse(syncState.isHighRiskRecordDeletedLocally(entity: .monthlyBudgetItem, id: editedItem.id))
+    }
+
+    func testSaveMonthlyBudgetPreservesItemIdentityAcrossRepeatedSaves() throws {
+        let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
+
+        store.saveMonthlyBudget(
+            year: 2026,
+            month: 7,
+            plannedAmountsByCategory: [
+                "Food": 100,
+                "Transport": 200
+            ]
+        )
+
+        let firstSave = try XCTUnwrap(store.monthlyBudget(year: 2026, month: 7))
+        let firstBudgetID = firstSave.id
+        let firstFood = try XCTUnwrap(firstSave.items.first { $0.categoryName == "Food" })
+        let firstTransport = try XCTUnwrap(firstSave.items.first { $0.categoryName == "Transport" })
+
+        store.saveMonthlyBudget(
+            year: 2026,
+            month: 7,
+            plannedAmountsByCategory: [
+                "Food": 100,
+                "Transport": 250
+            ]
+        )
+
+        let secondSave = try XCTUnwrap(store.monthlyBudget(year: 2026, month: 7))
+        let secondFood = try XCTUnwrap(secondSave.items.first { $0.categoryName == "Food" })
+        let secondTransport = try XCTUnwrap(secondSave.items.first { $0.categoryName == "Transport" })
+
+        XCTAssertEqual(secondSave.id, firstBudgetID)
+        XCTAssertEqual(secondFood.id, firstFood.id)
+        XCTAssertEqual(secondFood.createdAt, firstFood.createdAt)
+        XCTAssertEqual(secondFood.updatedAt, firstFood.updatedAt)
+        XCTAssertEqual(secondTransport.id, firstTransport.id)
+        XCTAssertEqual(secondTransport.createdAt, firstTransport.createdAt)
+        XCTAssertGreaterThan(secondTransport.updatedAt, firstTransport.updatedAt)
+
+        store.saveMonthlyBudget(
+            year: 2026,
+            month: 7,
+            plannedAmountsByCategory: [
+                "Food": 125,
+                "Utilities": 300
+            ]
+        )
+
+        let thirdSave = try XCTUnwrap(store.monthlyBudget(year: 2026, month: 7))
+        let thirdFood = try XCTUnwrap(thirdSave.items.first { $0.categoryName == "Food" })
+        let utilities = try XCTUnwrap(thirdSave.items.first { $0.categoryName == "Utilities" })
+
+        XCTAssertEqual(thirdSave.id, firstBudgetID)
+        XCTAssertEqual(thirdFood.id, firstFood.id)
+        XCTAssertEqual(thirdFood.createdAt, firstFood.createdAt)
+        XCTAssertGreaterThan(thirdFood.updatedAt, secondFood.updatedAt)
+        XCTAssertFalse(thirdSave.items.contains { $0.id == firstTransport.id })
+        XCTAssertNotEqual(utilities.id, firstFood.id)
+        XCTAssertNotEqual(utilities.id, firstTransport.id)
+    }
+
+    func testBackupSnapshotRoundTripPreservesMonthlyBudgetAndItemIDs() throws {
+        let store = WalletStore(userDefaults: makeIsolatedUserDefaults())
+        let budgetID = UUID()
+        let foodID = UUID()
+        let transportID = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_000)
+        let updatedAt = Date(timeIntervalSince1970: 2_000)
+        store.monthlyBudgets = [
+            WalletMonthlyBudget(
+                id: budgetID,
+                year: 2026,
+                month: 8,
+                items: [
+                    WalletMonthlyBudgetItem(
+                        id: foodID,
+                        categoryName: "Food",
+                        plannedAmount: 100,
+                        createdAt: createdAt,
+                        updatedAt: updatedAt
+                    ),
+                    WalletMonthlyBudgetItem(
+                        id: transportID,
+                        categoryName: "Transport",
+                        plannedAmount: 200,
+                        createdAt: createdAt,
+                        updatedAt: updatedAt
+                    )
+                ],
+                createdAt: createdAt,
+                updatedAt: updatedAt
+            )
+        ]
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(store.makeBackupSnapshot())
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decodedSnapshot = try decoder.decode(WalletDataSnapshot.self, from: data)
+
+        let restoredBudget = try XCTUnwrap(decodedSnapshot.monthlyBudgets.first)
+        XCTAssertEqual(restoredBudget.id, budgetID)
+        XCTAssertEqual(restoredBudget.items.map(\.id).sorted { $0.uuidString < $1.uuidString }, [foodID, transportID].sorted { $0.uuidString < $1.uuidString })
+        XCTAssertEqual(restoredBudget.items.first { $0.id == foodID }?.createdAt, createdAt)
+        XCTAssertEqual(restoredBudget.items.first { $0.id == foodID }?.updatedAt, updatedAt)
+        XCTAssertEqual(restoredBudget.items.first { $0.id == transportID }?.createdAt, createdAt)
+        XCTAssertEqual(restoredBudget.items.first { $0.id == transportID }?.updatedAt, updatedAt)
+    }
+
     func testDeleteInstallmentPlanRecordsSyncableLocalDeletionMarker() {
         let defaults = makeIsolatedUserDefaults()
         let store = WalletStore(userDefaults: defaults)
