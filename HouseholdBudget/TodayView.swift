@@ -1678,14 +1678,14 @@ private extension TodayView {
                 )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.appLanguage == .arabicEgyptian ? "واردات SMS معلقة" : "Pending SMS imports")
+                    Text(store.appLanguage == .arabicEgyptian ? "مسودات رسائل بنكية للمراجعة" : "Pending bank message drafts")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.primary)
 
                     Text(pendingBankSMSImportCount == 1
-                         ? (store.appLanguage == .arabicEgyptian ? "معاملة واحدة جاهزة للمراجعة." : "1 transaction is ready for review.")
-                         : (store.appLanguage == .arabicEgyptian ? "\(pendingBankSMSImportCount) معاملات جاهزة للمراجعة." : "\(pendingBankSMSImportCount) transactions are ready for review."))
+                         ? (store.appLanguage == .arabicEgyptian ? "مسودة واحدة جاهزة للمراجعة اليدوية." : "1 draft is ready for manual review.")
+                         : (store.appLanguage == .arabicEgyptian ? "\(pendingBankSMSImportCount) مسودات جاهزة للمراجعة اليدوية." : "\(pendingBankSMSImportCount) drafts are ready for manual review."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1700,8 +1700,8 @@ private extension TodayView {
                     .clipShape(Capsule())
                     .accessibilityLabel(
                         pendingBankSMSImportCount == 1
-                        ? (store.appLanguage == .arabicEgyptian ? "معاملة معلقة واحدة" : "1 pending import")
-                        : (store.appLanguage == .arabicEgyptian ? "\(pendingBankSMSImportCount) معاملات معلقة" : "\(pendingBankSMSImportCount) pending imports")
+                        ? (store.appLanguage == .arabicEgyptian ? "مسودة بنكية معلقة واحدة" : "1 pending bank message draft")
+                        : (store.appLanguage == .arabicEgyptian ? "\(pendingBankSMSImportCount) مسودات بنكية معلقة" : "\(pendingBankSMSImportCount) pending bank message drafts")
                     )
 
                 Image(systemName: "chevron.right")

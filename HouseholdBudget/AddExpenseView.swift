@@ -314,17 +314,17 @@ struct AddExpenseView: View {
                 }
             }
             .confirmationDialog(
-                isAr ? "تجاهل الاستيراد المعلق؟" : "Discard this pending import?",
+                isAr ? "تجاهل مسودة الرسالة البنكية؟" : "Discard this bank message draft?",
                 isPresented: $isShowingDiscardImportConfirmation,
                 titleVisibility: .visible
             ) {
-                Button(isAr ? "تجاهل الاستيراد" : "Discard Import", role: .destructive) {
+                Button(isAr ? "تجاهل المسودة" : "Discard Draft", role: .destructive) {
                     discardBankSMSImport()
                 }
 
                 Button(isAr ? "احتفظ به لاحقًا" : "Keep for Later", role: .cancel) {}
             } message: {
-                Text(isAr ? "سيُزال مسودة استيراد الرسالة بدون إنشاء معاملة." : "This removes the SMS import draft without creating a transaction.")
+                Text(isAr ? "سيتم حذف المسودة القادمة من نص الاختصار بدون إنشاء معاملة." : "This removes the draft created from shortcut text without creating a transaction.")
             }
             .confirmationDialog(
                 isAr ? "يشبه معاملة موجودة. تحفظ على أي حال؟" : "This looks similar to an existing transaction. Save anyway?",
@@ -593,7 +593,7 @@ struct AddExpenseView: View {
             date = transactionDate
         }
 
-        title = draft.merchant ?? "Bank SMS Import"
+        title = draft.merchant ?? "Review imported draft"
         note = draft.note
         selectedCategoryName = ""
         selectedSubCategoryName = ""
