@@ -494,6 +494,74 @@ The following are explicitly out of scope until the foundation phases above are 
 
 ---
 
+## Remaining Restore-Blocking Report Coverage — Implementation Status
+
+Implemented in commit: Complete restore-blocking backup report coverage  
+Date: 2026-06-30
+
+### What was implemented
+
+All conditions in `validateBackupSnapshot(_:)` that throw a `WalletBackupError` are now also reported as `.error` in `makeBackupValidationReport(for:)`. The following checks were added or upgraded:
+
+| Condition | Report title | Severity |
+|---|---|---|
+| Account with empty name | "Account missing name" | `.error` |
+| Duplicate account name (case-insensitive) | "Duplicate account name" | `.error` |
+| Category with empty name | "Category missing name" | `.error` |
+| Duplicate category name (case-insensitive) | "Duplicate category name" | `.error` |
+| Merchant memory with empty name or unknown category/subcategory | "Invalid merchant memory" | `.error` |
+| Monthly budget with invalid year or month | "Invalid monthly budget period" | `.error` |
+| Monthly budget item with empty category name or negative planned amount | "Invalid monthly budget item" | `.error` |
+| Historical summary entry with invalid year, month, amount, or unknown category/subcategory | "Invalid historical summary entry" | `.error` |
+| Person debt with empty person name or non-positive original amount | "Invalid person debt" | `.error` |
+| Credit card purchase with empty title | "Credit card purchase missing title" | `.error` |
+| Credit card purchase referencing unknown category/subcategory | "Credit card purchase invalid category" | `.error` |
+| Credit card that fails `isValidCreditCard(_:)` | "Invalid credit card" | `.error` |
+| Settings with negative fees or max fee below min fee | "Invalid backup settings" | `.error` |
+
+### Test coverage added
+
+47 tests pass in `BackupValidationTests`. The following tests were added for the new error conditions:
+
+- `testEmptyAccountNameIsReportedAsBlockingError`
+- `testEmptyAccountNameBlocksRestoreAtStoreLevel`
+- `testDuplicateAccountNameIsReportedAsBlockingError`
+- `testDuplicateAccountNameBlocksRestoreAtStoreLevel`
+- `testEmptyCategoryNameIsReportedAsBlockingError`
+- `testEmptyCategoryNameBlocksRestoreAtStoreLevel`
+- `testDuplicateCategoryNameIsReportedAsBlockingError`
+- `testDuplicateCategoryNameBlocksRestoreAtStoreLevel`
+- `testInvalidMerchantMemoryIsReportedAsBlockingError`
+- `testInvalidMerchantMemoryBlocksRestoreAtStoreLevel`
+- `testMerchantWithUnknownCategoryIsReportedAsBlockingError`
+- `testInvalidHistoricalSummaryIsReportedAsBlockingError`
+- `testInvalidHistoricalSummaryBlocksRestoreAtStoreLevel`
+- `testHistoricalSummaryWithUnknownCategoryIsReportedAsBlockingError`
+- `testInvalidCreditCardIsReportedAsBlockingError`
+- `testInvalidCreditCardBlocksRestoreAtStoreLevel`
+- `testCreditCardWithNegativeLimitIsReportedAsBlockingError`
+- `testInvalidPersonDebtEmptyNameIsReportedAsBlockingError`
+- `testInvalidPersonDebtZeroAmountIsReportedAsBlockingError`
+- `testInvalidPersonDebtBlocksRestoreAtStoreLevel`
+- `testNegativeMonthlyLivingBurnIsReportedAsBlockingError`
+- `testInstaPayMaxBelowMinIsReportedAsBlockingError`
+- `testInvalidSettingsBlocksRestoreAtStoreLevel`
+
+### Alignment guarantee
+
+Every condition that causes `validateBackupSnapshot(_:)` to throw `WalletBackupError.invalidData` now also causes `makeBackupValidationReport(for:)` to include at least one `.error` issue, making `report.hasErrors == true`. The restore gate in `DataBackupView.swift` uses `hasErrors` to block restore before calling `validateBackupSnapshot`, so the report and the store-level gate are fully aligned.
+
+### Non-blocking conditions preserved
+
+The following conditions continue to emit `.warning` (non-blocking) because `validateBackupSnapshot` does not throw for them:
+
+- Paid financial event referencing an account name not in the backup
+- Credit card purchase or payment referencing a card ID not in the backup
+- Credit card with no default payment account set
+- Merchant memory referencing an account name not in the backup
+
+---
+
 ## 12. Smallest Safe Next Implementation Step
 
 **Add `.error` severity to `BackupValidationSeverity` and add one blocking check to the existing backup validator.**

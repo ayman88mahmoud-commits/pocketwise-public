@@ -2945,11 +2945,151 @@ final class WalletStore: ObservableObject {
         // Duplicate monthly budget item IDs — blocks restore
         appendDuplicateMonthlyBudgetItemIDIssues(monthlyBudgets: snapshot.monthlyBudgets, issues: &issues)
 
+        // Account name validation — blocks restore
+        for account in snapshot.accounts {
+            if account.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Account missing name",
+                        detail: "The backup contains an account with no name. Restore is blocked.",
+                        recordID: account.id
+                    )
+                )
+            }
+        }
+        let trimmedAccountNamesLowercased = snapshot.accounts.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        var seenAccountNameSet: Set<String> = []
+        var reportedAccountNameSet: Set<String> = []
+        for name in trimmedAccountNamesLowercased where !name.isEmpty {
+            if seenAccountNameSet.contains(name), !reportedAccountNameSet.contains(name) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Duplicate account name",
+                        detail: "The backup contains more than one account with the name '\(name)'. Restore is blocked.",
+                        recordID: nil
+                    )
+                )
+                reportedAccountNameSet.insert(name)
+            }
+            seenAccountNameSet.insert(name)
+        }
+
+        // Category name validation — blocks restore
+        for category in snapshot.categories {
+            if category.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Category missing name",
+                        detail: "The backup contains a category with no name. Restore is blocked.",
+                        recordID: category.id
+                    )
+                )
+            }
+        }
+        let trimmedCategoryNamesLowercased = snapshot.categories.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        var seenCategoryNameSet: Set<String> = []
+        var reportedCategoryNameSet: Set<String> = []
+        for name in trimmedCategoryNamesLowercased where !name.isEmpty {
+            if seenCategoryNameSet.contains(name), !reportedCategoryNameSet.contains(name) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Duplicate category name",
+                        detail: "The backup contains more than one category with the name '\(name)'. Restore is blocked.",
+                        recordID: nil
+                    )
+                )
+                reportedCategoryNameSet.insert(name)
+            }
+            seenCategoryNameSet.insert(name)
+        }
+
         let accountNames = Set(snapshot.accounts.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) })
+        let validCategories = Set(snapshot.categories.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) })
+        let validSubcategoriesByCategory = Dictionary(
+            snapshot.categories.map { category in (category.name, Set(category.subcategories)) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let creditCardIDs = Set(snapshot.creditCards.map(\.id))
         let installmentPlanIDs = Set(snapshot.installmentPlans.map(\.id))
         let personDebtIDs = Set(snapshot.personDebts.map(\.id))
         let today = Calendar.current.startOfDay(for: Date())
+
+        // Merchant memory validation — blocks restore
+        for merchant in snapshot.merchantMemories {
+            if merchant.merchantName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !validCategories.contains(merchant.defaultCategoryName)
+                || validSubcategoriesByCategory[merchant.defaultCategoryName]?.contains(merchant.defaultSubCategoryName) != true {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Invalid merchant memory",
+                        detail: "The merchant memory '\(merchant.merchantName)' has an empty name or references a category or subcategory that is not in the backup.",
+                        recordID: merchant.id
+                    )
+                )
+            }
+        }
+
+        // Monthly budget content validation — blocks restore
+        for budget in snapshot.monthlyBudgets {
+            if budget.year < 1900 || budget.month < 1 || budget.month > 12 {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Invalid monthly budget period",
+                        detail: "A monthly budget has an invalid year (\(budget.year)) or month (\(budget.month)).",
+                        recordID: budget.id
+                    )
+                )
+            }
+            for item in budget.items {
+                if item.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || item.plannedAmount < 0 {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .error,
+                            title: "Invalid monthly budget item",
+                            detail: "A budget item in \(monthlyBudgetValidationContext(for: budget)) has an empty category name or a negative planned amount.",
+                            recordID: item.id
+                        )
+                    )
+                }
+            }
+        }
+
+        // Historical summary validation — blocks restore
+        for entry in snapshot.historicalMonthlySummaries {
+            if entry.year < 1900 || entry.month < 1 || entry.month > 12
+                || entry.amount <= 0
+                || !validCategories.contains(entry.categoryName)
+                || validSubcategoriesByCategory[entry.categoryName]?.contains(entry.subCategoryName) != true {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Invalid historical summary entry",
+                        detail: "A historical summary entry for \(entry.categoryName)/\(entry.subCategoryName) (\(entry.year)-\(String(format: "%02d", entry.month))) has an invalid period, amount, or references a category that is not in the backup.",
+                        recordID: entry.id
+                    )
+                )
+            }
+        }
+
+        // Person debt validation — blocks restore
+        for debt in snapshot.personDebts {
+            if debt.personName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || debt.originalAmount <= 0 {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Invalid person debt",
+                        detail: "A people/debts record has an empty person name or an invalid original amount.",
+                        recordID: debt.id
+                    )
+                )
+            }
+        }
 
         for event in snapshot.financialEvents {
             // Blocked by validateBackupSnapshot — .error
@@ -3086,6 +3226,31 @@ final class WalletStore: ObservableObject {
                     )
                 )
             }
+
+            // Blocked by validateBackupSnapshot — .error
+            if purchase.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Credit card purchase missing title",
+                        detail: "A credit card purchase has no title.",
+                        recordID: purchase.id
+                    )
+                )
+            }
+
+            // Blocked by validateBackupSnapshot — .error
+            if !validCategories.contains(purchase.categoryName)
+                || validSubcategoriesByCategory[purchase.categoryName]?.contains(purchase.subCategoryName) != true {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Credit card purchase invalid category",
+                        detail: "\(purchase.title) references a category or subcategory that is not in the backup.",
+                        recordID: purchase.id
+                    )
+                )
+            }
         }
 
         for payment in snapshot.creditCardPayments {
@@ -3193,8 +3358,20 @@ final class WalletStore: ObservableObject {
             }
         }
 
-        // Non-blocking — validateBackupSnapshot does not check card default payment account
         for card in snapshot.creditCards {
+            // Blocked by validateBackupSnapshot — .error
+            if !isValidCreditCard(card) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .error,
+                        title: "Invalid credit card",
+                        detail: "\(card.name) has an invalid name, credit limit, outstanding balance, statement closing day, payment due day, or last four digits.",
+                        recordID: card.id
+                    )
+                )
+            }
+
+            // Non-blocking — validateBackupSnapshot does not check card default payment account
             if let accountName = card.defaultPaymentAccountName?.trimmingCharacters(in: .whitespacesAndNewlines),
                !accountName.isEmpty,
                !accountNames.contains(accountName) {
@@ -3256,6 +3433,22 @@ final class WalletStore: ObservableObject {
                     )
                 )
             }
+        }
+
+        // Settings validation — blocks restore
+        if snapshot.monthlyLivingBurn < 0
+            || snapshot.runwaySafeBalanceTarget < 0
+            || snapshot.instaPayFeePercent < 0
+            || snapshot.instaPayMinimumFee < 0
+            || snapshot.instaPayMaximumFee < snapshot.instaPayMinimumFee {
+            issues.append(
+                BackupValidationIssue(
+                    severity: .error,
+                    title: "Invalid backup settings",
+                    detail: "The backup contains invalid settings values (negative fees or maximum fee below minimum fee). Restore is blocked.",
+                    recordID: nil
+                )
+            )
         }
 
         return BackupValidationReport(issues: issues)

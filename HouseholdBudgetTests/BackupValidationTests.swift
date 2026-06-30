@@ -736,11 +736,20 @@ final class BackupValidationTests: XCTestCase {
         schemaVersion: Int = WalletDataSnapshot.currentSchemaVersion,
         accounts: [Account],
         categories: [WalletBoard.Category],
+        merchantMemories: [MerchantMemory] = [],
         installmentPlans: [InstallmentPlan] = [],
         financialEvents: [FinancialEvent] = [],
+        personDebts: [PersonDebt] = [],
+        personDebtEntries: [PersonDebtEntry] = [],
         monthlyBudgets: [WalletMonthlyBudget] = [],
+        historicalMonthlySummaries: [HistoricalMonthlySummaryEntry] = [],
+        creditCards: [CreditCard] = [],
         creditCardPurchases: [CreditCardPurchase] = [],
-        creditCardPayments: [CreditCardPayment] = []
+        creditCardPayments: [CreditCardPayment] = [],
+        monthlyLivingBurn: Double = 0,
+        instaPayFeePercent: Double = 0,
+        instaPayMinimumFee: Double = 0,
+        instaPayMaximumFee: Double = 0
     ) -> WalletDataSnapshot {
         WalletDataSnapshot(
             schemaVersion: schemaVersion,
@@ -748,19 +757,414 @@ final class BackupValidationTests: XCTestCase {
             accounts: accounts,
             categories: categories,
             walletEvents: [],
+            merchantMemories: merchantMemories,
             installmentPlans: installmentPlans,
             financialEvents: financialEvents,
-            personDebts: [],
-            personDebtEntries: [],
+            personDebts: personDebts,
+            personDebtEntries: personDebtEntries,
             monthlyBudgets: monthlyBudgets,
-            creditCards: [],
+            historicalMonthlySummaries: historicalMonthlySummaries,
+            creditCards: creditCards,
             creditCardPurchases: creditCardPurchases,
             creditCardPayments: creditCardPayments,
-            monthlyLivingBurn: 0,
-            instaPayFeePercent: 0,
-            instaPayMinimumFee: 0,
-            instaPayMaximumFee: 0
+            monthlyLivingBurn: monthlyLivingBurn,
+            instaPayFeePercent: instaPayFeePercent,
+            instaPayMinimumFee: instaPayMinimumFee,
+            instaPayMaximumFee: instaPayMaximumFee
         )
+    }
+
+    // MARK: - Account name validation
+
+    func testEmptyAccountNameIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badAccount = Account(name: "", balance: 0, type: .cash)
+        let snapshot = makeSnapshot(
+            accounts: store.accounts + [badAccount],
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Account missing name", recordID: badAccount.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testEmptyAccountNameBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let badAccount = Account(name: "", balance: 0, type: .cash)
+        let snapshot = makeSnapshot(
+            accounts: store.accounts + [badAccount],
+            categories: store.categories
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testDuplicateAccountNameIsReportedAsBlockingError() {
+        let store = makeStore()
+        let dupName = "Duplicate Account"
+        let first = Account(name: dupName, balance: 0, type: .cash)
+        let second = Account(name: dupName, balance: 0, type: .cash)
+        let snapshot = makeSnapshot(
+            accounts: store.accounts + [first, second],
+            categories: store.categories
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Duplicate account name"))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testDuplicateAccountNameBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let dupName = "Duplicate Account"
+        let first = Account(name: dupName, balance: 0, type: .cash)
+        let second = Account(name: dupName, balance: 0, type: .cash)
+        let snapshot = makeSnapshot(
+            accounts: store.accounts + [first, second],
+            categories: store.categories
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    // MARK: - Category name validation
+
+    func testEmptyCategoryNameIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badCat = WalletBoard.Category(name: "", subcategories: [])
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories + [badCat]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Category missing name", recordID: badCat.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testEmptyCategoryNameBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let badCat = WalletBoard.Category(name: "", subcategories: [])
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories + [badCat]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testDuplicateCategoryNameIsReportedAsBlockingError() {
+        let store = makeStore()
+        let dupName = "Duplicate Category"
+        let first = WalletBoard.Category(name: dupName, subcategories: [])
+        let second = WalletBoard.Category(name: dupName, subcategories: [])
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories + [first, second]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Duplicate category name"))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testDuplicateCategoryNameBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let dupName = "Duplicate Category"
+        let first = WalletBoard.Category(name: dupName, subcategories: [])
+        let second = WalletBoard.Category(name: dupName, subcategories: [])
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories + [first, second]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    // MARK: - Merchant memory validation
+
+    func testInvalidMerchantMemoryIsReportedAsBlockingError() {
+        let store = makeStore()
+        var badMerchant = MerchantMemory(
+            merchantName: "",
+            defaultCategoryName: "Groceries",
+            defaultSubCategoryName: "Groceries"
+        )
+        badMerchant.id = UUID()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            merchantMemories: [badMerchant]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid merchant memory", recordID: badMerchant.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidMerchantMemoryBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        var badMerchant = MerchantMemory(
+            merchantName: "",
+            defaultCategoryName: "Groceries",
+            defaultSubCategoryName: "Groceries"
+        )
+        badMerchant.id = UUID()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            merchantMemories: [badMerchant]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testMerchantWithUnknownCategoryIsReportedAsBlockingError() {
+        let store = makeStore()
+        var badMerchant = MerchantMemory(
+            merchantName: "Shop",
+            defaultCategoryName: "Nonexistent Category",
+            defaultSubCategoryName: "Sub"
+        )
+        badMerchant.id = UUID()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            merchantMemories: [badMerchant]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid merchant memory", recordID: badMerchant.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Historical summary validation
+
+    func testInvalidHistoricalSummaryIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badEntry = HistoricalMonthlySummaryEntry(
+            year: 1800,
+            month: 1,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries",
+            amount: 100
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            historicalMonthlySummaries: [badEntry]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid historical summary entry", recordID: badEntry.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidHistoricalSummaryBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let badEntry = HistoricalMonthlySummaryEntry(
+            year: 1800,
+            month: 1,
+            categoryName: "Groceries",
+            subCategoryName: "Groceries",
+            amount: 100
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            historicalMonthlySummaries: [badEntry]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testHistoricalSummaryWithUnknownCategoryIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badEntry = HistoricalMonthlySummaryEntry(
+            year: 2024,
+            month: 6,
+            categoryName: "Nonexistent Category",
+            subCategoryName: "Sub",
+            amount: 200
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            historicalMonthlySummaries: [badEntry]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid historical summary entry", recordID: badEntry.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Credit card validation
+
+    func testInvalidCreditCardIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badCard = CreditCard(
+            name: "",
+            bankName: "Test Bank",
+            creditLimit: 1000,
+            statementClosingDay: 15,
+            paymentDueDay: 25
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            creditCards: [badCard]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid credit card", recordID: badCard.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidCreditCardBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let badCard = CreditCard(
+            name: "",
+            bankName: "Test Bank",
+            creditLimit: 1000,
+            statementClosingDay: 15,
+            paymentDueDay: 25
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            creditCards: [badCard]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testCreditCardWithNegativeLimitIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badCard = CreditCard(
+            name: "My Card",
+            bankName: "Test Bank",
+            creditLimit: -500,
+            statementClosingDay: 15,
+            paymentDueDay: 25
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            creditCards: [badCard]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid credit card", recordID: badCard.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Person debt validation
+
+    func testInvalidPersonDebtEmptyNameIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badDebt = PersonDebt(
+            personName: "",
+            kind: .owedToMe,
+            originalAmount: 100
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [badDebt]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid person debt", recordID: badDebt.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidPersonDebtZeroAmountIsReportedAsBlockingError() {
+        let store = makeStore()
+        let badDebt = PersonDebt(
+            personName: "Alice",
+            kind: .owedToMe,
+            originalAmount: 0
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [badDebt]
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid person debt", recordID: badDebt.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidPersonDebtBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let badDebt = PersonDebt(
+            personName: "",
+            kind: .iOwe,
+            originalAmount: 50
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [badDebt]
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    // MARK: - Settings validation
+
+    func testNegativeMonthlyLivingBurnIsReportedAsBlockingError() {
+        let store = makeStore()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyLivingBurn: -1
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid backup settings"))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInstaPayMaxBelowMinIsReportedAsBlockingError() {
+        let store = makeStore()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            instaPayMinimumFee: 10,
+            instaPayMaximumFee: 5
+        )
+
+        let report = store.makeBackupValidationReport(for: snapshot)
+
+        XCTAssertTrue(report.containsIssue(titled: "Invalid backup settings"))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testInvalidSettingsBlocksRestoreAtStoreLevel() {
+        let store = makeStore()
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            monthlyLivingBurn: -100
+        )
+
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
     }
 
     private func makeIsolatedUserDefaults(
