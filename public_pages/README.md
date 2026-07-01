@@ -1,6 +1,6 @@
-# PocketWise GitHub Pages Content
+# WalletBoard GitHub Pages Content
 
-This folder contains static GitHub Pages content for PocketWise:
+This folder contains static GitHub Pages content for WalletBoard:
 
 - `index.html`
 - `privacy.html`
@@ -10,7 +10,7 @@ The pages are plain HTML with inline CSS. They have no external dependencies, no
 
 ## Publishing With GitHub Pages
 
-1. Create a GitHub repository for the public pages, or use an existing repository intended for PocketWise public content.
+1. Create a GitHub repository for the public pages, or use an existing repository intended for WalletBoard public content.
 2. Upload the files in this folder to the repository.
 3. In GitHub, open the repository settings.
 4. Go to Pages.
@@ -36,7 +36,7 @@ The pages are plain HTML with inline CSS. They have no external dependencies, no
 
 ## Content Notes
 
-- App name: PocketWise
+- App name: WalletBoard
 - Subtitle: Plan your money clearly
 - Support email: ayman88mahmoud@icloud.com
 - Privacy policy effective date: 2026-06-17
