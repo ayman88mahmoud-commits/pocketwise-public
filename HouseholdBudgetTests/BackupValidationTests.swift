@@ -1487,6 +1487,159 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertFalse(report.containsIssue(titled: "Installment plan missing account", recordID: plan.id))
     }
 
+    // MARK: - Relationship integrity: CreditCardPurchase.cardID (existing .error — regression)
+
+    func testCreditCardPurchaseWithValidCardProducesNoPurchaseCardWarning() {
+        let store = makeStore()
+        let card = CreditCard(
+            name: "Test Card", bankName: "Test Bank",
+            creditLimit: 5000, statementClosingDay: 15, paymentDueDay: 25
+        )
+        let purchase = CreditCardPurchase(
+            id: UUID(), cardID: card.id, title: "Valid Purchase", amount: 200,
+            purchaseDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            note: nil, createdAt: startDate, updatedAt: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            creditCards: [card], creditCardPurchases: [purchase]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Credit card purchase missing card", recordID: purchase.id))
+    }
+
+    func testCreditCardPurchaseMissingCardIsBlockingError() {
+        let store = makeStore()
+        let purchase = CreditCardPurchase(
+            id: UUID(), cardID: UUID(), title: "Orphaned Purchase", amount: 200,
+            purchaseDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            note: nil, createdAt: startDate, updatedAt: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            creditCardPurchases: [purchase]
+        ))
+        let issue = report.issue(titled: "Credit card purchase missing card", recordID: purchase.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .error)
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Relationship integrity: CreditCardPayment.cardID (existing .error — regression)
+
+    func testCreditCardPaymentWithValidCardProducesNoPaymentCardWarning() {
+        let store = makeStore()
+        let card = CreditCard(
+            name: "Test Card", bankName: "Test Bank",
+            creditLimit: 5000, statementClosingDay: 15, paymentDueDay: 25
+        )
+        let payment = CreditCardPayment(
+            id: UUID(), cardID: card.id, fromAccountName: accountName, amount: 500,
+            paymentDate: startDate, note: nil, createdAt: startDate, updatedAt: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            creditCards: [card], creditCardPayments: [payment]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Credit card payment missing card", recordID: payment.id))
+    }
+
+    func testCreditCardPaymentMissingCardIsBlockingError() {
+        let store = makeStore()
+        let payment = CreditCardPayment(
+            id: UUID(), cardID: UUID(), fromAccountName: accountName, amount: 500,
+            paymentDate: startDate, note: nil, createdAt: startDate, updatedAt: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            creditCardPayments: [payment]
+        ))
+        let issue = report.issue(titled: "Credit card payment missing card", recordID: payment.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .error)
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Relationship integrity: InstallmentPlan.linkedCreditCardID (existing .warning — regression)
+
+    func testInstallmentPlanWithValidLinkedCardProducesNoLinkedCardWarning() {
+        let store = makeStore()
+        let card = CreditCard(
+            name: "Test Card", bankName: "Test Bank",
+            creditLimit: 5000, statementClosingDay: 15, paymentDueDay: 25
+        )
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            linkedCreditCardID: card.id
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan], creditCards: [card]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan missing linked card", recordID: plan.id))
+    }
+
+    func testInstallmentPlanWithMissingLinkedCardIsReportedAsWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            linkedCreditCardID: UUID()
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan]
+        ))
+        let issue = report.issue(titled: "Installment plan missing linked card", recordID: plan.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testInstallmentPlanWithNilLinkedCardProducesNoLinkedCardWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            linkedCreditCardID: nil
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan missing linked card", recordID: plan.id))
+    }
+
+    // MARK: - Relationship integrity: credit card reference cross-cutting
+
+    func testCreditCardWarningOnlyReportDoesNotSetHasErrors() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            linkedCreditCardID: UUID()
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan]
+        ))
+        XCTAssertTrue(report.containsIssue(titled: "Installment plan missing linked card", recordID: plan.id))
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testCreditCardWarningOnlyReportDoesNotBlockRestore() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries",
+            linkedCreditCardID: UUID()
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
     // MARK: - Relationship integrity: account reference cross-cutting
 
     func testAccountReferenceWarningDoesNotSetHasErrors() {
