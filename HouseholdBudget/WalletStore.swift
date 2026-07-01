@@ -3056,6 +3056,16 @@ final class WalletStore: ObservableObject {
                             recordID: item.id
                         )
                     )
+                } else if !validCategories.contains(item.categoryName) {
+                    // Relationship integrity — category reference — non-blocking .warning
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .warning,
+                            title: "Budget item unknown category",
+                            detail: "A budget item in \(monthlyBudgetValidationContext(for: budget)) references category '\(item.categoryName)' which is not in the backup.",
+                            recordID: item.id
+                        )
+                    )
                 }
             }
         }
@@ -3200,6 +3210,54 @@ final class WalletStore: ObservableObject {
                     )
                 )
             }
+
+            // Relationship integrity — category/subcategory reference — non-blocking .warning
+            if let categoryName = event.categoryName, !categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !validCategories.contains(categoryName) {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .warning,
+                            title: "Financial event unknown category",
+                            detail: "\(event.title) references category '\(categoryName)' which is not in the backup.",
+                            recordID: event.id
+                        )
+                    )
+                } else if let subCategoryName = event.subCategoryName,
+                          !subCategoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          validSubcategoriesByCategory[categoryName]?.contains(subCategoryName) != true {
+                    issues.append(
+                        BackupValidationIssue(
+                            severity: .warning,
+                            title: "Financial event unknown subcategory",
+                            detail: "\(event.title) references subcategory '\(subCategoryName)' under '\(categoryName)' which is not in the backup.",
+                            recordID: event.id
+                        )
+                    )
+                }
+            }
+        }
+
+        // Relationship integrity — WalletEvent category/subcategory reference — non-blocking .warning
+        for event in snapshot.walletEvents {
+            if !validCategories.contains(event.categoryName) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Quick event unknown category",
+                        detail: "Quick event '\(event.name)' references category '\(event.categoryName)' which is not in the backup.",
+                        recordID: event.id
+                    )
+                )
+            } else if validSubcategoriesByCategory[event.categoryName]?.contains(event.subCategoryName) != true {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Quick event unknown subcategory",
+                        detail: "Quick event '\(event.name)' references subcategory '\(event.subCategoryName)' under '\(event.categoryName)' which is not in the backup.",
+                        recordID: event.id
+                    )
+                )
+            }
         }
 
         for purchase in snapshot.creditCardPurchases {
@@ -3335,6 +3393,27 @@ final class WalletStore: ObservableObject {
                         severity: .warning,
                         title: "Installment plan missing linked card",
                         detail: "\(plan.purchaseName) is linked to a credit card that is not in the backup.",
+                        recordID: plan.id
+                    )
+                )
+            }
+
+            // Relationship integrity — category/subcategory reference — non-blocking .warning
+            if !validCategories.contains(plan.categoryName) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Installment plan unknown category",
+                        detail: "\(plan.purchaseName) references category '\(plan.categoryName)' which is not in the backup.",
+                        recordID: plan.id
+                    )
+                )
+            } else if validSubcategoriesByCategory[plan.categoryName]?.contains(plan.subCategoryName) != true {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Installment plan unknown subcategory",
+                        detail: "\(plan.purchaseName) references subcategory '\(plan.subCategoryName)' under '\(plan.categoryName)' which is not in the backup.",
                         recordID: plan.id
                     )
                 )

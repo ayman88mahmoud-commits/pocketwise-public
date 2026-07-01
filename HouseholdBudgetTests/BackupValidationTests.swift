@@ -736,6 +736,7 @@ final class BackupValidationTests: XCTestCase {
         schemaVersion: Int = WalletDataSnapshot.currentSchemaVersion,
         accounts: [Account],
         categories: [WalletBoard.Category],
+        walletEvents: [WalletEvent] = [],
         merchantMemories: [MerchantMemory] = [],
         installmentPlans: [InstallmentPlan] = [],
         financialEvents: [FinancialEvent] = [],
@@ -756,7 +757,7 @@ final class BackupValidationTests: XCTestCase {
             exportedAt: startDate,
             accounts: accounts,
             categories: categories,
-            walletEvents: [],
+            walletEvents: walletEvents,
             merchantMemories: merchantMemories,
             installmentPlans: installmentPlans,
             financialEvents: financialEvents,
@@ -1165,6 +1166,215 @@ final class BackupValidationTests: XCTestCase {
         )
 
         XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    // MARK: - Relationship integrity: FinancialEvent category/subcategory
+
+    func testFinancialEventWithValidCategoryProducesNoCategoryWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Valid", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Financial event unknown category", recordID: event.id))
+        XCTAssertFalse(report.containsIssue(titled: "Financial event unknown subcategory", recordID: event.id))
+    }
+
+    func testFinancialEventWithUnknownCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Bad Category", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Nonexistent Category", subCategoryName: "Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        let issue = report.issue(titled: "Financial event unknown category", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testFinancialEventWithUnknownSubcategoryUnderValidCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Bad Sub", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Nonexistent Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        let issue = report.issue(titled: "Financial event unknown subcategory", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testFinancialEventWithUnknownParentCategoryDoesNotAlsoProduceSubcategoryWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Missing Both", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Nonexistent Category", subCategoryName: "Nonexistent Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertTrue(report.containsIssue(titled: "Financial event unknown category", recordID: event.id))
+        XCTAssertFalse(report.containsIssue(titled: "Financial event unknown subcategory", recordID: event.id))
+    }
+
+    // MARK: - Relationship integrity: WalletEvent category/subcategory
+
+    func testWalletEventWithValidCategoryProducesNoWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Quick event unknown category", recordID: event.id))
+        XCTAssertFalse(report.containsIssue(titled: "Quick event unknown subcategory", recordID: event.id))
+    }
+
+    func testWalletEventWithUnknownCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Nonexistent Category", subCategoryName: "Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        let issue = report.issue(titled: "Quick event unknown category", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testWalletEventWithUnknownSubcategoryUnderValidCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Groceries", subCategoryName: "Nonexistent Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        let issue = report.issue(titled: "Quick event unknown subcategory", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    // MARK: - Relationship integrity: InstallmentPlan category/subcategory
+
+    func testInstallmentPlanWithValidCategoryProducesNoWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan unknown category", recordID: plan.id))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan unknown subcategory", recordID: plan.id))
+    }
+
+    func testInstallmentPlanWithUnknownCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Nonexistent Category", subCategoryName: "Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        let issue = report.issue(titled: "Installment plan unknown category", recordID: plan.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testInstallmentPlanWithUnknownSubcategoryUnderValidCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Laptop", totalAmount: 1200, installmentCount: 12,
+            firstDueDate: startDate, categoryName: "Groceries", subCategoryName: "Nonexistent Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        let issue = report.issue(titled: "Installment plan unknown subcategory", recordID: plan.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    // MARK: - Relationship integrity: MonthlyBudgetItem category
+
+    func testMonthlyBudgetItemWithValidCategoryProducesNoWarning() {
+        let store = makeStore()
+        let item = WalletMonthlyBudgetItem(categoryName: "Groceries", plannedAmount: 500)
+        let budget = WalletMonthlyBudget(year: 2026, month: 6, items: [item])
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, monthlyBudgets: [budget]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Budget item unknown category", recordID: item.id))
+    }
+
+    func testMonthlyBudgetItemWithUnknownCategoryIsReportedAsWarning() {
+        let store = makeStore()
+        let item = WalletMonthlyBudgetItem(categoryName: "Nonexistent Category", plannedAmount: 500)
+        let budget = WalletMonthlyBudget(year: 2026, month: 6, items: [item])
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, monthlyBudgets: [budget]
+        ))
+        let issue = report.issue(titled: "Budget item unknown category", recordID: item.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testMonthlyBudgetItemWithEmptyCategoryRemainsBlockingError() {
+        let store = makeStore()
+        let item = WalletMonthlyBudgetItem(categoryName: "", plannedAmount: 500)
+        let budget = WalletMonthlyBudget(year: 2026, month: 6, items: [item])
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, monthlyBudgets: [budget]
+        ))
+        let issue = report.issue(titled: "Invalid monthly budget item", recordID: item.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .error)
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    // MARK: - Relationship integrity: cross-cutting
+
+    func testWarningOnlyRelationshipIssuesDoNotSetHasErrors() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Bad Cat", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Nonexistent Category", subCategoryName: "Sub"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testWarningOnlyRelationshipIssuesDoNotBlockRestore() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Bad Cat", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Nonexistent Category", subCategoryName: "Sub"
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
     }
 
     private func makeIsolatedUserDefaults(
