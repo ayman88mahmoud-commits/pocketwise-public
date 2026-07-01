@@ -3016,6 +3016,7 @@ final class WalletStore: ObservableObject {
         let creditCardIDs = Set(snapshot.creditCards.map(\.id))
         let installmentPlanIDs = Set(snapshot.installmentPlans.map(\.id))
         let personDebtIDs = Set(snapshot.personDebts.map(\.id))
+        let financialEventIDs = Set(snapshot.financialEvents.map(\.id))
         let today = Calendar.current.startOfDay(for: Date())
 
         // Merchant memory validation — blocks restore
@@ -3221,6 +3222,19 @@ final class WalletStore: ObservableObject {
                         severity: .warning,
                         title: "Installment event missing plan",
                         detail: "\(event.title) references an installment plan that is not in the backup.",
+                        recordID: event.id
+                    )
+                )
+            }
+
+            // Relationship integrity — recurring series reference — non-blocking .warning
+            if let recurringSeriesID = event.sourceRecurringEventID,
+               !financialEventIDs.contains(recurringSeriesID) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Recurring occurrence missing series",
+                        detail: "\(event.title) references a recurring series that is not in the backup. It can still restore as a standalone event. This warning is non-blocking.",
                         recordID: event.id
                     )
                 )

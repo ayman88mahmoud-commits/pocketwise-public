@@ -1934,6 +1934,96 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
     }
 
+    // MARK: - Relationship integrity: FinancialEvent recurring series reference
+
+    func testFinancialEventWithValidRecurringSourceProducesNoWarning() {
+        let store = makeStore()
+        let series = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Rent", amount: 1000,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            repeatRule: .monthly
+        )
+        let occurrence = FinancialEvent(
+            type: .expense, status: .paid, title: "Rent", amount: 1000,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceRecurringEventID: series.id,
+            recurringOccurrenceYear: 2026, recurringOccurrenceMonth: 7
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [series, occurrence]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Recurring occurrence missing series", recordID: occurrence.id))
+    }
+
+    func testFinancialEventWithMissingRecurringSourceIsReportedAsWarning() {
+        let store = makeStore()
+        let occurrence = FinancialEvent(
+            type: .expense, status: .paid, title: "Rent", amount: 1000,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceRecurringEventID: UUID(),
+            recurringOccurrenceYear: 2026, recurringOccurrenceMonth: 7
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [occurrence]
+        ))
+        let issue = report.issue(titled: "Recurring occurrence missing series", recordID: occurrence.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testFinancialEventWithNilRecurringSourceProducesNoWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .paid, title: "One-off", amount: 50,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Recurring occurrence missing series", recordID: event.id))
+    }
+
+    func testRecurringSourceWarningOnlyReportDoesNotSetHasErrors() {
+        let store = makeStore()
+        let occurrence = FinancialEvent(
+            type: .expense, status: .paid, title: "Rent", amount: 1000,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceRecurringEventID: UUID(),
+            recurringOccurrenceYear: 2026, recurringOccurrenceMonth: 7
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [occurrence]
+        ))
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testRecurringSourceWarningDoesNotBlockRestore() {
+        let store = makeStore()
+        let occurrence = FinancialEvent(
+            type: .expense, status: .paid, title: "Rent", amount: 1000,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceRecurringEventID: UUID(),
+            recurringOccurrenceYear: 2026, recurringOccurrenceMonth: 7
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [occurrence]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
     func testValidPersonDebtAndEntryProduceNoRelationshipIssues() {
         let store = makeStore()
         let debt = PersonDebt(personName: "Grace", kind: .iOwe, originalAmount: 250)
