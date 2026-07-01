@@ -1698,6 +1698,183 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
     }
 
+    // MARK: - Relationship integrity: PersonDebtEntry references
+
+    func testPersonDebtEntryWithValidParentDebtProducesNoParentWarning() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Alice", kind: .owedToMe, originalAmount: 200)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialLending,
+            amount: 200,
+            accountName: accountName,
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Debt entry missing parent debt", recordID: entry.id))
+    }
+
+    func testPersonDebtEntryMissingParentDebtIsBlockingError() {
+        let store = makeStore()
+        let entry = PersonDebtEntry(
+            debtID: UUID(),
+            entryType: .initialLending,
+            amount: 100,
+            accountName: accountName,
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebtEntries: [entry]
+        ))
+        XCTAssertTrue(report.containsIssue(titled: "Debt entry missing parent debt", recordID: entry.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testPersonDebtEntryMissingParentDebtBlocksRestore() {
+        let store = makeStore()
+        let entry = PersonDebtEntry(
+            debtID: UUID(),
+            entryType: .initialBorrowing,
+            amount: 50,
+            accountName: accountName,
+            date: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebtEntries: [entry]
+        )
+        XCTAssertThrowsError(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testPersonDebtEntryWithValidAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Bob", kind: .iOwe, originalAmount: 100)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialBorrowing,
+            amount: 100,
+            accountName: accountName,
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Debt entry missing account", recordID: entry.id))
+    }
+
+    func testPersonDebtEntryWithEmptyAccountIsBlockingError() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Carol", kind: .owedToMe, originalAmount: 75)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialLending,
+            amount: 75,
+            accountName: "",
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        XCTAssertTrue(report.containsIssue(titled: "Debt entry missing account", recordID: entry.id))
+        XCTAssertTrue(report.hasErrors)
+    }
+
+    func testPersonDebtEntryWithMissingNonEmptyAccountIsReportedAsWarning() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Dave", kind: .iOwe, originalAmount: 300)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialBorrowing,
+            amount: 300,
+            accountName: "Deleted Account",
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        let issue = report.issue(titled: "Debt entry missing account", recordID: entry.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testPersonDebtEntryMissingAccountWarningDoesNotBlockRestore() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Eve", kind: .owedToMe, originalAmount: 150)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialLending,
+            amount: 150,
+            accountName: "Ghost Account",
+            date: startDate
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
+    func testPersonDebtWarningOnlyReportDoesNotSetHasErrors() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Frank", kind: .owedToMe, originalAmount: 500)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialLending,
+            amount: 500,
+            accountName: "Missing Account",
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testValidPersonDebtAndEntryProduceNoRelationshipIssues() {
+        let store = makeStore()
+        let debt = PersonDebt(personName: "Grace", kind: .iOwe, originalAmount: 250)
+        let entry = PersonDebtEntry(
+            debtID: debt.id,
+            entryType: .initialBorrowing,
+            amount: 250,
+            accountName: accountName,
+            date: startDate
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts,
+            categories: store.categories,
+            personDebts: [debt],
+            personDebtEntries: [entry]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Debt entry missing parent debt", recordID: entry.id))
+        XCTAssertFalse(report.containsIssue(titled: "Debt entry missing account", recordID: entry.id))
+        XCTAssertFalse(report.containsIssue(titled: "Invalid person debt", recordID: debt.id))
+    }
+
     private func makeIsolatedUserDefaults(
         suiteName: String = "BackupValidationTests-\(UUID().uuidString)"
     ) -> UserDefaults {
