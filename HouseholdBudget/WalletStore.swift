@@ -3129,6 +3129,21 @@ final class WalletStore: ObservableObject {
                 }
             }
 
+            // Relationship integrity — account reference for unpaid non-transfer events — non-blocking .warning
+            if event.status != .paid && event.type != .transfer,
+               let accountName = event.accountName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !accountName.isEmpty,
+               !accountNames.contains(accountName) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Event references unknown account",
+                        detail: "\(event.title) references account '\(accountName)' which is not in the backup.",
+                        recordID: event.id
+                    )
+                )
+            }
+
             if event.type == .transfer {
                 let source = event.accountName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let destination = event.destinationAccountName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -3254,6 +3269,20 @@ final class WalletStore: ObservableObject {
                         severity: .warning,
                         title: "Quick event unknown subcategory",
                         detail: "Quick event '\(event.name)' references subcategory '\(event.subCategoryName)' under '\(event.categoryName)' which is not in the backup.",
+                        recordID: event.id
+                    )
+                )
+            }
+
+            // Relationship integrity — default account reference — non-blocking .warning
+            if let defaultAccount = event.defaultAccountName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !defaultAccount.isEmpty,
+               !accountNames.contains(defaultAccount) {
+                issues.append(
+                    BackupValidationIssue(
+                        severity: .warning,
+                        title: "Quick event unknown default account",
+                        detail: "Quick event '\(event.name)' references default account '\(defaultAccount)' which is not in the backup.",
                         recordID: event.id
                     )
                 )

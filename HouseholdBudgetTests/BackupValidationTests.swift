@@ -1348,6 +1348,174 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertTrue(report.hasErrors)
     }
 
+    // MARK: - Relationship integrity: FinancialEvent account reference (unpaid non-transfer)
+
+    func testUnpaidFinancialEventWithValidAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Valid Unpaid", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Event references unknown account", recordID: event.id))
+    }
+
+    func testUnpaidFinancialEventWithMissingNonEmptyAccountIsReportedAsWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Missing Account", amount: 100,
+            date: startDate, accountName: "Nonexistent Account", paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        let issue = report.issue(titled: "Event references unknown account", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testUnpaidFinancialEventWithNilAccountProducesNoNewAccountWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Nil Account", amount: 100,
+            date: startDate, accountName: nil, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Event references unknown account", recordID: event.id))
+    }
+
+    func testTransferEventIsNotCoveredByUnpaidAccountCheck() {
+        let store = makeStore()
+        let transfer = FinancialEvent(
+            type: .transfer, status: .unpaid, title: "Transfer", amount: 200,
+            date: startDate, accountName: accountName, destinationAccountName: accountName,
+            paymentMethodName: nil, categoryName: nil, subCategoryName: nil
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [transfer]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Event references unknown account", recordID: transfer.id))
+    }
+
+    // MARK: - Relationship integrity: WalletEvent default account reference
+
+    func testWalletEventWithValidDefaultAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Groceries", subCategoryName: "Groceries",
+            defaultAccountName: accountName
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Quick event unknown default account", recordID: event.id))
+    }
+
+    func testWalletEventWithMissingDefaultAccountIsReportedAsWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Groceries", subCategoryName: "Groceries",
+            defaultAccountName: "Nonexistent Account"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        let issue = report.issue(titled: "Quick event unknown default account", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testWalletEventWithNilDefaultAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let event = WalletEvent(
+            name: "Coffee", categoryName: "Groceries", subCategoryName: "Groceries",
+            defaultAccountName: nil
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, walletEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Quick event unknown default account", recordID: event.id))
+    }
+
+    // MARK: - Relationship integrity: InstallmentPlan account reference (already covered — regression)
+
+    func testInstallmentPlanWithValidAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, accountName: accountName,
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan missing account", recordID: plan.id))
+    }
+
+    func testInstallmentPlanWithMissingAccountIsReportedAsWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, accountName: "Nonexistent Account",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        let issue = report.issue(titled: "Installment plan missing account", recordID: plan.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+    }
+
+    func testInstallmentPlanWithNilAccountProducesNoAccountWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, accountName: nil,
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, installmentPlans: [plan]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment plan missing account", recordID: plan.id))
+    }
+
+    // MARK: - Relationship integrity: account reference cross-cutting
+
+    func testAccountReferenceWarningDoesNotSetHasErrors() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Missing Acct", amount: 100,
+            date: startDate, accountName: "Nonexistent Account", paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        ))
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testAccountReferenceWarningDoesNotBlockRestore() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .unpaid, title: "Missing Acct", amount: 100,
+            date: startDate, accountName: "Nonexistent Account", paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts, categories: store.categories, financialEvents: [event]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
     // MARK: - Relationship integrity: cross-cutting
 
     func testWarningOnlyRelationshipIssuesDoNotSetHasErrors() {
