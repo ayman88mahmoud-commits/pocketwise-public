@@ -1854,6 +1854,86 @@ final class BackupValidationTests: XCTestCase {
         XCTAssertFalse(report.hasErrors)
     }
 
+    // MARK: - Relationship integrity: FinancialEvent installment plan reference
+
+    func testFinancialEventWithValidInstallmentPlanReferenceProducesNoWarning() {
+        let store = makeStore()
+        let plan = InstallmentPlan(
+            purchaseName: "Phone", totalAmount: 600, installmentCount: 6,
+            firstDueDate: startDate, accountName: accountName,
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let event = makeInstallmentEvent(plan: plan, date: startDate)
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            installmentPlans: [plan], financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment event missing plan", recordID: event.id))
+    }
+
+    func testFinancialEventWithMissingInstallmentPlanReferenceIsReportedAsWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .installment, status: .paid, title: "Valu - Ghost", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Valu",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceInstallmentPlanID: UUID()
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [event]
+        ))
+        let issue = report.issue(titled: "Installment event missing plan", recordID: event.id)
+        XCTAssertNotNil(issue)
+        XCTAssertEqual(issue?.severity, .warning)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testFinancialEventWithNilInstallmentPlanReferenceProducesNoWarning() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .expense, status: .paid, title: "Cash", amount: 50,
+            date: startDate, accountName: accountName, paymentMethodName: "Cash",
+            categoryName: "Groceries", subCategoryName: "Groceries"
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [event]
+        ))
+        XCTAssertFalse(report.containsIssue(titled: "Installment event missing plan", recordID: event.id))
+    }
+
+    func testInstallmentReferenceWarningOnlyReportDoesNotSetHasErrors() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .installment, status: .paid, title: "Valu - Ghost", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Valu",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceInstallmentPlanID: UUID()
+        )
+        let report = store.makeBackupValidationReport(for: makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [event]
+        ))
+        XCTAssertTrue(report.hasIssues)
+        XCTAssertFalse(report.hasErrors)
+    }
+
+    func testInstallmentReferenceWarningDoesNotBlockRestore() {
+        let store = makeStore()
+        let event = FinancialEvent(
+            type: .installment, status: .paid, title: "Valu - Ghost", amount: 100,
+            date: startDate, accountName: accountName, paymentMethodName: "Valu",
+            categoryName: "Groceries", subCategoryName: "Groceries",
+            sourceInstallmentPlanID: UUID()
+        )
+        let snapshot = makeSnapshot(
+            accounts: store.accounts, categories: store.categories,
+            financialEvents: [event]
+        )
+        XCTAssertNoThrow(try store.restoreFromBackupSnapshot(snapshot))
+    }
+
     func testValidPersonDebtAndEntryProduceNoRelationshipIssues() {
         let store = makeStore()
         let debt = PersonDebt(personName: "Grace", kind: .iOwe, originalAmount: 250)
