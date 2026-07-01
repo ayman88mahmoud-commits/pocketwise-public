@@ -6,7 +6,7 @@ struct DataBackupView: View {
     @EnvironmentObject private var store: WalletStore
 
     @State private var backupDocument = WalletBackupDocument(data: Data())
-    @State private var backupFileName = "PocketWiseBackup.json"
+    @State private var backupFileName = "WalletBoardBackup.json"
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var isExporting = false
@@ -253,7 +253,7 @@ struct DataBackupView: View {
     private func makeBackupFileName() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
-        return "PocketWiseBackup-\(formatter.string(from: Date())).json"
+        return "WalletBoardBackup-\(formatter.string(from: Date())).json"
     }
 
     private func formattedOptionalDate(_ date: Date?) -> String {
