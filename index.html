@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PocketWise</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --text: #172026;
+            --muted: #52616b;
+            --line: #d9e2e8;
+            --bg: #f7fafc;
+            --panel: #ffffff;
+            --accent: #146c6c;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+        }
+
+        main {
+            width: min(760px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 64px 0;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 32px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: clamp(2rem, 7vw, 3.5rem);
+            line-height: 1.05;
+        }
+
+        p {
+            margin: 0 0 18px;
+            color: var(--muted);
+        }
+
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        a {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        nav a {
+            display: inline-block;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px 14px;
+            text-decoration: none;
+            background: #fbfdfe;
+        }
+
+        footer {
+            margin-top: 28px;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="panel" aria-labelledby="title">
+            <h1 id="title">PocketWise</h1>
+            <p><strong>Plan your money clearly.</strong></p>
+            <p>PocketWise is a local-first personal wallet and cash planning app for manual household finance planning.</p>
+            <p>It does not connect to banks, process payments, collect card numbers, or track users.</p>
+            <nav aria-label="PocketWise pages">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="support.html">Support</a>
+            </nav>
+        </section>
+        <footer>
+            <p>Support: <a href="mailto:ayman88mahmoud@icloud.com">ayman88mahmoud@icloud.com</a></p>
+        </footer>
+    </main>
+</body>
+</html>
